@@ -9,6 +9,7 @@ typedef struct {
     struct wl_compositor *compositor;
     struct wl_shm *shm;
     struct zwlr_screencopy_manager_v1 *screencopy_manager;
+    // TODO: Use a simple linked list here or something
     struct wl_output **outputs;
     OutputCallback handle_output_create;
 } WaylandGlobals;

@@ -20,6 +20,7 @@ wlr_screencopy_h = custom_target(
 wlr_screencopy_dep = declare_dependency(sources: [wlr_screencopy_c, wlr_screencopy_h])
 
 sources = [
+    'args.c',
     'image.c',
     'main.c',
     'stb_ds.c',

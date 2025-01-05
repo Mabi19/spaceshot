@@ -1,3 +1,4 @@
+#include "args.h"
 #include "image.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
@@ -30,7 +31,9 @@ void save_image(Image *image) {
     is_finished = true;
 }
 
-int main() {
+int main(int argc, char **argv) {
+    Arguments *args = parse_argv(argc, argv);
+
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) {
         fprintf(stderr, "Failed to connect to Wayland display.\n");
