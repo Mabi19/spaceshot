@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "globals.h": "c",
-        "stb_ds.h": "c",
-        "wayland-client.h": "c",
-        "wlr-screencopy-client.h": "c",
-        "stdbool.h": "c"
-    }
-}

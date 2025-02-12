@@ -1,3 +1,4 @@
 build/
 .cache/
 screenshot.png
+.vscode/settings.json
