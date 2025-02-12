@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <wayland-client-core.h>
 #include <wayland-client.h>
+#include <wayland-util.h>
 
 void add_new_output(struct wl_output *output) {
     printf("Got output %p\n", (void *)output);
@@ -46,8 +47,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    struct wl_output *test_output = wayland_globals.outputs[0];
-    take_output_screenshot(test_output, &save_image);
+    OutputListElement *test_output;
+    test_output =
+        wl_container_of(wayland_globals.outputs.next, test_output, link);
+    take_output_screenshot(test_output->output, &save_image);
     while (wl_display_dispatch(display) != -1) {
         if (is_finished)
             break;

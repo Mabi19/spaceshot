@@ -6,11 +6,16 @@
 typedef void (*OutputCallback)(struct wl_output *);
 
 typedef struct {
+    struct wl_output *output;
+    struct wl_list link;
+} OutputListElement;
+
+typedef struct {
     struct wl_compositor *compositor;
     struct wl_shm *shm;
     struct zwlr_screencopy_manager_v1 *screencopy_manager;
-    // TODO: Use a simple linked list here or something
-    struct wl_output **outputs;
+    /** of OutputListElement */
+    struct wl_list outputs;
     OutputCallback handle_output_create;
 } WaylandGlobals;
 extern WaylandGlobals wayland_globals;

@@ -23,16 +23,17 @@ sources = [
     'args.c',
     'image.c',
     'main.c',
-    'stb_ds.c',
     'wayland/globals.c',
     'wayland/screenshot.c',
     'wayland/shared-memory.c',
+    'wayland/surface.c',
 ]
 
+cairo_dep = dependency('cairo')
 libpng_dep = dependency('libpng')
 
 executable(
     'spaceshot',
     sources,
-    dependencies: [libpng_dep, wl_dep, wlr_screencopy_dep],
+    dependencies: [cairo_dep, libpng_dep, wl_dep, wlr_screencopy_dep],
 )
