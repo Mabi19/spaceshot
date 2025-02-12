@@ -3,9 +3,7 @@
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <stdio.h>
-#include <wayland-client-core.h>
 #include <wayland-client.h>
-#include <wayland-util.h>
 
 void add_new_output(OutputListElement *output) {
     printf(

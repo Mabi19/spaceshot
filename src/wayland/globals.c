@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 

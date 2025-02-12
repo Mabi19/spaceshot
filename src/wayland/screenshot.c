@@ -6,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
-#include <wayland-client-protocol.h>
 #include <wlr-screencopy-client.h>
 
 typedef struct {
