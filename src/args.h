@@ -15,7 +15,8 @@ typedef struct {
     int32_t y;
     uint32_t width;
     uint32_t height;
-    char *output_name;
+    /** Whether a region was specified. */
+    bool has_region;
 } RegionCaptureParams;
 
 typedef struct {
@@ -25,7 +26,8 @@ typedef struct {
         RegionCaptureParams region_params;
     };
     int captured_mode_params;
-    char *output_filename;
+    const char *output_filename;
+    const char *executable_name;
 } Arguments;
 
 Arguments *parse_argv(int argc, char **argv);

@@ -3,19 +3,15 @@
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <wayland-client.h>
 
-void add_new_output(OutputListElement *output) {
-    printf(
-        "Got output %p with name %s\n",
-        (void *)output->output,
-        output->name ? output->name : "NULL"
-    );
-}
-
 static bool is_finished = false;
+static bool correct_output_found = false;
+static Arguments *args;
 
-void save_image(Image *image) {
+static void save_image(Image *image) {
     printf(
         "Got image from wayland: %dx%d, %d bytes in total\n",
         image->width,
@@ -34,8 +30,35 @@ void save_image(Image *image) {
     is_finished = true;
 }
 
+static void add_new_output(WrappedOutput *output) {
+    printf(
+        "Got output %p with name %s\n",
+        (void *)output->wl_output,
+        output->name ? output->name : "NULL"
+    );
+
+    if (args->mode == CAPTURE_OUTPUT) {
+        if (strcmp(output->name, args->output_params.output_name) == 0) {
+            printf("...which is correct\n");
+            correct_output_found = true;
+            take_output_screenshot(output->wl_output, save_image);
+        }
+    } else if (args->mode == CAPTURE_REGION) {
+        if (args->region_params.has_region) {
+            // TODO: test if contained
+        } else {
+            // TODO: open the picker
+        }
+    } else {
+        fprintf(
+            stderr, "%s: unhandled mode %d\n", args->executable_name, args->mode
+        );
+        exit(EXIT_FAILURE);
+    }
+}
+
 int main(int argc, char **argv) {
-    Arguments *args = parse_argv(argc, argv);
+    args = parse_argv(argc, argv);
 
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) {
@@ -49,10 +72,19 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    OutputListElement *test_output;
-    test_output =
-        wl_container_of(wayland_globals.outputs.next, test_output, link);
-    take_output_screenshot(test_output->output, &save_image);
+    wl_display_roundtrip(display);
+    if (!correct_output_found) {
+        const char *output_name =
+            CAPTURE_OUTPUT ? args->output_params.output_name : "[unspecified]";
+        fprintf(
+            stderr,
+            "%s: couldn't find output %s\n",
+            args->executable_name,
+            output_name
+        );
+        exit(EXIT_FAILURE);
+    }
+
     while (wl_display_dispatch(display) != -1) {
         if (is_finished)
             break;

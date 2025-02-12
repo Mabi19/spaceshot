@@ -39,16 +39,16 @@ static void output_handle_scale(
     // this space intentionally left blank
 }
 
-static void output_handle_done(void * /* data */, struct wl_output *output) {
-    printf("output %p is done\n", (void *)output);
-    // TODO: call the output callback here instead
+static void output_handle_done(void *data, struct wl_output * /* output */) {
+    WrappedOutput *element = (WrappedOutput *)data;
+    wayland_globals.handle_output_create(element);
 }
 
-static void
-output_handle_name(void *data, struct wl_output *output, const char *name) {
-    OutputListElement *element = (OutputListElement *)data;
+static void output_handle_name(
+    void *data, struct wl_output * /* output */, const char *name
+) {
+    WrappedOutput *element = (WrappedOutput *)data;
     element->name = strdup(name);
-    printf("output %p's name is %s\n", (void *)output, name);
 }
 
 static void output_handle_description(
@@ -104,15 +104,9 @@ static void registry_handle_global(
         struct wl_output *output =
             wl_registry_bind(registry, object_id, &wl_output_interface, 4);
 
-        printf("Adding output %p\n", (void *)output);
-        OutputListElement *element = calloc(1, sizeof(OutputListElement));
-        element->output = output;
+        WrappedOutput *element = calloc(1, sizeof(WrappedOutput));
+        element->wl_output = output;
         wl_output_add_listener(output, &output_listener, element);
-        wl_list_insert(&globals->outputs, &element->link);
-
-        if (globals->handle_output_create) {
-            globals->handle_output_create(element);
-        }
     }
 }
 
@@ -133,7 +127,7 @@ bool find_wayland_globals(
 ) {
     // initialize wayland_globals object
     memset(&wayland_globals, 0, sizeof(WaylandGlobals));
-    wl_list_init(&wayland_globals.outputs);
+    wayland_globals.handle_output_create = output_callback;
 
     struct wl_registry *registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, &wayland_globals);
@@ -143,15 +137,6 @@ bool find_wayland_globals(
         wayland_globals.screencopy_manager == NULL) {
         return false;
     }
-
-    // call the callback when everything's obtained
-    OutputListElement *output_element;
-    wl_list_for_each(output_element, &wayland_globals.outputs, link) {
-        output_callback(output_element);
-    }
-
-    // if any new outputs are connected after this, handle them
-    wayland_globals.handle_output_create = output_callback;
 
     return true;
 }

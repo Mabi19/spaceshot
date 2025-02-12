@@ -9,10 +9,8 @@ static void print_help(char *program_name) {
     printf(
         "Modes:\n"
         "  - output <output-name>: screenshot an entire output\n"
-        "  - region [region] [output-name]: screenshot a region\n"
-        "    region format is 'X,Y WxH'\n"
-        "    if output-name is specified, then the region is relative to that "
-        "output, otherwise it's in global compositor space\n"
+        "  - region [region]: screenshot a region\n"
+        "    region format is 'X,Y WxH', in global compositor space\n"
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
@@ -21,6 +19,7 @@ static void print_help(char *program_name) {
 
 Arguments *parse_argv(int argc, char **argv) {
     Arguments *result = calloc(1, sizeof(Arguments));
+    result->executable_name = argv[0];
 
     if (argc == 1) {
         fprintf(
@@ -52,7 +51,7 @@ Arguments *parse_argv(int argc, char **argv) {
                 stderr,
                 "%s: invalid mode %s\n"
                 "Valid modes are 'output <output-name>' "
-                "and 'region [output-region] [output-name]'\n",
+                "and 'region [region]'\n",
                 argv[0],
                 argv[1]
             );
@@ -108,12 +107,11 @@ Arguments *parse_argv(int argc, char **argv) {
                         );
                         goto error;
                     }
-                } else if (result->captured_mode_params == 1) {
-                    result->region_params.output_name = arg;
+                    result->region_params.has_region = true;
                 } else {
                     fprintf(
                         stderr,
-                        "%s: too many parameters for mode 'region' (max 2)\n",
+                        "%s: too many parameters for mode 'region' (max 1)\n",
                         argv[0]
                     );
                     goto error;
