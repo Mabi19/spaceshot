@@ -74,8 +74,9 @@ int main(int argc, char **argv) {
 
     wl_display_roundtrip(display);
     if (!correct_output_found) {
-        const char *output_name =
-            CAPTURE_OUTPUT ? args->output_params.output_name : "[unspecified]";
+        const char *output_name = args->mode == CAPTURE_OUTPUT
+                                      ? args->output_params.output_name
+                                      : "[unspecified]";
         fprintf(
             stderr,
             "%s: couldn't find output %s\n",
