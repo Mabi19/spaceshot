@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-Image *image_create(uint32_t width, uint32_t height, bool has_alpha) {
+Image *image_new(uint32_t width, uint32_t height, bool has_alpha) {
     Image *result = calloc(1, sizeof(Image));
     if (!result) {
         return NULL;
@@ -19,7 +19,7 @@ Image *image_create(uint32_t width, uint32_t height, bool has_alpha) {
     return result;
 }
 
-Image *image_create_from_wayland(
+Image *image_new_from_wayland(
     enum wl_shm_format format,
     // This will be copied.
     uint8_t *data,
@@ -28,7 +28,7 @@ Image *image_create_from_wayland(
     uint32_t stride
 ) {
     if (format == WL_SHM_FORMAT_XRGB8888) {
-        Image *result = image_create(width, height, false);
+        Image *result = image_new(width, height, false);
         if (!result)
             return NULL;
 
@@ -78,7 +78,7 @@ void image_save_png(const Image *image, const char *filename) {
     }
 }
 
-void image_free(Image *image) {
+void image_destroy(Image *image) {
     free(image->data);
     free(image);
 }

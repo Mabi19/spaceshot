@@ -27,7 +27,7 @@ void save_image(Image *image) {
     );
 
     image_save_png(image, "./screenshot.png");
-    image_free(image);
+    image_destroy(image);
     is_finished = true;
 }
 

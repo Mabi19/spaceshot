@@ -17,8 +17,8 @@ typedef struct {
     bool has_alpha;
 } Image;
 
-Image *image_create(uint32_t width, uint32_t height, bool has_alpha);
-Image *image_create_from_wayland(
+Image *image_new(uint32_t width, uint32_t height, bool has_alpha);
+Image *image_new_from_wayland(
     enum wl_shm_format format,
     // This will be copied.
     uint8_t *data,
@@ -28,4 +28,4 @@ Image *image_create_from_wayland(
 );
 
 void image_save_png(const Image *image, const char *filename);
-void image_free(Image *image);
+void image_destroy(Image *image);

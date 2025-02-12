@@ -18,11 +18,8 @@ typedef struct {
     bool has_selected_format;
     enum zwlr_screencopy_frame_v1_flags frame_flags;
     // Shared memory bookkeeping
-    int fd;
-    struct wl_shm_pool *pool;
+    SharedPool *pool;
     struct wl_buffer *wayland_buffer;
-    uint8_t *buffer_data;
-    uint32_t buffer_size;
     // callback
     ScreenshotCallback image_callback;
 } FrameContext;
@@ -78,23 +75,9 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
     }
 
     // create a buffer
-    context->buffer_size = context->stride * context->height;
-    context->fd = create_shm_fd(context->buffer_size);
-    // TODO: figure out if PROT_WRITE is really necessary here
-    context->buffer_data = mmap(
-        NULL,
-        context->buffer_size,
-        PROT_READ | PROT_WRITE,
-        MAP_SHARED,
-        context->fd,
-        0
-    );
-
-    context->pool = wl_shm_create_pool(
-        wayland_globals.shm, context->fd, context->buffer_size
-    );
+    context->pool = shared_pool_new(context->stride * context->height);
     context->wayland_buffer = wl_shm_pool_create_buffer(
-        context->pool,
+        context->pool->wl_pool,
         0,
         context->width,
         context->height,
@@ -126,22 +109,19 @@ static void frame_handle_ready(
 ) {
     FrameContext *context = data;
 
-    Image *result = image_create_from_wayland(
+    Image *result = image_new_from_wayland(
         context->selected_format,
-        context->buffer_data,
+        context->pool->data,
         context->width,
         context->height,
         context->stride
     );
-    // callback's here
     context->image_callback(result);
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
-    munmap(context->buffer_data, context->buffer_size);
-    destroy_shm_fd(context->fd);
     wl_buffer_destroy(context->wayland_buffer);
-    wl_shm_pool_destroy(context->pool);
+    shared_pool_destroy(context->pool);
 }
 
 static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
@@ -149,8 +129,8 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
     .buffer = frame_handle_buffer,
     .buffer_done = frame_handle_buffer_done,
     .linux_dmabuf = frame_handle_linux_dmabuf,
-    // buffer copy event
     .flags = frame_handle_flags,
+    // buffer copy event
     .ready = frame_handle_ready,
 };
 
