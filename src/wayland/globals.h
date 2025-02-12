@@ -3,12 +3,13 @@
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 
-typedef void (*OutputCallback)(struct wl_output *);
-
 typedef struct {
     struct wl_output *output;
+    const char *name;
     struct wl_list link;
 } OutputListElement;
+
+typedef void (*OutputCallback)(OutputListElement *);
 
 typedef struct {
     struct wl_compositor *compositor;

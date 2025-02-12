@@ -7,8 +7,12 @@
 #include <wayland-client.h>
 #include <wayland-util.h>
 
-void add_new_output(struct wl_output *output) {
-    printf("Got output %p\n", (void *)output);
+void add_new_output(OutputListElement *output) {
+    printf(
+        "Got output %p with name %s\n",
+        (void *)output->output,
+        output->name ? output->name : "NULL"
+    );
 }
 
 static bool is_finished = false;
