@@ -15,6 +15,6 @@ typedef struct {
 } WaylandGlobals;
 extern WaylandGlobals wayland_globals;
 
-int find_wayland_globals(
+bool find_wayland_globals(
     struct wl_display *display, OutputCallback output_callback
 );

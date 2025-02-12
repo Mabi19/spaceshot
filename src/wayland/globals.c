@@ -64,7 +64,7 @@ static const struct wl_registry_listener registry_listener = {
     .global_remove = registry_handle_global_remove
 };
 
-int find_wayland_globals(
+bool find_wayland_globals(
     struct wl_display *display, OutputCallback output_callback
 ) {
     // initialize wayland_globals object
@@ -85,8 +85,8 @@ int find_wayland_globals(
 
     if (wayland_globals.compositor == NULL ||
         wayland_globals.screencopy_manager == NULL) {
-        return 0;
+        return false;
     }
 
-    return 1;
+    return true;
 }

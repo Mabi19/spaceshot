@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    int found_everything = find_wayland_globals(display, &add_new_output);
+    bool found_everything = find_wayland_globals(display, &add_new_output);
     if (!found_everything) {
         fprintf(stderr, "Didn't find every required Wayland object\n");
         return 1;
