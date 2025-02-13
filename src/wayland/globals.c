@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
+#include <xdg-output-client.h>
 
 WaylandGlobals wayland_globals;
 
@@ -39,16 +41,12 @@ static void output_handle_scale(
     // this space intentionally left blank
 }
 
-static void output_handle_done(void *data, struct wl_output * /* output */) {
-    WrappedOutput *element = (WrappedOutput *)data;
-    wayland_globals.handle_output_create(element);
-}
-
 static void output_handle_name(
     void *data, struct wl_output * /* output */, const char *name
 ) {
-    WrappedOutput *element = (WrappedOutput *)data;
-    element->name = strdup(name);
+    WrappedOutput *output = (WrappedOutput *)data;
+    output->name = strdup(name);
+    output->fill_state |= WRAPPED_OUTPUT_HAS_NAME;
 }
 
 static void output_handle_description(
@@ -59,13 +57,81 @@ static void output_handle_description(
     // this space intentionally left blank
 }
 
+static void output_handle_done(void *data, struct wl_output * /* output */) {
+    WrappedOutput *output = (WrappedOutput *)data;
+    if (output->fill_state & WRAPPED_OUTPUT_CREATE_WAS_CALLED) {
+        // this is an update.
+        // TODO: handle updates
+        // TODO: this should probably use a pending state mechanism anyway
+    } else {
+        if ((output->fill_state & WRAPPED_OUTPUT_HAS_ALL) ==
+            WRAPPED_OUTPUT_HAS_ALL) {
+            // just created
+            output->fill_state |= WRAPPED_OUTPUT_CREATE_WAS_CALLED;
+            wayland_globals.handle_output_create(output);
+        }
+    }
+}
+
 static const struct wl_output_listener output_listener = {
     .geometry = output_handle_geometry,
     .mode = output_handle_mode,
-    .done = output_handle_done,
     .scale = output_handle_scale,
     .name = output_handle_name,
     .description = output_handle_description,
+    .done = output_handle_done,
+};
+
+static void xdg_output_handle_name(
+    void * /* data */,
+    struct zxdg_output_v1 * /* output */,
+    const char * /* name */
+) {
+    // this space intentionally left blank
+}
+
+static void xdg_output_handle_description(
+    void * /* data */,
+    struct zxdg_output_v1 * /* output */,
+    const char * /* name */
+) {
+    // this space intentionally left blank
+}
+
+static void xdg_output_handle_logical_position(
+    void *data, struct zxdg_output_v1 * /* output */, int32_t x, int32_t y
+) {
+    WrappedOutput *output = (WrappedOutput *)data;
+    output->logical_x = x;
+    output->logical_y = y;
+    output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_POSITION;
+}
+
+static void xdg_output_handle_logical_size(
+    void *data,
+    struct zxdg_output_v1 * /* output */,
+    int32_t width,
+    int32_t height
+) {
+    WrappedOutput *output = (WrappedOutput *)data;
+    output->logical_width = width;
+    output->logical_height = height;
+    output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_SIZE;
+}
+
+static void xdg_output_handle_done(
+    void * /* data */, struct zxdg_output_v1 * /* output */
+) {
+    // This space intentionally left blank
+    // note that wl_output_done replaces this event
+}
+
+static const struct zxdg_output_v1_listener xdg_output_listener = {
+    .name = xdg_output_handle_name,
+    .description = xdg_output_handle_description,
+    .logical_position = xdg_output_handle_logical_position,
+    .logical_size = xdg_output_handle_logical_size,
+    .done = xdg_output_handle_done
 };
 
 static void registry_handle_global(
@@ -100,13 +166,26 @@ static void registry_handle_global(
         );
     }
 
+    if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
+        globals->output_manager = wl_registry_bind(
+            registry, object_id, &zxdg_output_manager_v1_interface, 3
+        );
+    }
+
     if (strcmp(interface, wl_output_interface.name) == 0) {
-        struct wl_output *output =
+        struct wl_output *wl_output =
             wl_registry_bind(registry, object_id, &wl_output_interface, 4);
 
-        WrappedOutput *element = calloc(1, sizeof(WrappedOutput));
-        element->wl_output = output;
-        wl_output_add_listener(output, &output_listener, element);
+        WrappedOutput *output = calloc(1, sizeof(WrappedOutput));
+        output->wl_output = wl_output;
+        wl_output_add_listener(wl_output, &output_listener, output);
+
+        output->xdg_output = zxdg_output_manager_v1_get_xdg_output(
+            globals->output_manager, wl_output
+        );
+        zxdg_output_v1_add_listener(
+            output->xdg_output, &xdg_output_listener, output
+        );
     }
 }
 
@@ -133,8 +212,9 @@ bool find_wayland_globals(
     wl_registry_add_listener(registry, &registry_listener, &wayland_globals);
     wl_display_roundtrip(display);
 
-    if (wayland_globals.compositor == NULL ||
-        wayland_globals.screencopy_manager == NULL) {
+    if (wayland_globals.compositor == NULL || wayland_globals.shm == NULL ||
+        wayland_globals.screencopy_manager == NULL ||
+        wayland_globals.output_manager == NULL) {
         return false;
     }
 
