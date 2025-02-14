@@ -1,4 +1,5 @@
 #include "args.h"
+#include "bbox.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,8 +45,9 @@ Arguments *parse_argv(int argc, char **argv) {
             result->output_params = (OutputCaptureParams){.output_name = NULL};
         } else if (strcmp(mode, "region") == 0) {
             result->mode = CAPTURE_REGION;
-            result->region_params =
-                (RegionCaptureParams){.x = 0, .y = 0, .width = 0, .height = 0};
+            result->region_params.region =
+                (BBox){.x = 0, .y = 0, .width = 0, .height = 0};
+            result->region_params.has_region = false;
         } else {
             fprintf(
                 stderr,
@@ -87,19 +89,7 @@ Arguments *parse_argv(int argc, char **argv) {
                 }
             } else if (result->mode == CAPTURE_REGION) {
                 if (result->captured_mode_params == 0) {
-                    int read_char_count;
-                    int read_specifier_count = sscanf(
-                        arg,
-                        "%d,%d %ux%u%n",
-                        &result->region_params.x,
-                        &result->region_params.y,
-                        &result->region_params.width,
-                        &result->region_params.height,
-                        &read_char_count
-                    );
-
-                    if (read_specifier_count != 4 ||
-                        read_char_count != arg_len) {
+                    if (!bbox_parse(arg, &result->region_params.region)) {
                         fprintf(
                             stderr,
                             "%s: invalid region\nregion format is 'X,Y WxH'\n",
@@ -107,6 +97,7 @@ Arguments *parse_argv(int argc, char **argv) {
                         );
                         goto error;
                     }
+
                     result->region_params.has_region = true;
                 } else {
                     fprintf(

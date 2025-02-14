@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bbox.h"
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 #include <xdg-output-client.h>
@@ -16,10 +17,7 @@ typedef struct {
     struct wl_output *wl_output;
     struct zxdg_output_v1 *xdg_output;
     const char *name;
-    int32_t logical_x;
-    int32_t logical_y;
-    uint32_t logical_width;
-    uint32_t logical_height;
+    BBox logical_bounds;
     WrappedOutputFillState fill_state;
 } WrappedOutput;
 

@@ -53,6 +53,7 @@ endforeach
 
 sources = [
     'args.c',
+    'bbox.c',
     'image.c',
     'main.c',
     'wayland/globals.c',

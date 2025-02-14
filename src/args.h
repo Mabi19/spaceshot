@@ -1,4 +1,5 @@
 #pragma once
+#include "bbox.h"
 #include <stdint.h>
 
 typedef enum {
@@ -11,10 +12,7 @@ typedef struct {
 } OutputCaptureParams;
 
 typedef struct {
-    int32_t x;
-    int32_t y;
-    uint32_t width;
-    uint32_t height;
+    BBox region;
     /** Whether a region was specified. */
     bool has_region;
 } RegionCaptureParams;

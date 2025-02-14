@@ -102,8 +102,8 @@ static void xdg_output_handle_logical_position(
     void *data, struct zxdg_output_v1 * /* output */, int32_t x, int32_t y
 ) {
     WrappedOutput *output = (WrappedOutput *)data;
-    output->logical_x = x;
-    output->logical_y = y;
+    output->logical_bounds.x = x;
+    output->logical_bounds.y = y;
     output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_POSITION;
 }
 
@@ -114,8 +114,8 @@ static void xdg_output_handle_logical_size(
     int32_t height
 ) {
     WrappedOutput *output = (WrappedOutput *)data;
-    output->logical_width = width;
-    output->logical_height = height;
+    output->logical_bounds.width = width;
+    output->logical_bounds.height = height;
     output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_SIZE;
 }
 
