@@ -20,7 +20,9 @@ typedef struct {
     SharedPool *pool;
     struct wl_buffer *wayland_buffer;
     // callback
+    WrappedOutput *output;
     ScreenshotCallback image_callback;
+    void *user_data;
 } FrameContext;
 
 static void frame_handle_buffer(
@@ -115,7 +117,7 @@ static void frame_handle_ready(
         context->height,
         context->stride
     );
-    context->image_callback(result);
+    context->image_callback(context->output, result, context->user_data);
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
@@ -134,13 +136,15 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 };
 
 void take_output_screenshot(
-    struct wl_output *output, ScreenshotCallback image_callback
+    WrappedOutput *output, ScreenshotCallback image_callback, void *data
 ) {
     struct zwlr_screencopy_frame_v1 *frame =
         zwlr_screencopy_manager_v1_capture_output(
-            wayland_globals.screencopy_manager, 0, output
+            wayland_globals.screencopy_manager, 0, output->wl_output
         );
     FrameContext *context = calloc(1, sizeof(FrameContext));
+    context->output = output;
     context->image_callback = image_callback;
+    context->user_data = data;
     zwlr_screencopy_frame_v1_add_listener(frame, &frame_listener, context);
 }

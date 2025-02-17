@@ -1,7 +1,9 @@
 #include "args.h"
+#include "bbox.h"
 #include "image.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +13,8 @@ static bool is_finished = false;
 static bool correct_output_found = false;
 static Arguments *args;
 
-static void save_image(Image *image) {
+static void
+save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
     printf(
         "Got image from wayland: %dx%d, %d bytes in total\n",
         image->width,
@@ -30,6 +33,35 @@ static void save_image(Image *image) {
     is_finished = true;
 }
 
+static void
+crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
+    const BBox *logical_box_in_comp_space = data;
+    const BBox logical_box_in_output_space = bbox_translate(
+        logical_box_in_comp_space,
+        -output->logical_bounds.x,
+        -output->logical_bounds.y
+    );
+
+    double scale_factor_x = image->width / output->logical_bounds.width;
+    double scale_factor_y = image->height / output->logical_bounds.height;
+    assert(fabs(scale_factor_x - scale_factor_y) < 0.01);
+    const BBox device_box =
+        bbox_scale(&logical_box_in_output_space, scale_factor_x);
+    // cropping takes place in pixels, which are whole, so round off any
+    // potential inaccuracies
+    const BBox rounded_device_box = bbox_round(&device_box);
+
+    // TODO: Delete this, it leaks memory
+    printf(
+        "Logical box: %s, device box: %s\n",
+        bbox_stringify(logical_box_in_comp_space),
+        bbox_stringify(&rounded_device_box)
+    );
+
+    // TODO: Actually crop and save the image
+    is_finished = true;
+}
+
 static void add_new_output(WrappedOutput *output) {
     printf(
         "Got output %p with name %s\n",
@@ -41,7 +73,7 @@ static void add_new_output(WrappedOutput *output) {
         if (strcmp(output->name, args->output_params.output_name) == 0) {
             printf("...which is correct\n");
             correct_output_found = true;
-            take_output_screenshot(output->wl_output, save_image);
+            take_output_screenshot(output, save_image, NULL);
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
@@ -50,7 +82,9 @@ static void add_new_output(WrappedOutput *output) {
                 )) {
                 printf("... which is correct\n");
                 correct_output_found = true;
-                take_output_screenshot(output->wl_output, save_image);
+                take_output_screenshot(
+                    output, crop_and_save_image, &args->region_params.region
+                );
             }
         } else {
             // TODO: open the picker
