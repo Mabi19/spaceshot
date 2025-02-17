@@ -45,9 +45,8 @@ static void add_new_output(WrappedOutput *output) {
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
-            // TODO: test if contained
             if (bbox_contains(
-                    output->logical_bounds, args->region_params.region
+                    &output->logical_bounds, &args->region_params.region
                 )) {
                 printf("... which is correct\n");
                 correct_output_found = true;

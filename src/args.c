@@ -46,7 +46,7 @@ Arguments *parse_argv(int argc, char **argv) {
         } else if (strcmp(mode, "region") == 0) {
             result->mode = CAPTURE_REGION;
             result->region_params.region =
-                (BBox){.x = 0, .y = 0, .width = 0, .height = 0};
+                (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
             result->region_params.has_region = false;
         } else {
             fprintf(
