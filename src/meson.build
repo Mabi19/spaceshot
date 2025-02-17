@@ -63,7 +63,7 @@ sources = [
 ]
 
 cairo_dep = dependency('cairo')
-libpng_dep = dependency('libpng')
+spng_dep = dependency('spng')
 
 cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
@@ -71,5 +71,5 @@ m_dep = cc.find_library('m', required: false)
 executable(
     'spaceshot',
     sources,
-    dependencies: [cairo_dep, libpng_dep, m_dep, wl_dep, extra_protocol_deps],
+    dependencies: [cairo_dep, spng_dep, m_dep, wl_dep, extra_protocol_deps],
 )

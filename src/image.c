@@ -1,20 +1,18 @@
 #include "image.h"
-#include <png.h>
+#include <spng.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-Image *image_new(uint32_t width, uint32_t height, bool has_alpha) {
+Image *image_new(uint32_t width, uint32_t height) {
     Image *result = calloc(1, sizeof(Image));
     if (!result) {
         return NULL;
     }
 
-    uint32_t bytes_per_pixel = has_alpha ? 4 : 3;
     result->width = width;
     result->height = height;
-    result->stride = bytes_per_pixel * width;
-    result->has_alpha = has_alpha;
+    result->stride = 4 * width;
     result->data = malloc(result->stride * height);
     return result;
 }
@@ -28,7 +26,7 @@ Image *image_new_from_wayland(
     uint32_t stride
 ) {
     if (format == WL_SHM_FORMAT_XRGB8888) {
-        Image *result = image_new(width, height, false);
+        Image *result = image_new(width, height);
         if (!result)
             return NULL;
 
@@ -36,17 +34,7 @@ Image *image_new_from_wayland(
         uint8_t *source_row = data;
         uint8_t *result_row = result->data;
         for (uint32_t y = 0; y < height; y++) {
-            for (uint32_t x = 0; x < width; x++) {
-                // note: this format is little-endian
-
-                // r
-                result_row[x * 3] = source_row[x * 4 + 2];
-                // g
-                result_row[x * 3 + 1] = source_row[x * 4 + 1];
-                // b
-                result_row[x * 3 + 2] = source_row[x * 4 + 0];
-            }
-
+            memcpy(result_row, source_row, 4 * width);
             source_row += stride;
             result_row += result->stride;
         }
@@ -63,17 +51,43 @@ Image *image_new_from_wayland(
 }
 
 void image_save_png(const Image *image, const char *filename) {
-    png_image png_data;
-    memset(&png_data, 0, sizeof(png_data));
-    png_data.version = PNG_IMAGE_VERSION;
-    png_data.width = image->width;
-    png_data.height = image->height;
-    png_data.format = image->has_alpha ? PNG_FORMAT_RGBA : PNG_FORMAT_RGB;
-    png_image_write_to_file(
-        &png_data, filename, 0, image->data, image->stride, NULL
+    spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
+    struct spng_ihdr ihdr = {0};
+    ihdr.width = image->width;
+    ihdr.height = image->height;
+    ihdr.color_type = SPNG_COLOR_TYPE_TRUECOLOR;
+    ihdr.bit_depth = 8;
+    spng_set_ihdr(ctx, &ihdr);
+
+    FILE *out_file = fopen(filename, "w");
+    spng_set_png_file(ctx, out_file);
+
+    // libspng expects 3 bytes per pixel
+    uint8_t *data = malloc(image->width * image->height * 3);
+    uint8_t *current_pixel = data;
+    for (uint32_t y = 0; y < image->height; y++) {
+        for (uint32_t x = 0; x < image->width; x++) {
+            uint8_t *source_pixel = image->data + y * image->stride + x * 4;
+            current_pixel[0] = source_pixel[2];
+            current_pixel[1] = source_pixel[1];
+            current_pixel[2] = source_pixel[0];
+            current_pixel += 3;
+        }
+    }
+
+    int encode_result = spng_encode_image(
+        ctx,
+        data,
+        image->width * image->height * 3,
+        SPNG_FMT_RAW,
+        SPNG_ENCODE_FINALIZE
     );
-    if (png_data.warning_or_error != 0) {
-        fprintf(stderr, "PNG error: %s\n", png_data.message);
+    free(data);
+    fclose(out_file);
+    spng_ctx_free(ctx);
+
+    if (encode_result) {
+        fprintf(stderr, "spng error: %s\n", spng_strerror(encode_result));
         exit(EXIT_FAILURE);
     }
 }
