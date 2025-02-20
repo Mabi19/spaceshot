@@ -58,7 +58,16 @@ crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
         bbox_stringify(&rounded_device_box)
     );
 
-    // TODO: Actually crop and save the image
+    Image *cropped = image_crop(
+        image,
+        rounded_device_box.x,
+        rounded_device_box.y,
+        rounded_device_box.width,
+        rounded_device_box.height
+    );
+    image_destroy(image);
+    image_save_png(cropped, "./screenshot.png");
+    image_destroy(cropped);
     is_finished = true;
 }
 
