@@ -5,9 +5,16 @@ extra_protocols = [
     {
         'provider': 'wlr',
         'state': 'unstable',
+        'name': 'wlr-layer-shell',
+        'version': 1,
+    },
+    {
+        'provider': 'wlr',
+        'state': 'unstable',
         'name': 'wlr-screencopy',
         'version': 1,
     },
+    {'provider': 'wp', 'state': 'stable', 'name': 'xdg-shell'},
     {
         'provider': 'wp',
         'state': 'unstable',
@@ -27,11 +34,19 @@ foreach protocol : extra_protocols
     provider = protocol['provider']
     state = protocol['state']
     name = protocol['name']
-    version = protocol['version']
+
+    # stable protocols have no version
+    if state == 'stable'
+        filename = f'@name@.xml'
+    else
+        version = protocol['version']
+        filename = f'@name@-@state@-v@version@.xml'
+    endif
+
     if provider == 'wlr'
-        xml_path = wlr_protocols_dir / state / f'@name@-@state@-v@version@.xml'
+        xml_path = wlr_protocols_dir / state / filename
     elif provider == 'wp'
-        xml_path = wayland_protocols_dir / state / name / f'@name@-@state@-v@version@.xml'
+        xml_path = wayland_protocols_dir / state / name / filename
     endif
 
     xml_file = files(xml_path)[0]
@@ -57,9 +72,9 @@ sources = [
     'image.c',
     'main.c',
     'wayland/globals.c',
+    'wayland/overlay-surface.c',
     'wayland/screenshot.c',
     'wayland/shared-memory.c',
-    'wayland/surface.c',
 ]
 
 cairo_dep = dependency('cairo')

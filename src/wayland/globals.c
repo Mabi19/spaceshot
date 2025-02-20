@@ -44,7 +44,7 @@ static void output_handle_scale(
 static void output_handle_name(
     void *data, struct wl_output * /* output */, const char *name
 ) {
-    WrappedOutput *output = (WrappedOutput *)data;
+    WrappedOutput *output = data;
     output->name = strdup(name);
     output->fill_state |= WRAPPED_OUTPUT_HAS_NAME;
 }
@@ -58,7 +58,7 @@ static void output_handle_description(
 }
 
 static void output_handle_done(void *data, struct wl_output * /* output */) {
-    WrappedOutput *output = (WrappedOutput *)data;
+    WrappedOutput *output = data;
     if (output->fill_state & WRAPPED_OUTPUT_CREATE_WAS_CALLED) {
         // this is an update.
         // TODO: handle updates
@@ -101,7 +101,7 @@ static void xdg_output_handle_description(
 static void xdg_output_handle_logical_position(
     void *data, struct zxdg_output_v1 * /* output */, int32_t x, int32_t y
 ) {
-    WrappedOutput *output = (WrappedOutput *)data;
+    WrappedOutput *output = data;
     output->logical_bounds.x = x;
     output->logical_bounds.y = y;
     output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_POSITION;
@@ -113,7 +113,7 @@ static void xdg_output_handle_logical_size(
     int32_t width,
     int32_t height
 ) {
-    WrappedOutput *output = (WrappedOutput *)data;
+    WrappedOutput *output = data;
     output->logical_bounds.width = width;
     output->logical_bounds.height = height;
     output->fill_state |= WRAPPED_OUTPUT_HAS_LOGICAL_SIZE;
@@ -141,7 +141,7 @@ static void registry_handle_global(
     const char *interface,
     uint32_t /* version */
 ) {
-    WaylandGlobals *globals = (WaylandGlobals *)data;
+    WaylandGlobals *globals = data;
 
     // printf(
     //     "Interface '%s' version %d with object ID %d\n",
@@ -158,6 +158,12 @@ static void registry_handle_global(
     if (strcmp(interface, wl_shm_interface.name) == 0) {
         globals->shm =
             wl_registry_bind(registry, object_id, &wl_shm_interface, 1);
+    }
+
+    if (strcmp(interface, zwlr_layer_shell_v1_interface.name) == 0) {
+        globals->layer_shell = wl_registry_bind(
+            registry, object_id, &zwlr_layer_shell_v1_interface, 4
+        );
     }
 
     if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
@@ -213,6 +219,7 @@ bool find_wayland_globals(
     wl_display_roundtrip(display);
 
     if (wayland_globals.compositor == NULL || wayland_globals.shm == NULL ||
+        wayland_globals.layer_shell == NULL ||
         wayland_globals.screencopy_manager == NULL ||
         wayland_globals.output_manager == NULL) {
         return false;

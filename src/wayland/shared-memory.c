@@ -20,7 +20,7 @@ static void randname(char *buf) {
     }
 }
 
-static int make_shm_file(void) {
+static int make_shm_file() {
     int retries = 100;
     do {
         char name[] = "/spaceshot_wl_shm-XXXXXX";

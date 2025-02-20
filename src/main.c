@@ -2,6 +2,7 @@
 #include "bbox.h"
 #include "image.h"
 #include "wayland/globals.h"
+#include "wayland/overlay-surface.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
 #include <stdio.h>
@@ -96,7 +97,14 @@ static void add_new_output(WrappedOutput *output) {
                 );
             }
         } else {
-            // TODO: open the picker
+            //! This is for debugging so that I don't lock myself out of my
+            //! terminal
+            if (strcmp(output->name, "HDMI-A-1") != 0) {
+                return;
+            }
+            correct_output_found = true;
+
+            overlay_surface_new(output);
         }
     } else {
         fprintf(
