@@ -17,8 +17,7 @@ typedef struct {
     bool has_selected_format;
     enum zwlr_screencopy_frame_v1_flags frame_flags;
     // Shared memory bookkeeping
-    SharedPool *pool;
-    struct wl_buffer *wayland_buffer;
+    SharedBuffer *buffer;
     // callback
     WrappedOutput *output;
     ScreenshotCallback image_callback;
@@ -75,19 +74,13 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
         exit(EXIT_FAILURE);
     }
 
-    // create a buffer
-    context->pool = shared_pool_new(context->stride * context->height);
-    context->wayland_buffer = wl_shm_pool_create_buffer(
-        context->pool->wl_pool,
-        0,
+    context->buffer = shared_buffer_new(
         context->width,
         context->height,
         context->stride,
         context->selected_format
     );
-
-    // copy the frame into the buffer
-    zwlr_screencopy_frame_v1_copy(frame, context->wayland_buffer);
+    zwlr_screencopy_frame_v1_copy(frame, context->buffer->wl_buffer);
 
     printf("buffer done\n");
 }
@@ -112,7 +105,7 @@ static void frame_handle_ready(
 
     Image *result = image_new_from_wayland(
         context->selected_format,
-        context->pool->data,
+        context->buffer->data,
         context->width,
         context->height,
         context->stride
@@ -121,8 +114,7 @@ static void frame_handle_ready(
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
-    wl_buffer_destroy(context->wayland_buffer);
-    shared_pool_destroy(context->pool);
+    shared_buffer_destroy(context->buffer);
 }
 
 static const struct zwlr_screencopy_frame_v1_listener frame_listener = {

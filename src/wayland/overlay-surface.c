@@ -1,20 +1,52 @@
 #include "overlay-surface.h"
 #include "wayland/globals.h"
-#include "wayland/shared-memory.h"
+#include "wayland/render.h"
 #include "wlr-layer-shell-client.h"
 #include <assert.h>
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <wayland-client-protocol.h>
 
-// TODO: Rework how buffers are managed
-// Instead of trying to stuff multiple buffers inside one pool, always create
-// one buffer per pool. Additionally, make buffer sizes immutable. This means
-// that the wl_shm_pool object can be immediately discarded.
+static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
 
-// TODO: Hook up cairo drawing
-// Cairo seems to be little-endian as well, so cairo ARGB32 = wl ARGB8888
+    // first, try to get an existing buffer
+    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
+        if (!window->buffers[i]) {
+            continue;
+        }
+        RenderBuffer *test_buf = window->buffers[i];
+        if (!test_buf->is_busy && test_buf->shm->width == window->width &&
+            test_buf->shm->height == window->height) {
+            printf("returned buffer #%zu\n", i);
+            return test_buf;
+        }
+    }
+
+    // second, try to create a new one in an empty spot
+    // or overwrite one with the wrong size
+    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
+        if (window->buffers[i]) {
+            if (window->buffers[i]->shm->width == window->width &&
+                window->buffers[i]->shm->height == window->height) {
+                continue;
+            }
+            printf("destroyed buffer #%zu\n", i);
+            render_buffer_destroy(window->buffers[i]);
+        }
+        window->buffers[i] = render_buffer_new(window->width, window->height);
+        printf("created buffer #%zu\n", i);
+        return window->buffers[i];
+    }
+
+    // last resort: overwrite the first one
+    if (window->buffers[0]) {
+        render_buffer_destroy(window->buffers[0]);
+    }
+    window->buffers[0] = render_buffer_new(window->width, window->height);
+    printf("overwrote buffer #0 (last resort)\n");
+
+    return window->buffers[0];
+}
 
 static void overlay_surface_handle_configure(
     void *data,
@@ -35,42 +67,18 @@ static void overlay_surface_handle_configure(
 
     window->width = width;
     window->height = height;
-    // TODO: Make Cairo decide this
-    uint32_t image_buffer_size = width * height * 4;
-    if (window->current_buffer || window->other_buffer) {
+    if (window->buffers[0] || window->buffers[1]) {
         // TODO: handle this
         fprintf(stderr, "configure called while buffers already exist");
         exit(EXIT_FAILURE);
     }
 
-    if (window->buffer_pool) {
-        assert(
-            shared_pool_ensure_size(window->buffer_pool, 2 * image_buffer_size)
-        );
-    } else {
-        window->buffer_pool = shared_pool_new(2 * image_buffer_size);
-    }
+    RenderBuffer *draw_buf = get_unused_buffer(window);
+    cairo_set_source_rgb(draw_buf->cr, 0.5, 0.5, 0.5);
+    cairo_paint(draw_buf->cr);
+    cairo_surface_flush(draw_buf->cairo_surface);
 
-    window->current_buffer = wl_shm_pool_create_buffer(
-        window->buffer_pool->wl_pool,
-        0,
-        width,
-        height,
-        width * 4,
-        WL_SHM_FORMAT_XRGB8888
-    );
-
-    window->other_buffer = wl_shm_pool_create_buffer(
-        window->buffer_pool->wl_pool,
-        0,
-        width,
-        height,
-        width * 4,
-        WL_SHM_FORMAT_XRGB8888
-    );
-    memset(window->buffer_pool->data, 0x7f, image_buffer_size);
-    wl_surface_attach(window->surface, window->current_buffer, 0, 0);
-
+    render_buffer_attach_to_surface(draw_buf, window->surface);
     wl_surface_commit(window->surface);
 }
 

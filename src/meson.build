@@ -73,6 +73,7 @@ sources = [
     'main.c',
     'wayland/globals.c',
     'wayland/overlay-surface.c',
+    'wayland/render.c',
     'wayland/screenshot.c',
     'wayland/shared-memory.c',
 ]

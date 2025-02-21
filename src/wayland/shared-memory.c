@@ -1,8 +1,10 @@
 #define _POSIX_C_SOURCE 200112L
 #include "shared-memory.h"
 #include "wayland/globals.h"
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
@@ -35,60 +37,62 @@ static int make_shm_file() {
     return -1;
 }
 
-void destroy_shm_fd(int fd) { close(fd); }
-
-SharedPool *shared_pool_new(size_t size) {
-    SharedPool *result = calloc(1, sizeof(SharedPool));
+SharedBuffer *shared_buffer_new(
+    uint32_t width, uint32_t height, uint32_t stride, enum wl_shm_format format
+) {
+    SharedBuffer *result = calloc(1, sizeof(SharedBuffer));
     result->fd = make_shm_file();
+    result->width = width;
+    result->height = height;
+    result->stride = stride;
+    result->format = format;
+    uint32_t size = height * stride;
 
     if (result->fd < 0) {
-        free(result);
-        return NULL;
-    }
-
-    if (!shared_pool_ensure_size(result, size)) {
-        shared_pool_destroy(result);
-        return NULL;
-    }
-
-    return result;
-}
-
-bool shared_pool_ensure_size(SharedPool *pool, size_t new_size) {
-    if (pool->size >= new_size) {
-        return true;
+        goto error;
     }
 
     // truncate the file to the new size
     int ret;
     do {
-        ret = ftruncate(pool->fd, new_size);
+        ret = ftruncate(result->fd, size);
     } while (ret < 0 && errno == EINTR);
     if (ret != 0) {
-        return false;
+        goto error;
     }
 
     // re-map
-    pool->size = new_size;
-    pool->data = mmap(
-        pool->data, pool->size, PROT_READ | PROT_WRITE, MAP_SHARED, pool->fd, 0
-    );
-
-    // this function is also called by shared_pool_new when there is no wl_pool,
-    // so create one if necessary
-    if (!pool->wl_pool) {
-        pool->wl_pool =
-            wl_shm_create_pool(wayland_globals.shm, pool->fd, pool->size);
-    } else {
-        wl_shm_pool_resize(pool->wl_pool, pool->size);
+    result->data =
+        mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, result->fd, 0);
+    if (result->data == MAP_FAILED) {
+        goto error;
     }
 
-    return true;
+    struct wl_shm_pool *pool =
+        wl_shm_create_pool(wayland_globals.shm, result->fd, size);
+    result->wl_buffer = wl_shm_pool_create_buffer(
+        pool, 0, result->width, result->height, result->stride, result->format
+    );
+    wl_shm_pool_destroy(pool);
+
+    return result;
+error:
+    shared_buffer_destroy(result);
+    return NULL;
 }
 
-void shared_pool_destroy(SharedPool *pool) {
-    munmap(pool->data, pool->size);
-    close(pool->fd);
-    wl_shm_pool_destroy(pool->wl_pool);
-    free(pool);
+void shared_buffer_destroy(SharedBuffer *buffer) {
+    if (buffer->data && buffer->data != MAP_FAILED) {
+        munmap(buffer->data, buffer->height * buffer->stride);
+    }
+
+    if (buffer->fd != 0) {
+        close(buffer->fd);
+    }
+
+    if (buffer->wl_buffer) {
+        wl_buffer_destroy(buffer->wl_buffer);
+    }
+
+    free(buffer);
 }
