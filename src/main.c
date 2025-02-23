@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
     while (wl_display_dispatch(display) != -1) {
         if (is_finished)
             break;
-        printf("waiting\n");
+        // printf("waiting\n");
     }
 
     wl_display_disconnect(display);

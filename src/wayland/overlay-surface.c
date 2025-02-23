@@ -8,7 +8,6 @@
 #include <stdlib.h>
 
 static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
-
     // first, try to get an existing buffer
     for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
         if (!window->buffers[i]) {
@@ -67,11 +66,6 @@ static void overlay_surface_handle_configure(
 
     window->width = width;
     window->height = height;
-    if (window->buffers[0] || window->buffers[1]) {
-        // TODO: handle this
-        fprintf(stderr, "configure called while buffers already exist");
-        exit(EXIT_FAILURE);
-    }
 
     RenderBuffer *draw_buf = get_unused_buffer(window);
     cairo_set_source_rgb(draw_buf->cr, 0.5, 0.5, 0.5);

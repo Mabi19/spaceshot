@@ -75,6 +75,7 @@ sources = [
     'wayland/overlay-surface.c',
     'wayland/render.c',
     'wayland/screenshot.c',
+    'wayland/seat.c',
     'wayland/shared-memory.c',
 ]
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "wayland/globals.h"
+#include "wayland/output.h"
 #include "wayland/render.h"
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>

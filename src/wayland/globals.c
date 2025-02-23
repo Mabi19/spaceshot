@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "wayland/seat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -178,6 +179,20 @@ static void registry_handle_global(
         );
     }
 
+    if (strcmp(interface, wl_seat_interface.name) == 0) {
+        if (globals->seat_dispatcher) {
+            fprintf(
+                stderr,
+                "warning: Multiple seats present. Handling this is "
+                "unimplemented, only one will work\n"
+            );
+        } else {
+            struct wl_seat *seat =
+                wl_registry_bind(registry, object_id, &wl_seat_interface, 9);
+            globals->seat_dispatcher = seat_dispatcher_new(seat);
+        }
+    }
+
     if (strcmp(interface, wl_output_interface.name) == 0) {
         struct wl_output *wl_output =
             wl_registry_bind(registry, object_id, &wl_output_interface, 4);
@@ -221,6 +236,7 @@ bool find_wayland_globals(
     if (wayland_globals.compositor == NULL || wayland_globals.shm == NULL ||
         wayland_globals.layer_shell == NULL ||
         wayland_globals.screencopy_manager == NULL ||
+        wayland_globals.seat_dispatcher == NULL ||
         wayland_globals.output_manager == NULL) {
         return false;
     }
