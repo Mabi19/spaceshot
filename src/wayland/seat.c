@@ -90,8 +90,6 @@ static void pointer_handle_axis(
 
 static void
 pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
-    // TODO: construct a MouseEvent
-
     SeatDispatcher *dispatcher = data;
     auto ptr_data = &dispatcher->pointer_data;
 
@@ -99,16 +97,24 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
         printf("moved to %f %f\n", ptr_data->surface_x, ptr_data->surface_y);
     }
     if (ptr_data->pressed_buttons != ptr_data->pending_buttons) {
-        PointerButtons pressed =
-            ptr_data->pending_buttons & ~ptr_data->pressed_buttons;
-        PointerButtons released =
-            ptr_data->pressed_buttons & ~ptr_data->pending_buttons;
-        printf("buttons changed!\n");
-        printf("pressed: %x\n", pressed);
-        printf("released: %x\n", released);
-        printf("held: %x\n", ptr_data->pending_buttons);
-
+        MouseEvent event = {
+            .focus = ptr_data->focus,
+            .surface_x = ptr_data->surface_x,
+            .surface_y = ptr_data->surface_y,
+            .buttons_pressed =
+                ptr_data->pending_buttons & ~ptr_data->pressed_buttons,
+            .buttons_held = ptr_data->pending_buttons,
+            .buttons_released =
+                ptr_data->pressed_buttons & ~ptr_data->pending_buttons,
+        };
         ptr_data->pressed_buttons = ptr_data->pending_buttons;
+
+        SeatListenerListEntry *entry;
+        wl_list_for_each(entry, &dispatcher->listeners, link) {
+            if (entry->listener->mouse) {
+                entry->listener->mouse(entry->surface, event);
+            }
+        }
     }
     ptr_data->received_events = 0;
 }
