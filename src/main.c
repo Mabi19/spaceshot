@@ -68,6 +68,7 @@ crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
 static void create_region_picker_for_output(
     WrappedOutput *output, Image *image, void * /* data */
 ) {
+    // TODO: Save this so that it can be destroyed properly later
     region_picker_new(output, image);
 }
 

@@ -21,7 +21,7 @@ typedef struct {
  * A set of callbacks to receive seat events.
  */
 typedef struct {
-    void (*mouse)(OverlaySurface *surface, MouseEvent event);
+    void (*mouse)(void *data, MouseEvent event);
 } SeatListener;
 
 typedef struct {
@@ -54,7 +54,10 @@ SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat);
  * output.
  */
 void seat_dispatcher_add_listener(
-    SeatDispatcher *dispatcher, OverlaySurface *surface, SeatListener *listener
+    SeatDispatcher *dispatcher,
+    OverlaySurface *surface,
+    SeatListener *listener,
+    void *user_data
 );
 void seat_dispatcher_remove_listener(
     SeatDispatcher *dispatcher, OverlaySurface *surface

@@ -7,6 +7,7 @@
 typedef struct {
     OverlaySurface *surface;
     SeatListener *listener;
+    void *user_data;
     struct wl_list link;
 } SeatListenerListEntry;
 
@@ -111,7 +112,7 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
         SeatListenerListEntry *entry;
         wl_list_for_each(entry, &dispatcher->listeners, link) {
             if (entry->listener->mouse) {
-                entry->listener->mouse(entry->surface, event);
+                entry->listener->mouse(entry->user_data, event);
             }
         }
     }
@@ -208,11 +209,15 @@ SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
 }
 
 void seat_dispatcher_add_listener(
-    SeatDispatcher *dispatcher, OverlaySurface *surface, SeatListener *listener
+    SeatDispatcher *dispatcher,
+    OverlaySurface *surface,
+    SeatListener *listener,
+    void *user_data
 ) {
     SeatListenerListEntry *entry = calloc(1, sizeof(SeatListenerListEntry));
     entry->surface = surface;
     entry->listener = listener;
+    entry->user_data = user_data;
     wl_list_insert(&dispatcher->listeners, &entry->link);
 }
 
