@@ -1,8 +1,8 @@
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
+#include "picker/region-picker.h"
 #include "wayland/globals.h"
-#include "wayland/overlay-surface.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
 #include <stdio.h>
@@ -104,7 +104,8 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            overlay_surface_new(output);
+            // TODO: Store this so that they can be destroyed easily
+            region_picker_new(output);
         }
     } else {
         fprintf(

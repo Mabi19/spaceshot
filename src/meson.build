@@ -71,6 +71,7 @@ sources = [
     'bbox.c',
     'image.c',
     'main.c',
+    'picker/region-picker.c',
     'wayland/globals.c',
     'wayland/overlay-surface.c',
     'wayland/render.c',

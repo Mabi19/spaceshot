@@ -1,4 +1,5 @@
 #include "overlay-surface.h"
+#include "cairo.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
 #include "wlr-layer-shell-client.h"
@@ -87,7 +88,11 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
     .closed = overlay_surface_handle_closed,
 };
 
-OverlaySurface *overlay_surface_new(WrappedOutput *output) {
+OverlaySurface *overlay_surface_new(
+    WrappedOutput *output,
+    OverlaySurfaceDrawCallback draw_callback,
+    void *user_data
+) {
     OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
     result->surface = wl_compositor_create_surface(wayland_globals.compositor);
     result->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
@@ -97,6 +102,8 @@ OverlaySurface *overlay_surface_new(WrappedOutput *output) {
         ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         "spaceshot"
     );
+    result->draw_callback = draw_callback;
+    result->user_data = user_data;
     zwlr_layer_surface_v1_add_listener(
         result->layer_surface, &layer_surface_listener, result
     );
