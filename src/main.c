@@ -65,6 +65,12 @@ crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
     is_finished = true;
 }
 
+static void create_region_picker_for_output(
+    WrappedOutput *output, Image *image, void * /* data */
+) {
+    region_picker_new(output, image);
+}
+
 static void add_new_output(WrappedOutput *output) {
     printf(
         "Got output %p with name %s\n",
@@ -97,8 +103,9 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            // TODO: Store this so that they can be destroyed easily
-            region_picker_new(output);
+            take_output_screenshot(
+                output, create_region_picker_for_output, NULL
+            );
         }
     } else {
         fprintf(

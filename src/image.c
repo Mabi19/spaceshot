@@ -75,6 +75,16 @@ Image *image_crop(
     return result;
 }
 
+cairo_surface_t *image_make_cairo_surface(Image *image) {
+    return cairo_image_surface_create_for_data(
+        image->data,
+        CAIRO_FORMAT_RGB24,
+        image->width,
+        image->height,
+        image->stride
+    );
+}
+
 void image_save_png(const Image *image, const char *filename) {
     spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
     struct spng_ihdr ihdr = {0};
