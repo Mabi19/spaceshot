@@ -8,7 +8,8 @@
 
 constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 
-typedef void (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
+/** Returns the damaged area, in device pixels. */
+typedef BBox (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
 
 typedef struct {
     struct wl_surface *wl_surface;
@@ -29,6 +30,8 @@ typedef struct {
     // callback things
     OverlaySurfaceDrawCallback draw_callback;
     void *user_data;
+    // used for deduplicating frame() requests
+    bool has_requested_frame;
 } OverlaySurface;
 
 OverlaySurface *overlay_surface_new(
@@ -36,5 +39,5 @@ OverlaySurface *overlay_surface_new(
     OverlaySurfaceDrawCallback draw_callback,
     void *user_data
 );
-/** Call the draw_callback immediately and present the result. */
-void overlay_surface_draw(OverlaySurface *surface);
+/** Call the draw_callback sometime in the future and present the result. */
+void overlay_surface_queue_draw(OverlaySurface *surface);

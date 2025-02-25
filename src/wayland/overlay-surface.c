@@ -60,6 +60,24 @@ static void recompute_device_size(OverlaySurface *surface) {
         round((surface->logical_height * surface->scale) / 120.0);
 }
 
+/** Call the draw_callback immediately. Prefer using
+ * overlay_surface_queue_draw() over this if possible. */
+static void overlay_surface_draw_immediate(OverlaySurface *surface) {
+    RenderBuffer *draw_buf = get_unused_buffer(surface);
+    BBox damage_box = surface->draw_callback(surface->user_data, draw_buf->cr);
+    cairo_surface_flush(draw_buf->cairo_surface);
+
+    render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
+    wl_surface_damage_buffer(
+        surface->wl_surface,
+        damage_box.x,
+        damage_box.y,
+        damage_box.width,
+        damage_box.height
+    );
+    wl_surface_commit(surface->wl_surface);
+}
+
 static void overlay_surface_handle_configure(
     void *data,
     struct zwlr_layer_surface_v1 * /* layer_surface */,
@@ -84,7 +102,7 @@ static void overlay_surface_handle_configure(
     );
     recompute_device_size(surface);
 
-    overlay_surface_draw(surface);
+    overlay_surface_draw_immediate(surface);
 }
 
 static void overlay_surface_handle_closed(
@@ -112,7 +130,7 @@ static void preferred_scale_changed(
     surface->scale = scale;
     recompute_device_size(surface);
 
-    overlay_surface_draw(surface);
+    overlay_surface_draw_immediate(surface);
 }
 
 static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
@@ -162,14 +180,24 @@ OverlaySurface *overlay_surface_new(
     return result;
 }
 
-void overlay_surface_draw(OverlaySurface *surface) {
-    RenderBuffer *draw_buf = get_unused_buffer(surface);
-    surface->draw_callback(surface->user_data, draw_buf->cr);
-    cairo_surface_flush(draw_buf->cairo_surface);
+static void overlay_surface_handle_frame(
+    void *data, struct wl_callback * /* callback */, uint32_t /* timestamp */
+) {
+    OverlaySurface *surface = data;
+    overlay_surface_draw_immediate(surface);
+    surface->has_requested_frame = false;
+}
 
-    render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
-    wl_surface_damage_buffer(
-        surface->wl_surface, 0, 0, surface->device_width, surface->device_height
-    );
+static struct wl_callback_listener frame_callback_listener = {
+    .done = overlay_surface_handle_frame
+};
+
+void overlay_surface_queue_draw(OverlaySurface *surface) {
+    if (surface->has_requested_frame) {
+        return;
+    }
+    surface->has_requested_frame = true;
+    struct wl_callback *callback = wl_surface_frame(surface->wl_surface);
+    wl_callback_add_listener(callback, &frame_callback_listener, surface);
     wl_surface_commit(surface->wl_surface);
 }
