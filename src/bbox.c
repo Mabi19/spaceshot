@@ -88,10 +88,15 @@ BBox bbox_scale(const BBox *src, double factor) {
 }
 
 BBox bbox_round(const BBox *src) {
+    double right = floor(src->x + src->width);
+    double bottom = floor(src->y + src->height);
+    double new_x = floor(src->x);
+    double new_y = floor(src->y);
+
     return (BBox){
-        .x = round(src->x),
-        .y = round(src->y),
-        .width = round(src->width),
-        .height = round(src->height),
+        .x = new_x,
+        .y = new_y,
+        .width = right - new_x,
+        .height = bottom - new_y,
     };
 }

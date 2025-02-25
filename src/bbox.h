@@ -42,5 +42,6 @@ BBox bbox_scale(const BBox *src, double factor);
 
 /**
  * Round a BBox to the nearest integer coordinates.
+ * This snaps to the top-left corner of the grid cell.
  */
 BBox bbox_round(const BBox *src);
