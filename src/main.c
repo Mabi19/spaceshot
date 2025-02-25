@@ -52,13 +52,6 @@ crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
     // potential inaccuracies
     const BBox rounded_device_box = bbox_round(&device_box);
 
-    // TODO: Delete this, it leaks memory
-    printf(
-        "Logical box: %s, device box: %s\n",
-        bbox_stringify(logical_box_in_comp_space),
-        bbox_stringify(&rounded_device_box)
-    );
-
     Image *cropped = image_crop(
         image,
         rounded_device_box.x,

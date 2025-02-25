@@ -170,7 +170,7 @@ static void registry_handle_global(
     }
 
     if (strcmp(interface, wp_viewporter_interface.name) == 0) {
-        globals->fractional_scale_manager =
+        globals->viewporter =
             wl_registry_bind(registry, object_id, &wp_viewporter_interface, 1);
     }
 
@@ -247,6 +247,8 @@ bool find_wayland_globals(
     wl_display_roundtrip(display);
 
     if (wayland_globals.compositor == NULL || wayland_globals.shm == NULL ||
+        wayland_globals.fractional_scale_manager == NULL ||
+        wayland_globals.viewporter == NULL ||
         wayland_globals.layer_shell == NULL ||
         wayland_globals.screencopy_manager == NULL ||
         wayland_globals.seat_dispatcher == NULL ||

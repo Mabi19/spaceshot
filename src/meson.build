@@ -14,7 +14,24 @@ extra_protocols = [
         'name': 'wlr-screencopy',
         'version': 1,
     },
-    {'provider': 'wp', 'state': 'stable', 'name': 'xdg-shell'},
+    {
+        'provider': 'wp',
+        'state': 'staging',
+        'name': 'fractional-scale',
+        'version': 1,
+    },
+    {
+        # used for fractional-scale
+        'provider': 'wp',
+        'state': 'stable',
+        'name': 'viewporter',
+    },
+    {
+        # required for wlr-layer-shell
+        'provider': 'wp',
+        'state': 'stable',
+        'name': 'xdg-shell',
+    },
     {
         'provider': 'wp',
         'state': 'unstable',
@@ -35,9 +52,12 @@ foreach protocol : extra_protocols
     state = protocol['state']
     name = protocol['name']
 
-    # stable protocols have no version
+    # protocol paths depend on state
     if state == 'stable'
         filename = f'@name@.xml'
+    elif state == 'staging'
+        version = protocol['version']
+        filename = f'@name@-v@version@.xml'
     else
         version = protocol['version']
         filename = f'@name@-@state@-v@version@.xml'

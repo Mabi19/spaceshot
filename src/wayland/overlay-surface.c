@@ -1,12 +1,14 @@
 #include "overlay-surface.h"
-#include "cairo.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
-#include "wlr-layer-shell-client.h"
 #include <assert.h>
+#include <cairo.h>
+#include <fractional-scale-client.h>
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <viewporter-client.h>
+#include <wlr-layer-shell-client.h>
 
 static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
     // first, try to get an existing buffer
@@ -15,8 +17,9 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
             continue;
         }
         RenderBuffer *test_buf = window->buffers[i];
-        if (!test_buf->is_busy && test_buf->shm->width == window->width &&
-            test_buf->shm->height == window->height) {
+        if (!test_buf->is_busy &&
+            test_buf->shm->width == window->logical_width &&
+            test_buf->shm->height == window->logical_height) {
             printf("returned buffer #%zu\n", i);
             return test_buf;
         }
@@ -26,14 +29,15 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
     // or overwrite one with the wrong size
     for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
         if (window->buffers[i]) {
-            if (window->buffers[i]->shm->width == window->width &&
-                window->buffers[i]->shm->height == window->height) {
+            if (window->buffers[i]->shm->width == window->logical_width &&
+                window->buffers[i]->shm->height == window->logical_height) {
                 continue;
             }
             printf("destroyed buffer #%zu\n", i);
             render_buffer_destroy(window->buffers[i]);
         }
-        window->buffers[i] = render_buffer_new(window->width, window->height);
+        window->buffers[i] =
+            render_buffer_new(window->logical_width, window->logical_height);
         printf("created buffer #%zu\n", i);
         return window->buffers[i];
     }
@@ -42,10 +46,18 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
     if (window->buffers[0]) {
         render_buffer_destroy(window->buffers[0]);
     }
-    window->buffers[0] = render_buffer_new(window->width, window->height);
+    window->buffers[0] =
+        render_buffer_new(window->logical_width, window->logical_height);
     printf("overwrote buffer #0 (last resort)\n");
 
     return window->buffers[0];
+}
+
+static void recompute_device_size(OverlaySurface *surface) {
+    surface->device_width =
+        round((surface->logical_width * surface->scale) / 120.0);
+    surface->device_height =
+        round((surface->logical_height * surface->scale) / 120.0);
 }
 
 static void overlay_surface_handle_configure(
@@ -55,7 +67,7 @@ static void overlay_surface_handle_configure(
     uint32_t width,
     uint32_t height
 ) {
-    OverlaySurface *window = data;
+    OverlaySurface *surface = data;
     printf(
         "Received configure for surface %p with w = %d, h = %d\n",
         data,
@@ -63,18 +75,16 @@ static void overlay_surface_handle_configure(
         height
     );
 
-    zwlr_layer_surface_v1_ack_configure(window->layer_surface, serial);
+    zwlr_layer_surface_v1_ack_configure(surface->layer_surface, serial);
 
-    window->width = width;
-    window->height = height;
+    surface->logical_width = width;
+    surface->logical_height = height;
+    wp_viewport_set_destination(
+        surface->viewport, surface->logical_width, surface->logical_height
+    );
+    recompute_device_size(surface);
 
-    RenderBuffer *draw_buf = get_unused_buffer(window);
-    cairo_set_source_rgb(draw_buf->cr, 0.5, 0.5, 0.5);
-    cairo_paint(draw_buf->cr);
-    cairo_surface_flush(draw_buf->cairo_surface);
-
-    render_buffer_attach_to_surface(draw_buf, window->surface);
-    wl_surface_commit(window->surface);
+    overlay_surface_draw(surface);
 }
 
 static void overlay_surface_handle_closed(
@@ -88,22 +98,55 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
     .closed = overlay_surface_handle_closed,
 };
 
+static void preferred_scale_changed(
+    void *data,
+    struct wp_fractional_scale_v1 * /* fractional_scale */,
+    uint32_t scale
+) {
+    OverlaySurface *surface = data;
+    printf(
+        "Received fractional scale for surface %p with scale = %d\n",
+        data,
+        scale
+    );
+    surface->scale = scale;
+    recompute_device_size(surface);
+
+    overlay_surface_draw(surface);
+}
+
+static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
+    {.preferred_scale = preferred_scale_changed};
+
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
     OverlaySurfaceDrawCallback draw_callback,
     void *user_data
 ) {
     OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
-    result->surface = wl_compositor_create_surface(wayland_globals.compositor);
+    result->wl_surface =
+        wl_compositor_create_surface(wayland_globals.compositor);
     result->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
         wayland_globals.layer_shell,
-        result->surface,
+        result->wl_surface,
         output->wl_output,
         ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         "spaceshot"
     );
+    result->viewport = wp_viewporter_get_viewport(
+        wayland_globals.viewporter, result->wl_surface
+    );
+    result->scale = 120;
+    result->fractional_scale =
+        wp_fractional_scale_manager_v1_get_fractional_scale(
+            wayland_globals.fractional_scale_manager, result->wl_surface
+        );
     result->draw_callback = draw_callback;
     result->user_data = user_data;
+
+    wp_fractional_scale_v1_add_listener(
+        result->fractional_scale, &fractional_scale_listener, result
+    );
     zwlr_layer_surface_v1_add_listener(
         result->layer_surface, &layer_surface_listener, result
     );
@@ -114,7 +157,19 @@ OverlaySurface *overlay_surface_new(
     zwlr_layer_surface_v1_set_anchor(result->layer_surface, ANCHOR);
     // do not honor other surfaces' exclusive zones
     zwlr_layer_surface_v1_set_exclusive_zone(result->layer_surface, -1);
-    wl_surface_commit(result->surface);
+    wl_surface_commit(result->wl_surface);
 
     return result;
+}
+
+void overlay_surface_draw(OverlaySurface *surface) {
+    RenderBuffer *draw_buf = get_unused_buffer(surface);
+    surface->draw_callback(surface->user_data, draw_buf->cr);
+    cairo_surface_flush(draw_buf->cairo_surface);
+
+    render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
+    wl_surface_damage_buffer(
+        surface->wl_surface, 0, 0, surface->device_width, surface->device_height
+    );
+    wl_surface_commit(surface->wl_surface);
 }
