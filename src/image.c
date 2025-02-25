@@ -1,5 +1,6 @@
 #include "image.h"
 #include <assert.h>
+#include <cairo.h>
 #include <spng.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,7 @@ Image *image_new(uint32_t width, uint32_t height) {
 
     result->width = width;
     result->height = height;
-    result->stride = width * BYTES_PER_PIXEL;
+    result->stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
     result->data = malloc(result->stride * height);
     return result;
 }
