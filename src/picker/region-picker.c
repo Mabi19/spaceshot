@@ -29,8 +29,21 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
 
+    // background
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    const double GRAY_LEVEL = 0.05;
+    cairo_set_source_rgba(cr, GRAY_LEVEL, GRAY_LEVEL, GRAY_LEVEL, 0.4);
+    cairo_rectangle(
+        cr,
+        0.0,
+        0.0,
+        picker->surface->device_width,
+        picker->surface->device_height
+    );
     BBox selection_box = get_bbox_containing_selection(picker);
-    if (selection_box.width != 0 && selection_box.height != 0) {
+    if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
+        selection_box.height != 0) {
+        // poke a hole in it
         cairo_rectangle(
             cr,
             selection_box.x,
@@ -38,8 +51,24 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
             selection_box.width,
             selection_box.height
         );
-        cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
-        cairo_fill(cr);
+    }
+    cairo_fill(cr);
+
+    if (picker->state != REGION_PICKER_EMPTY) {
+        // border
+        // the offset is so that it doesn't occlude the visible area
+        const double BORDER_WIDTH = 2.0;
+        double border_offset = BORDER_WIDTH / 2;
+        cairo_set_line_width(cr, BORDER_WIDTH);
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        cairo_rectangle(
+            cr,
+            selection_box.x - border_offset,
+            selection_box.y - border_offset,
+            selection_box.width + 2 * border_offset,
+            selection_box.height + 2 * border_offset
+        );
+        cairo_stroke(cr);
     }
 
     return (BBox){
