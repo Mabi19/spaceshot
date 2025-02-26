@@ -1,4 +1,4 @@
-#include "picker/region-picker.h"
+#include "region-picker.h"
 #include "image.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"

@@ -1,7 +1,7 @@
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
-#include "picker/region-picker.h"
+#include "region-picker.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
