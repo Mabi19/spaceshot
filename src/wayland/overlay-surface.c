@@ -18,9 +18,8 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
         }
         RenderBuffer *test_buf = window->buffers[i];
         if (!test_buf->is_busy &&
-            test_buf->shm->width == window->logical_width &&
-            test_buf->shm->height == window->logical_height) {
-            printf("returned buffer #%zu\n", i);
+            test_buf->shm->width == window->device_width &&
+            test_buf->shm->height == window->device_height) {
             return test_buf;
         }
     }
@@ -29,15 +28,15 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
     // or overwrite one with the wrong size
     for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
         if (window->buffers[i]) {
-            if (window->buffers[i]->shm->width == window->logical_width &&
-                window->buffers[i]->shm->height == window->logical_height) {
+            if (window->buffers[i]->shm->width == window->device_width &&
+                window->buffers[i]->shm->height == window->device_height) {
                 continue;
             }
             printf("destroyed buffer #%zu\n", i);
             render_buffer_destroy(window->buffers[i]);
         }
         window->buffers[i] =
-            render_buffer_new(window->logical_width, window->logical_height);
+            render_buffer_new(window->device_width, window->device_height);
         printf("created buffer #%zu\n", i);
         return window->buffers[i];
     }
@@ -47,7 +46,7 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
         render_buffer_destroy(window->buffers[0]);
     }
     window->buffers[0] =
-        render_buffer_new(window->logical_width, window->logical_height);
+        render_buffer_new(window->device_width, window->device_height);
     printf("overwrote buffer #0 (last resort)\n");
 
     return window->buffers[0];
