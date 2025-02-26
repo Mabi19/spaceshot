@@ -43,11 +43,11 @@ static char *format_double(double input) {
     return output_buf;
 }
 
-char *bbox_stringify(const BBox *src) {
-    char *x = format_double(src->x);
-    char *y = format_double(src->y);
-    char *width = format_double(src->width);
-    char *height = format_double(src->height);
+char *bbox_stringify(const BBox src) {
+    char *x = format_double(src.x);
+    char *y = format_double(src.y);
+    char *width = format_double(src.width);
+    char *height = format_double(src.height);
 
     int buf_len =
         strlen(x) + 1 + strlen(y) + 1 + strlen(width) + 1 + strlen(height) + 1;
@@ -60,43 +60,57 @@ char *bbox_stringify(const BBox *src) {
     return result;
 }
 
-bool bbox_contains(const BBox *outer, const BBox *inner) {
-    int32_t outer_right = outer->x + outer->width;
-    int32_t outer_bottom = outer->y + outer->height;
-    int32_t inner_right = inner->x + inner->width;
-    int32_t inner_bottom = inner->y + inner->height;
-    return (outer->x <= inner->x) && (outer->y <= inner->y) &&
+bool bbox_contains(const BBox outer, const BBox inner) {
+    int32_t outer_right = outer.x + outer.width;
+    int32_t outer_bottom = outer.y + outer.height;
+    int32_t inner_right = inner.x + inner.width;
+    int32_t inner_bottom = inner.y + inner.height;
+    return (outer.x <= inner.x) && (outer.y <= inner.y) &&
            (outer_right >= inner_right) && (outer_bottom >= inner_bottom);
 }
 
-BBox bbox_translate(const BBox *src, double dx, double dy) {
+BBox bbox_translate(const BBox src, double dx, double dy) {
     return (BBox){
-        .x = src->x + dx,
-        .y = src->y + dy,
-        .width = src->width,
-        .height = src->height,
+        .x = src.x + dx,
+        .y = src.y + dy,
+        .width = src.width,
+        .height = src.height,
     };
 }
 
-BBox bbox_scale(const BBox *src, double factor) {
+BBox bbox_scale(const BBox src, double factor) {
     return (BBox){
-        .x = src->x * factor,
-        .y = src->y * factor,
-        .width = src->width * factor,
-        .height = src->height * factor,
+        .x = src.x * factor,
+        .y = src.y * factor,
+        .width = src.width * factor,
+        .height = src.height * factor,
     };
 }
 
-BBox bbox_round(const BBox *src) {
-    double right = floor(src->x + src->width);
-    double bottom = floor(src->y + src->height);
-    double new_x = floor(src->x);
-    double new_y = floor(src->y);
+BBox bbox_expand_to_grid(const BBox src) {
+    double left = floor(src.x);
+    double top = floor(src.y);
+    double right = ceil(src.x + src.width);
+    double bottom = ceil(src.y + src.height);
 
     return (BBox){
-        .x = new_x,
-        .y = new_y,
-        .width = right - new_x,
-        .height = bottom - new_y,
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
+    };
+}
+
+BBox bbox_round(const BBox src) {
+    double left = round(src.x);
+    double top = round(src.y);
+    double right = round(src.x + src.width);
+    double bottom = round(src.y + src.height);
+
+    return (BBox){
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
     };
 }

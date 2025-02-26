@@ -19,9 +19,9 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
         .width = right - left,
         .height = bottom - top,
     };
-    BBox scaled = bbox_scale(&result, picker->surface->scale / 120.0);
-    BBox rounded = bbox_round(&scaled);
-    return rounded;
+    result = bbox_scale(result, picker->surface->scale / 120.0);
+    result = bbox_expand_to_grid(result);
+    return result;
 }
 
 static BBox region_picker_draw(void *data, cairo_t *cr) {

@@ -36,28 +36,27 @@ save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
 
 static void
 crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
-    const BBox *logical_box_in_comp_space = data;
-    const BBox logical_box_in_output_space = bbox_translate(
-        logical_box_in_comp_space,
-        -output->logical_bounds.x,
-        -output->logical_bounds.y
+    BBox crop_bounds = *(BBox *)data;
+    // move to output space
+    crop_bounds = bbox_translate(
+        crop_bounds, -output->logical_bounds.x, -output->logical_bounds.y
     );
 
     double scale_factor_x = image->width / output->logical_bounds.width;
     double scale_factor_y = image->height / output->logical_bounds.height;
     assert(fabs(scale_factor_x - scale_factor_y) < 0.01);
-    const BBox device_box =
-        bbox_scale(&logical_box_in_output_space, scale_factor_x);
+    // move to device space
+    crop_bounds = bbox_scale(crop_bounds, scale_factor_x);
     // cropping takes place in pixels, which are whole, so round off any
     // potential inaccuracies
-    const BBox rounded_device_box = bbox_round(&device_box);
+    crop_bounds = bbox_round(crop_bounds);
 
     Image *cropped = image_crop(
         image,
-        rounded_device_box.x,
-        rounded_device_box.y,
-        rounded_device_box.width,
-        rounded_device_box.height
+        crop_bounds.x,
+        crop_bounds.y,
+        crop_bounds.width,
+        crop_bounds.height
     );
     image_destroy(image);
     image_save_png(cropped, "./screenshot.png");
@@ -88,7 +87,7 @@ static void add_new_output(WrappedOutput *output) {
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
             if (bbox_contains(
-                    &output->logical_bounds, &args->region_params.region
+                    output->logical_bounds, args->region_params.region
                 )) {
                 printf("... which is correct\n");
                 correct_output_found = true;
