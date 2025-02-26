@@ -5,6 +5,7 @@
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
 #include <cairo.h>
+#include <math.h>
 #include <stdlib.h>
 
 static BBox get_bbox_containing_selection(RegionPicker *picker) {
@@ -24,8 +25,11 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     return result;
 }
 
+static const double BORDER_WIDTH = 2.0;
+
 static BBox region_picker_draw(void *data, cairo_t *cr) {
     RegionPicker *picker = data;
+    OverlaySurface *surface = picker->surface;
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
 
@@ -34,11 +38,7 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     const double GRAY_LEVEL = 0.05;
     cairo_set_source_rgba(cr, GRAY_LEVEL, GRAY_LEVEL, GRAY_LEVEL, 0.4);
     cairo_rectangle(
-        cr,
-        0.0,
-        0.0,
-        picker->surface->device_width,
-        picker->surface->device_height
+        cr, 0.0, 0.0, surface->device_width, surface->device_height
     );
     BBox selection_box = get_bbox_containing_selection(picker);
     if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
@@ -57,9 +57,10 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     if (picker->state != REGION_PICKER_EMPTY) {
         // border
         // the offset is so that it doesn't occlude the visible area
-        const double BORDER_WIDTH = 2.0;
-        double border_offset = BORDER_WIDTH / 2;
-        cairo_set_line_width(cr, BORDER_WIDTH);
+        double border_width_pixels =
+            round((BORDER_WIDTH * surface->scale) / 120.0);
+        double border_offset = border_width_pixels / 2;
+        cairo_set_line_width(cr, border_width_pixels);
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         cairo_rectangle(
             cr,
@@ -74,8 +75,8 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     return (BBox){
         .x = 0,
         .y = 0,
-        .width = picker->surface->device_width,
-        .height = picker->surface->device_height,
+        .width = surface->device_width,
+        .height = surface->device_height,
     };
 }
 
