@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <viewporter-client.h>
+#include <wayland-client-protocol.h>
 #include <wlr-layer-shell-client.h>
 
 static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
@@ -107,7 +108,8 @@ static void overlay_surface_handle_configure(
 static void overlay_surface_handle_closed(
     void *data, struct zwlr_layer_surface_v1 * /* layer_surface */
 ) {
-    printf("Overlay surface %p closed\n", data);
+    OverlaySurface *surface = data;
+    surface->close_callback(surface->user_data);
 }
 
 static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
@@ -138,6 +140,7 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
     OverlaySurfaceDrawCallback draw_callback,
+    OverlaySurfaceCloseCallback close_callback,
     void *user_data
 ) {
     OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
@@ -159,6 +162,7 @@ OverlaySurface *overlay_surface_new(
             wayland_globals.fractional_scale_manager, result->wl_surface
         );
     result->draw_callback = draw_callback;
+    result->close_callback = close_callback;
     result->user_data = user_data;
 
     wp_fractional_scale_v1_add_listener(
@@ -172,6 +176,12 @@ OverlaySurface *overlay_surface_new(
         ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
     zwlr_layer_surface_v1_set_anchor(result->layer_surface, ANCHOR);
+    // TODO: Consider changing to EXCLUSIVE here once actual keyboard stuff is
+    // handled
+    // zwlr_layer_surface_v1_set_keyboard_interactivity(
+    //     result->layer_surface,
+    //     ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
+    // );
     // do not honor other surfaces' exclusive zones
     zwlr_layer_surface_v1_set_exclusive_zone(result->layer_surface, -1);
     wl_surface_commit(result->wl_surface);
@@ -199,4 +209,19 @@ void overlay_surface_queue_draw(OverlaySurface *surface) {
     struct wl_callback *callback = wl_surface_frame(surface->wl_surface);
     wl_callback_add_listener(callback, &frame_callback_listener, surface);
     wl_surface_commit(surface->wl_surface);
+}
+
+void overlay_surface_destroy(OverlaySurface *surface) {
+    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
+        if (surface->buffers[i]) {
+            render_buffer_destroy(surface->buffers[i]);
+        }
+    }
+
+    wp_fractional_scale_v1_destroy(surface->fractional_scale);
+    wp_viewport_destroy(surface->viewport);
+    zwlr_layer_surface_v1_destroy(surface->layer_surface);
+    wl_surface_destroy(surface->wl_surface);
+
+    free(surface);
 }

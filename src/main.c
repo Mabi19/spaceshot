@@ -10,9 +10,16 @@
 #include <string.h>
 #include <wayland-client.h>
 
+typedef struct {
+    RegionPicker *picker;
+    Image *image;
+    struct wl_list link;
+} RegionPickerListEntry;
+
 static bool is_finished = false;
 static bool correct_output_found = false;
 static Arguments *args;
+static struct wl_list active_pickers;
 
 static void
 save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
@@ -34,8 +41,29 @@ save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
     is_finished = true;
 }
 
-static void
-crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
+/**
+ * Crop an image using device (pixel) coordinates.
+ */
+static void crop_and_save_image(Image *image, BBox crop_bounds) {
+    Image *cropped = image_crop(
+        image,
+        crop_bounds.x,
+        crop_bounds.y,
+        crop_bounds.width,
+        crop_bounds.height
+    );
+
+    image_save_png(cropped, "./screenshot.png");
+    image_destroy(cropped);
+    is_finished = true;
+}
+
+/**
+ * Crop an image using global logical coordinates and save it.
+ */
+static void finish_predefined_region_screenshot(
+    WrappedOutput *output, Image *image, void *data
+) {
     BBox crop_bounds = *(BBox *)data;
     // move to output space
     crop_bounds = bbox_translate(
@@ -51,24 +79,54 @@ crop_and_save_image(WrappedOutput *output, Image *image, void *data) {
     // potential inaccuracies
     crop_bounds = bbox_round(crop_bounds);
 
-    Image *cropped = image_crop(
-        image,
-        crop_bounds.x,
-        crop_bounds.y,
-        crop_bounds.width,
-        crop_bounds.height
-    );
+    crop_and_save_image(image, crop_bounds);
     image_destroy(image);
-    image_save_png(cropped, "./screenshot.png");
-    image_destroy(cropped);
-    is_finished = true;
+}
+
+static void region_picker_finish(
+    RegionPicker *picker, RegionPickerFinishReason reason, BBox result_region
+) {
+    // Note that when this function is called, the picker is already destroyed
+    bool should_delete_others = false;
+
+    RegionPickerListEntry *entry, *tmp;
+    wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
+        if (entry->picker != picker) {
+            continue;
+        }
+
+        if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
+            crop_and_save_image(entry->image, result_region);
+            should_delete_others = true;
+        } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
+            printf("selection cancelled\n");
+            should_delete_others = true;
+            is_finished = true;
+        }
+
+        image_destroy(entry->image);
+        wl_list_remove(&entry->link);
+        free(entry);
+    }
+
+    if (should_delete_others) {
+        wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
+            region_picker_destroy(entry->picker);
+            image_destroy(entry->image);
+            wl_list_remove(&entry->link);
+            free(entry);
+        }
+    }
 }
 
 static void create_region_picker_for_output(
     WrappedOutput *output, Image *image, void * /* data */
 ) {
-    // TODO: Save this so that it can be destroyed properly later
-    region_picker_new(output, image);
+    // Save it in a list so that it can be properly destroyed later
+    RegionPickerListEntry *entry = calloc(1, sizeof(RegionPickerListEntry));
+    entry->picker = region_picker_new(output, image, region_picker_finish);
+    entry->image = image;
+    wl_list_insert(&active_pickers, &entry->link);
 }
 
 static void add_new_output(WrappedOutput *output) {
@@ -92,15 +150,17 @@ static void add_new_output(WrappedOutput *output) {
                 printf("... which is correct\n");
                 correct_output_found = true;
                 take_output_screenshot(
-                    output, crop_and_save_image, &args->region_params.region
+                    output,
+                    finish_predefined_region_screenshot,
+                    &args->region_params.region
                 );
             }
         } else {
             //! This is for debugging so that I don't lock myself out of my
             //! terminal
-            if (strcmp(output->name, "HDMI-A-1") != 0) {
-                return;
-            }
+            // if (strcmp(output->name, "HDMI-A-1") != 0) {
+            //     return;
+            // }
             correct_output_found = true;
 
             take_output_screenshot(
@@ -116,6 +176,8 @@ static void add_new_output(WrappedOutput *output) {
 }
 
 int main(int argc, char **argv) {
+    wl_list_init(&active_pickers);
+
     args = parse_argv(argc, argv);
 
     struct wl_display *display = wl_display_connect(NULL);

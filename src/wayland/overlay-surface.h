@@ -1,8 +1,8 @@
 #pragma once
-#include "fractional-scale-client.h"
 #include "wayland/output.h"
 #include "wayland/render.h"
 #include <cairo.h>
+#include <fractional-scale-client.h>
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>
 
@@ -10,6 +10,11 @@ constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 
 /** Returns the damaged area, in device pixels. */
 typedef BBox (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
+
+/**
+ * Called when the surface is closed. This should call overlay_surface_destroy.
+ */
+typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
 
 typedef struct {
     struct wl_surface *wl_surface;
@@ -29,6 +34,7 @@ typedef struct {
     RenderBuffer *buffers[OVERLAY_SURFACE_BUFFER_COUNT];
     // callback things
     OverlaySurfaceDrawCallback draw_callback;
+    OverlaySurfaceCloseCallback close_callback;
     void *user_data;
     // used for deduplicating frame() requests
     bool has_requested_frame;
@@ -37,7 +43,9 @@ typedef struct {
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
     OverlaySurfaceDrawCallback draw_callback,
+    OverlaySurfaceCloseCallback close_callback,
     void *user_data
 );
 /** Call the draw_callback sometime in the future and present the result. */
 void overlay_surface_queue_draw(OverlaySurface *surface);
+void overlay_surface_destroy(OverlaySurface *surface);

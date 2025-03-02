@@ -3,12 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wayland-client.h>
+#include <wayland-util.h>
 
 typedef struct {
+    // This will be NULL when empty
     OverlaySurface *surface;
     SeatListener *listener;
     void *user_data;
-    struct wl_list link;
 } SeatListenerListEntry;
 
 static void pointer_handle_enter(
@@ -69,6 +70,9 @@ static void pointer_handle_button(
     case BTN_MIDDLE:
         button_mask = POINTER_BUTTON_MIDDLE;
         break;
+    default:
+        button_mask = 0;
+        break;
     }
 
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
@@ -110,7 +114,10 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
         ptr_data->pressed_buttons != ptr_data->pending_buttons) {
 
         SeatListenerListEntry *entry;
-        wl_list_for_each(entry, &dispatcher->listeners, link) {
+        wl_array_for_each(entry, &dispatcher->listeners) {
+            if (!entry->surface)
+                continue;
+
             if (entry->listener->mouse) {
                 entry->listener->mouse(entry->user_data, event);
             }
@@ -204,7 +211,7 @@ SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
     SeatDispatcher *result = calloc(1, sizeof(SeatDispatcher));
     result->seat = seat;
     wl_seat_add_listener(seat, &seat_listener, result);
-    wl_list_init(&result->listeners);
+    wl_array_init(&result->listeners);
     return result;
 }
 
@@ -214,20 +221,33 @@ void seat_dispatcher_add_listener(
     SeatListener *listener,
     void *user_data
 ) {
-    SeatListenerListEntry *entry = calloc(1, sizeof(SeatListenerListEntry));
+    SeatListenerListEntry *entry;
+    // try to find an empty slot first
+    wl_array_for_each(entry, &dispatcher->listeners) {
+        if (entry->surface == NULL) {
+            entry->surface = surface;
+            entry->listener = listener;
+            entry->user_data = user_data;
+            return;
+        }
+    }
+    // push to the end
+    entry = wl_array_add(&dispatcher->listeners, sizeof(SeatListenerListEntry));
     entry->surface = surface;
     entry->listener = listener;
     entry->user_data = user_data;
-    wl_list_insert(&dispatcher->listeners, &entry->link);
 }
 
 void seat_dispatcher_remove_listener(
     SeatDispatcher *dispatcher, OverlaySurface *surface
 ) {
-    SeatListenerListEntry *entry, *tmp;
-    wl_list_for_each_safe(entry, tmp, &dispatcher->listeners, link) {
+    SeatListenerListEntry *entry;
+    wl_array_for_each(entry, &dispatcher->listeners) {
         if (entry->surface == surface) {
-            wl_list_remove(&entry->link);
+            // clear everything for safety
+            entry->surface = NULL;
+            entry->listener = NULL;
+            entry->user_data = NULL;
         }
     }
 }

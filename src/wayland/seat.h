@@ -42,8 +42,10 @@ typedef struct {
             POINTER_EVENT_MOTION = 1,
         } received_events;
     } pointer_data;
+    // This is an array because it needs to be safe against arbitrary removals
+    // (it does mean O(n) insertions though)
     // of (private) struct SeatListenerListEntry
-    struct wl_list listeners;
+    struct wl_array listeners;
 } SeatDispatcher;
 
 SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat);
