@@ -1,9 +1,10 @@
 #include "wayland/seat.h"
+#include "cursor-shape-client.h"
+#include "wayland/globals.h"
 #include <linux/input-event-codes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wayland-client.h>
-#include <wayland-util.h>
 
 typedef struct {
     // This will be NULL when empty
@@ -15,7 +16,7 @@ typedef struct {
 static void pointer_handle_enter(
     void *data,
     struct wl_pointer * /* pointer */,
-    uint32_t /* serial */,
+    uint32_t serial,
     struct wl_surface *surface,
     wl_fixed_t x,
     wl_fixed_t y
@@ -25,6 +26,13 @@ static void pointer_handle_enter(
     dispatcher->pointer_data.surface_x = wl_fixed_to_double(x);
     dispatcher->pointer_data.surface_y = wl_fixed_to_double(y);
     dispatcher->pointer_data.received_events |= POINTER_EVENT_MOTION;
+
+    // TODO: make this configurable and settable outside of enter events
+    wp_cursor_shape_device_v1_set_shape(
+        dispatcher->pointer_data.shape_device,
+        serial,
+        WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
+    );
 }
 
 static void pointer_handle_leave(
@@ -185,12 +193,19 @@ static void seat_handle_capabilities(
     if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
         if (!dispatcher->pointer) {
             dispatcher->pointer = wl_seat_get_pointer(dispatcher->seat);
+            dispatcher->pointer_data.shape_device =
+                wp_cursor_shape_manager_v1_get_pointer(
+                    wayland_globals.cursor_shape_manager, dispatcher->pointer
+                );
             wl_pointer_add_listener(
                 dispatcher->pointer, &pointer_listener, dispatcher
             );
         }
     } else {
         if (dispatcher->pointer) {
+            wp_cursor_shape_device_v1_destroy(
+                dispatcher->pointer_data.shape_device
+            );
             wl_pointer_destroy(dispatcher->pointer);
         }
     }

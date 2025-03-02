@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "wayland/seat.h"
+#include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,6 +162,12 @@ static void registry_handle_global(
     if (strcmp(interface, wl_shm_interface.name) == 0) {
         globals->shm =
             wl_registry_bind(registry, object_id, &wl_shm_interface, 1);
+    }
+
+    if (strcmp(interface, wp_cursor_shape_manager_v1_interface.name) == 0) {
+        globals->cursor_shape_manager = wl_registry_bind(
+            registry, object_id, &wp_cursor_shape_manager_v1_interface, 1
+        );
     }
 
     if (strcmp(interface, wp_fractional_scale_manager_v1_interface.name) == 0) {

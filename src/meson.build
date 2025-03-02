@@ -17,11 +17,23 @@ extra_protocols = [
     {
         'provider': 'wp',
         'state': 'staging',
+        'name': 'cursor-shape',
+        'version': 1,
+    },
+    {
+        'provider': 'wp',
+        'state': 'staging',
         'name': 'fractional-scale',
         'version': 1,
     },
     {
-        # used for fractional-scale
+        # required for cursor-shape
+        'provider': 'wp',
+        'state': 'stable',
+        'name': 'tablet',
+        'version': 2,
+    },
+    {
         'provider': 'wp',
         'state': 'stable',
         'name': 'viewporter',
@@ -53,11 +65,13 @@ foreach protocol : extra_protocols
     name = protocol['name']
 
     # protocol paths depend on state
-    if state == 'stable'
-        filename = f'@name@.xml'
-    elif state == 'staging'
-        version = protocol['version']
-        filename = f'@name@-v@version@.xml'
+    if state != 'unstable'
+        if 'version' in protocol
+            version = protocol['version']
+            filename = f'@name@-v@version@.xml'
+        else
+            filename = f'@name@.xml'
+        endif
     else
         version = protocol['version']
         filename = f'@name@-@state@-v@version@.xml'

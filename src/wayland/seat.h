@@ -1,5 +1,6 @@
 #pragma once
 #include "wayland/overlay-surface.h"
+#include <cursor-shape-client.h>
 #include <wayland-client.h>
 
 typedef enum {
@@ -30,6 +31,7 @@ typedef struct {
     struct wl_keyboard *keyboard;
     struct wl_touch *touch;
     struct {
+        struct wp_cursor_shape_device_v1 *shape_device;
         struct wl_surface *focus;
         double surface_x;
         double surface_y;

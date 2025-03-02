@@ -1,10 +1,11 @@
 #pragma once
 
 #include "wayland/seat.h"
-#include "wlr-layer-shell-client.h"
+#include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <viewporter-client.h>
 #include <wayland-client.h>
+#include <wlr-layer-shell-client.h>
 #include <wlr-screencopy-client.h>
 #include <xdg-output-client.h>
 
@@ -13,6 +14,7 @@ typedef void (*OutputCallback)(WrappedOutput *);
 typedef struct {
     struct wl_compositor *compositor;
     struct wl_shm *shm;
+    struct wp_cursor_shape_manager_v1 *cursor_shape_manager;
     struct wp_fractional_scale_manager_v1 *fractional_scale_manager;
     struct wp_viewporter *viewporter;
     struct zwlr_layer_shell_v1 *layer_shell;
