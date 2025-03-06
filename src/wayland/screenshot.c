@@ -42,17 +42,25 @@ static void frame_handle_buffer(
         stride
     );
 
-    if (context->has_selected_format) {
-        printf("skipping\n");
-    } else {
-        if (format == WL_SHM_FORMAT_XRGB8888) {
-            context->selected_format = format;
-            context->width = width;
-            context->height = height;
-            context->stride = stride;
-            context->has_selected_format = true;
-        }
+    // 10-bit should be preferred if available
+    // TODO: 8-bit BGR (for Sway & other wlr)
+    // actually BGR surfaces should be fully supported,
+    // because wlr can't display XRGB2101010
+    if (format == WL_SHM_FORMAT_XRGB2101010 ||
+        format == WL_SHM_FORMAT_XBGR2101010) {
+        goto accept_format;
+    } else if (format == WL_SHM_FORMAT_XRGB8888 &&
+               !context->has_selected_format) {
+        goto accept_format;
     }
+    printf("skipping\n");
+    return;
+accept_format:
+    context->selected_format = format;
+    context->width = width;
+    context->height = height;
+    context->stride = stride;
+    context->has_selected_format = true;
 }
 
 static void frame_handle_linux_dmabuf(
@@ -109,6 +117,17 @@ static void frame_handle_ready(
         context->width,
         context->height,
         context->stride
+    );
+    printf(
+        "Got image from wayland: %dx%d, %d bytes in total\n",
+        result->width,
+        result->height,
+        result->stride * result->height
+    );
+    printf(
+        "Top-left pixel: %x, original: %x\n",
+        ((uint32_t *)result->data)[0],
+        ((uint32_t *)context->buffer->data)[0]
     );
     context->image_callback(context->output, result, context->user_data);
 

@@ -11,16 +11,16 @@
 #include <wayland-client-protocol.h>
 #include <wlr-layer-shell-client.h>
 
-static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
+static RenderBuffer *get_unused_buffer(OverlaySurface *surface) {
     // first, try to get an existing buffer
     for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
-        if (!window->buffers[i]) {
+        if (!surface->buffers[i]) {
             continue;
         }
-        RenderBuffer *test_buf = window->buffers[i];
+        RenderBuffer *test_buf = surface->buffers[i];
         if (!test_buf->is_busy &&
-            test_buf->shm->width == window->device_width &&
-            test_buf->shm->height == window->device_height) {
+            test_buf->shm->width == surface->device_width &&
+            test_buf->shm->height == surface->device_height) {
             return test_buf;
         }
     }
@@ -28,29 +28,31 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *window) {
     // second, try to create a new one in an empty spot
     // or overwrite one with the wrong size
     for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
-        if (window->buffers[i]) {
-            if (window->buffers[i]->shm->width == window->device_width &&
-                window->buffers[i]->shm->height == window->device_height) {
+        if (surface->buffers[i]) {
+            if (surface->buffers[i]->shm->width == surface->device_width &&
+                surface->buffers[i]->shm->height == surface->device_height) {
                 continue;
             }
             printf("destroyed buffer #%zu\n", i);
-            render_buffer_destroy(window->buffers[i]);
+            render_buffer_destroy(surface->buffers[i]);
         }
-        window->buffers[i] =
-            render_buffer_new(window->device_width, window->device_height);
+        surface->buffers[i] = render_buffer_new(
+            surface->device_width, surface->device_height, surface->pixel_format
+        );
         printf("created buffer #%zu\n", i);
-        return window->buffers[i];
+        return surface->buffers[i];
     }
 
     // last resort: overwrite the first one
-    if (window->buffers[0]) {
-        render_buffer_destroy(window->buffers[0]);
+    if (surface->buffers[0]) {
+        render_buffer_destroy(surface->buffers[0]);
     }
-    window->buffers[0] =
-        render_buffer_new(window->device_width, window->device_height);
+    surface->buffers[0] = render_buffer_new(
+        surface->device_width, surface->device_height, surface->pixel_format
+    );
     printf("overwrote buffer #0 (last resort)\n");
 
-    return window->buffers[0];
+    return surface->buffers[0];
 }
 
 static void recompute_device_size(OverlaySurface *surface) {
@@ -139,11 +141,13 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
 
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
+    ImageFormat pixel_format,
     OverlaySurfaceDrawCallback draw_callback,
     OverlaySurfaceCloseCallback close_callback,
     void *user_data
 ) {
     OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
+    result->pixel_format = pixel_format;
     result->wl_surface =
         wl_compositor_create_surface(wayland_globals.compositor);
     result->layer_surface = zwlr_layer_shell_v1_get_layer_surface(

@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
@@ -70,6 +71,7 @@ SharedBuffer *shared_buffer_new(
 
     struct wl_shm_pool *pool =
         wl_shm_create_pool(wayland_globals.shm, result->fd, size);
+    printf("format: %x\n", result->format);
     result->wl_buffer = wl_shm_pool_create_buffer(
         pool, 0, result->width, result->height, result->stride, result->format
     );

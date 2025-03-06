@@ -156,7 +156,11 @@ RegionPicker *region_picker_new(
 ) {
     RegionPicker *result = calloc(1, sizeof(RegionPicker));
     result->surface = overlay_surface_new(
-        output, region_picker_draw, region_picker_handle_surface_close, result
+        output,
+        background->format,
+        region_picker_draw,
+        region_picker_handle_surface_close,
+        result
     );
     result->state = REGION_PICKER_EMPTY;
     result->background = image_make_cairo_surface(background);

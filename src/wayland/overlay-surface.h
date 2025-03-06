@@ -31,6 +31,8 @@ typedef struct {
     uint32_t device_width;
     /** The height of the render buffer. */
     uint32_t device_height;
+    /** The window's pixel format. */
+    ImageFormat pixel_format;
     RenderBuffer *buffers[OVERLAY_SURFACE_BUFFER_COUNT];
     // callback things
     OverlaySurfaceDrawCallback draw_callback;
@@ -42,6 +44,7 @@ typedef struct {
 
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
+    ImageFormat pixel_format,
     OverlaySurfaceDrawCallback draw_callback,
     OverlaySurfaceCloseCallback close_callback,
     void *user_data

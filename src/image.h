@@ -4,19 +4,28 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
-/**
- * An image in the XRGB8888 format (little endian).
- */
+/** Note that all formats here are little endian.  */
+typedef enum {
+    IMAGE_FORMAT_XRGB8888,
+    IMAGE_FORMAT_XRGB2101010,
+} ImageFormat;
+
+ImageFormat image_format_from_wl(enum wl_shm_format format);
+enum wl_shm_format image_format_to_wl(ImageFormat format);
+cairo_format_t image_format_to_cairo(ImageFormat format);
+uint32_t image_format_bytes_per_pixel(ImageFormat format);
+
 typedef struct {
     uint8_t *data;
+    ImageFormat format;
     uint32_t width;
     uint32_t height;
     uint32_t stride;
 } Image;
 
-Image *image_new(uint32_t width, uint32_t height);
+Image *image_new(uint32_t width, uint32_t height, ImageFormat format);
 Image *image_new_from_wayland(
-    enum wl_shm_format format,
+    enum wl_shm_format wl_format,
     // This will be copied.
     const uint8_t *data,
     uint32_t width,

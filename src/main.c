@@ -23,19 +23,6 @@ static struct wl_list active_pickers;
 
 static void
 save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
-    printf(
-        "Got image from wayland: %dx%d, %d bytes in total\n",
-        image->width,
-        image->height,
-        image->stride * image->height
-    );
-    printf(
-        "Top-left pixel: %x %x %x\n",
-        image->data[2],
-        image->data[1],
-        image->data[0]
-    );
-
     image_save_png(image, "./screenshot.png");
     image_destroy(image);
     is_finished = true;
