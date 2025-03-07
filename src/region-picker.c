@@ -39,6 +39,7 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
     const double GRAY_LEVEL = 0.05;
+    // no need for eventual flip because R = B
     cairo_set_source_rgba(cr, GRAY_LEVEL, GRAY_LEVEL, GRAY_LEVEL, 0.4);
     cairo_rectangle(
         cr, 0.0, 0.0, surface->device_width, surface->device_height
@@ -65,6 +66,7 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
             round((BORDER_WIDTH * surface->scale) / 120.0);
         double border_offset = border_width_pixels / 2;
         cairo_set_line_width(cr, border_width_pixels);
+        // no need for eventual flip because R = B
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         cairo_rectangle(
             cr,
