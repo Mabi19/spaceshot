@@ -4,14 +4,26 @@
 #include <stdint.h>
 #include <wayland-client.h>
 
-/** Note that all formats here are little endian.  */
+constexpr uint32_t IMAGE_FORMAT_FLIPPED_ORDER = (1 << 15);
+/**
+ * An enum of image formats.
+ * BGR formats are the corresponding RGB formats OR'd with
+ * IMAGE_FORMAT_FLIPPED_ORDER. Note that all formats here are little endian.
+ */
 typedef enum {
-    IMAGE_FORMAT_XRGB8888,
-    IMAGE_FORMAT_XRGB2101010,
+    IMAGE_FORMAT_XRGB8888 = 1,
+    IMAGE_FORMAT_XRGB2101010 = 2,
+    IMAGE_FORMAT_XBGR2101010 =
+        IMAGE_FORMAT_XRGB2101010 | IMAGE_FORMAT_FLIPPED_ORDER
 } ImageFormat;
 
 ImageFormat image_format_from_wl(enum wl_shm_format format);
 enum wl_shm_format image_format_to_wl(ImageFormat format);
+/**
+ * Note that this function always returns an RGB format.
+ * Manually specified colors should have R & B flipped if
+ * (format & IMAGE_FORMAT_FLIPPED_ORDER).
+ */
 cairo_format_t image_format_to_cairo(ImageFormat format);
 uint32_t image_format_bytes_per_pixel(ImageFormat format);
 

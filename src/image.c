@@ -16,6 +16,8 @@ ImageFormat image_format_from_wl(enum wl_shm_format format) {
         return IMAGE_FORMAT_XRGB8888;
     case WL_SHM_FORMAT_XRGB2101010:
         return IMAGE_FORMAT_XRGB2101010;
+    case WL_SHM_FORMAT_XBGR2101010:
+        return IMAGE_FORMAT_XBGR2101010;
     default:
         fprintf(stderr, "internal error: unhandled wl format %x\n", format);
         exit(EXIT_FAILURE);
@@ -27,6 +29,8 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
         return WL_SHM_FORMAT_XRGB8888;
     case IMAGE_FORMAT_XRGB2101010:
         return WL_SHM_FORMAT_XRGB2101010;
+    case IMAGE_FORMAT_XBGR2101010:
+        return WL_SHM_FORMAT_XBGR2101010;
     default:
         fprintf(stderr, "internal error: unhandled image format %x\n", format);
         exit(EXIT_FAILURE);
@@ -37,6 +41,7 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
     case IMAGE_FORMAT_XRGB8888:
         return CAIRO_FORMAT_RGB24;
     case IMAGE_FORMAT_XRGB2101010:
+    case IMAGE_FORMAT_XBGR2101010:
         return CAIRO_FORMAT_RGB30;
     default:
         fprintf(stderr, "internal error: unhandled image format %x\n", format);
@@ -46,8 +51,8 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
 uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
-        return 4;
     case IMAGE_FORMAT_XRGB2101010:
+    case IMAGE_FORMAT_XBGR2101010:
         return 4;
     default:
         fprintf(stderr, "internal error: unhandled image format %x\n", format);
@@ -78,14 +83,6 @@ Image *image_new_from_wayland(
     uint32_t height,
     uint32_t stride
 ) {
-    enum { NONE, BGR_TO_RGB_2101010 } transcode_type = NONE;
-
-    // check if transcoding is necessary
-    if (wl_format == WL_SHM_FORMAT_XBGR2101010) {
-        wl_format = WL_SHM_FORMAT_XRGB2101010;
-        transcode_type = BGR_TO_RGB_2101010;
-    }
-
     ImageFormat format = image_format_from_wl(wl_format);
 
     Image *result = image_new(width, height, format);
@@ -100,22 +97,6 @@ Image *image_new_from_wayland(
         memcpy(result_row, source_row, width * bytes_per_pixel);
         source_row += stride;
         result_row += result->stride;
-    }
-
-    if (transcode_type == BGR_TO_RGB_2101010) {
-        for (uint32_t y = 0; y < height; y++) {
-            uint32_t *row_ptr = (uint32_t *)(result->data + result->stride * y);
-            for (uint32_t x = 0; x < width; x++) {
-                uint32_t pixel = row_ptr[x];
-                uint32_t r = pixel & 0x3ff;
-                uint32_t g = (pixel >> 10) & 0x3ff;
-                uint32_t b = (pixel >> 20) & 0x3ff;
-                if (x == 0 && y == 0) {
-                    printf("transcoded: %x %x %x\n", r >> 2, g >> 2, b >> 2);
-                }
-                row_ptr[x] = (r << 20) | (g << 10) | b;
-            }
-        }
     }
 
     return result;
@@ -165,6 +146,7 @@ void image_save_png(const Image *image, const char *filename) {
         ihdr.bit_depth = 8;
         break;
     case IMAGE_FORMAT_XRGB2101010:
+    case IMAGE_FORMAT_XBGR2101010:
         ihdr.bit_depth = 16;
         break;
     default:
@@ -196,6 +178,10 @@ void image_save_png(const Image *image, const char *filename) {
         }
         result_data = data;
     } else if (image->format == IMAGE_FORMAT_XRGB2101010) {
+        // libspng expects ??? bytes per pixel
+        fprintf(stderr, "TODO: 16-bit save\n");
+        exit(EXIT_FAILURE);
+    } else if (image->format == IMAGE_FORMAT_XBGR2101010) {
         // libspng expects ??? bytes per pixel
         fprintf(stderr, "TODO: 16-bit save\n");
         exit(EXIT_FAILURE);
