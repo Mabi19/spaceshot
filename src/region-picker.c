@@ -30,9 +30,20 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     return result;
 }
 
-static BBox region_picker_draw(void *data, cairo_t *cr) {
+static bool region_picker_draw(void *data, cairo_t *cr) {
     RegionPicker *picker = data;
     OverlaySurface *surface = picker->surface;
+    BBox selection_box = get_bbox_containing_selection(picker);
+    if (surface->device_width == picker->last_device_width &&
+        surface->device_height == picker->last_device_height &&
+        bbox_equal(selection_box, picker->last_drawn_box)) {
+        printf("skipping draw\n");
+        return false;
+    }
+    picker->last_drawn_box = selection_box;
+    picker->last_device_width = surface->device_width;
+    picker->last_device_height = surface->device_height;
+
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
 
@@ -44,7 +55,7 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
     cairo_rectangle(
         cr, 0.0, 0.0, surface->device_width, surface->device_height
     );
-    BBox selection_box = get_bbox_containing_selection(picker);
+
     if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
         selection_box.height != 0) {
         // poke a hole in it
@@ -78,12 +89,19 @@ static BBox region_picker_draw(void *data, cairo_t *cr) {
         cairo_stroke(cr);
     }
 
-    return (BBox){
-        .x = 0,
-        .y = 0,
-        .width = surface->device_width,
-        .height = surface->device_height,
-    };
+    // TODO: use last_drawn_box here to damage a smaller region
+    // we can do slices, or just get the superset of the prev and curr frame
+    // it'd also be nice if the boxes got cairo_clipped as well
+    overlay_surface_damage(
+        surface,
+        (BBox){
+            .x = 0,
+            .y = 0,
+            .width = surface->device_width,
+            .height = surface->device_height,
+        }
+    );
+    return true;
 }
 
 static void region_picker_handle_mouse(void *data, MouseEvent event) {
@@ -137,6 +155,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         return;
     }
 
+    // TODO: only do this if the box changed
     overlay_surface_queue_draw(picker->surface);
 }
 

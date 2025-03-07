@@ -36,6 +36,10 @@ typedef struct RegionPicker {
     // In logical coordinates
     double x1, y1;
     double x2, y2;
+    // These is kept for optimization purposes
+    BBox last_drawn_box;
+    uint32_t last_device_width;
+    uint32_t last_device_height;
 } RegionPicker;
 
 /**

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
@@ -251,9 +252,24 @@ static void keyboard_handle_leave(
     dispatcher->keyboard_data.focus = NULL;
 }
 
-static void keyboard_handle_key() {}
+static void keyboard_handle_key(
+    void *data,
+    struct wl_keyboard * /* keyboard */,
+    uint32_t,
+    uint32_t,
+    uint32_t,
+    uint32_t
+) {}
 
-static void keyboard_handle_modifiers() {}
+static void keyboard_handle_modifiers(
+    void *data,
+    struct wl_keyboard * /* keyboard */,
+    uint32_t,
+    uint32_t,
+    uint32_t,
+    uint32_t,
+    uint32_t
+) {}
 
 static void keyboard_handle_repeat_info(
     void * /* data */,

@@ -8,8 +8,11 @@
 
 constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 
-/** Returns the damaged area, in device pixels. */
-typedef BBox (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
+/**
+ * Returns whether the surface contents were actually updated. This should call
+ * overlay_surface_damage() itself
+ */
+typedef bool (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
 
 /**
  * Called when the surface is closed. This should call overlay_surface_destroy.
@@ -51,4 +54,9 @@ OverlaySurface *overlay_surface_new(
 );
 /** Call the draw_callback sometime in the future and present the result. */
 void overlay_surface_queue_draw(OverlaySurface *surface);
+/**
+ * Damage the surface in device coordinates. This should be called from the
+ * draw callback.
+ */
+void overlay_surface_damage(OverlaySurface *surface, BBox damage_box);
 void overlay_surface_destroy(OverlaySurface *surface);

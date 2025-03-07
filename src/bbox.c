@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+bool bbox_equal(BBox a, BBox b) {
+    return a.x == b.x && a.y == b.y && a.width == b.width &&
+           a.height == b.height;
+}
+
 bool bbox_parse(const char *str_form, BBox *out) {
     int read_char_count;
     int read_specifier_count = sscanf(

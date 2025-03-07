@@ -66,17 +66,12 @@ static void recompute_device_size(OverlaySurface *surface) {
  * overlay_surface_queue_draw() over this if possible. */
 static void overlay_surface_draw_immediate(OverlaySurface *surface) {
     RenderBuffer *draw_buf = get_unused_buffer(surface);
-    BBox damage_box = surface->draw_callback(surface->user_data, draw_buf->cr);
+    bool did_update = surface->draw_callback(surface->user_data, draw_buf->cr);
+    if (!did_update) {
+        return;
+    }
     cairo_surface_flush(draw_buf->cairo_surface);
-
     render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
-    wl_surface_damage_buffer(
-        surface->wl_surface,
-        damage_box.x,
-        damage_box.y,
-        damage_box.width,
-        damage_box.height
-    );
     wl_surface_commit(surface->wl_surface);
 }
 
@@ -182,10 +177,10 @@ OverlaySurface *overlay_surface_new(
     zwlr_layer_surface_v1_set_anchor(result->layer_surface, ANCHOR);
     // TODO: Consider changing to EXCLUSIVE here once actual keyboard stuff is
     // handled
-    // zwlr_layer_surface_v1_set_keyboard_interactivity(
-    //     result->layer_surface,
-    //     ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
-    // );
+    zwlr_layer_surface_v1_set_keyboard_interactivity(
+        result->layer_surface,
+        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+    );
     // do not honor other surfaces' exclusive zones
     zwlr_layer_surface_v1_set_exclusive_zone(result->layer_surface, -1);
     wl_surface_commit(result->wl_surface);
@@ -213,6 +208,16 @@ void overlay_surface_queue_draw(OverlaySurface *surface) {
     struct wl_callback *callback = wl_surface_frame(surface->wl_surface);
     wl_callback_add_listener(callback, &frame_callback_listener, surface);
     wl_surface_commit(surface->wl_surface);
+}
+
+void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
+    wl_surface_damage_buffer(
+        surface->wl_surface,
+        damage_box.x,
+        damage_box.y,
+        damage_box.width,
+        damage_box.height
+    );
 }
 
 void overlay_surface_destroy(OverlaySurface *surface) {

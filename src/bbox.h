@@ -14,6 +14,12 @@ typedef struct {
 } BBox;
 
 /**
+ * Test whether two BBox'es are equal.
+ * Note that this function does not account for FP imprecision.
+ */
+bool bbox_equal(BBox a, BBox b);
+
+/**
  * Convert slurp's string format into a BBox.
  * Note that @p out may be left in an invalid state if conversion fails.
  * @returns true if conversion was successful, false otherwise
