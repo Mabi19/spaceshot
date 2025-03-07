@@ -143,11 +143,12 @@ static void add_new_output(WrappedOutput *output) {
                 );
             }
         } else {
-            //! This is for debugging so that I don't lock myself out of my
-            //! terminal
-            // if (strcmp(output->name, "HDMI-A-1") != 0) {
-            //     return;
-            // }
+            // This is for debugging so I don't lock myself out of my terminal
+            const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
+            if (only_output_name &&
+                strcmp(output->name, only_output_name) != 0) {
+                return;
+            }
             correct_output_found = true;
 
             take_output_screenshot(
