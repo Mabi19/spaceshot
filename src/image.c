@@ -168,23 +168,50 @@ void image_save_png(const Image *image, const char *filename) {
         uint8_t *current_pixel = data;
         for (uint32_t y = 0; y < image->height; y++) {
             for (uint32_t x = 0; x < image->width; x++) {
-                uint8_t *source_pixel =
-                    image->data + y * image->stride + x * bytes_per_pixel;
-                current_pixel[0] = source_pixel[2];
-                current_pixel[1] = source_pixel[1];
-                current_pixel[2] = source_pixel[0];
+                uint32_t *source_pixel =
+                    (uint32_t *)(image->data + y * image->stride +
+                                 x * bytes_per_pixel);
+                current_pixel[0] = (*source_pixel >> 16) & 0xff;
+                current_pixel[1] = (*source_pixel >> 8) & 0xff;
+                current_pixel[2] = *source_pixel & 0xff;
                 current_pixel += 3;
             }
         }
         result_data = data;
     } else if (image->format == IMAGE_FORMAT_XRGB2101010) {
-        // libspng expects ??? bytes per pixel
-        fprintf(stderr, "TODO: 16-bit save\n");
-        exit(EXIT_FAILURE);
+        // libspng expects 6 bytes per pixel
+        result_len = image->width * image->height * 6;
+        uint16_t *data = malloc(result_len);
+        uint16_t *current_pixel = data;
+        for (uint32_t y = 0; y < image->height; y++) {
+            for (uint32_t x = 0; x < image->width; x++) {
+                uint32_t *source_pixel =
+                    (uint32_t *)(image->data + y * image->stride +
+                                 x * bytes_per_pixel);
+                current_pixel[0] = ((*source_pixel >> 20) & 0x3ff) << 6;
+                current_pixel[1] = ((*source_pixel >> 10) & 0x3ff) << 6;
+                current_pixel[2] = (*source_pixel & 0x3ff) << 6;
+                current_pixel += 3;
+            }
+        }
+        result_data = data;
     } else if (image->format == IMAGE_FORMAT_XBGR2101010) {
-        // libspng expects ??? bytes per pixel
-        fprintf(stderr, "TODO: 16-bit save\n");
-        exit(EXIT_FAILURE);
+        // libspng expects 6 bytes per pixel
+        result_len = image->width * image->height * 6;
+        uint16_t *data = malloc(result_len);
+        uint16_t *current_pixel = data;
+        for (uint32_t y = 0; y < image->height; y++) {
+            for (uint32_t x = 0; x < image->width; x++) {
+                uint32_t *source_pixel =
+                    (uint32_t *)(image->data + y * image->stride +
+                                 x * bytes_per_pixel);
+                current_pixel[0] = (*source_pixel & 0x3ff) << 6;
+                current_pixel[1] = ((*source_pixel >> 10) & 0x3ff) << 6;
+                current_pixel[2] = ((*source_pixel >> 20) & 0x3ff) << 6;
+                current_pixel += 3;
+            }
+        }
+        result_data = data;
     } else {
         fprintf(stderr, "internal error: unhandled format %d\n", image->format);
         exit(EXIT_FAILURE);
