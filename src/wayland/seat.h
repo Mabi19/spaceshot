@@ -2,6 +2,7 @@
 #include "wayland/overlay-surface.h"
 #include <cursor-shape-client.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
 
 typedef enum {
     POINTER_BUTTON_LEFT = 1,
@@ -28,8 +29,6 @@ typedef struct {
 typedef struct {
     struct wl_seat *seat;
     struct wl_pointer *pointer;
-    struct wl_keyboard *keyboard;
-    struct wl_touch *touch;
     struct {
         struct wp_cursor_shape_device_v1 *shape_device;
         struct wl_surface *focus;
@@ -44,6 +43,14 @@ typedef struct {
             POINTER_EVENT_MOTION = 1,
         } received_events;
     } pointer_data;
+
+    struct wl_keyboard *keyboard;
+    struct {
+        struct xkb_context *context;
+        struct xkb_keymap *keymap;
+        struct xkb_state *state;
+        struct wl_surface *focus;
+    } keyboard_data;
     // This is an array because it needs to be safe against arbitrary removals
     // (it does mean O(n) insertions though)
     // of (private) struct SeatListenerListEntry

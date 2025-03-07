@@ -1,10 +1,15 @@
 #include "wayland/seat.h"
 #include "cursor-shape-client.h"
 #include "wayland/globals.h"
+#include <assert.h>
 #include <linux/input-event-codes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
 
 typedef struct {
     // This will be NULL when empty
@@ -184,6 +189,90 @@ static struct wl_pointer_listener pointer_listener = {
     .axis_relative_direction = pointer_handle_axis_relative_direction,
 };
 
+static void keyboard_handle_keymap(
+    void *data,
+    struct wl_keyboard * /* keyboard */,
+    enum wl_keyboard_keymap_format format,
+    int fd,
+    uint32_t size
+) {
+    SeatDispatcher *dispatcher = data;
+    if (dispatcher->keyboard_data.keymap) {
+        xkb_keymap_unref(dispatcher->keyboard_data.keymap);
+        dispatcher->keyboard_data.keymap = NULL;
+    }
+    if (dispatcher->keyboard_data.state) {
+        xkb_state_unref(dispatcher->keyboard_data.state);
+        dispatcher->keyboard_data.state = NULL;
+    }
+
+    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
+        fprintf(stderr, "error: unrecognized keyboard format %d\n", format);
+        exit(EXIT_FAILURE);
+    }
+
+    char *map_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map_shm == MAP_FAILED) {
+        fprintf(stderr, "error: couldn't mmap keymap\n");
+        exit(EXIT_FAILURE);
+    }
+    dispatcher->keyboard_data.keymap = xkb_keymap_new_from_string(
+        dispatcher->keyboard_data.context,
+        map_shm,
+        XKB_KEYMAP_FORMAT_TEXT_V1,
+        XKB_KEYMAP_COMPILE_NO_FLAGS
+    );
+    munmap(map_shm, size);
+    close(fd);
+
+    dispatcher->keyboard_data.state =
+        xkb_state_new(dispatcher->keyboard_data.keymap);
+}
+
+static void keyboard_handle_enter(
+    void *data,
+    struct wl_keyboard * /* keyboard */,
+    uint32_t /* serial */,
+    struct wl_surface *surface,
+    struct wl_array *keys
+) {
+    SeatDispatcher *dispatcher = data;
+    dispatcher->keyboard_data.focus = surface;
+    // TODO: handle keys
+}
+
+static void keyboard_handle_leave(
+    void *data,
+    struct wl_keyboard * /* keyboard */,
+    uint32_t /* serial */,
+    struct wl_surface * /* surface */
+) {
+    SeatDispatcher *dispatcher = data;
+    dispatcher->keyboard_data.focus = NULL;
+}
+
+static void keyboard_handle_key() {}
+
+static void keyboard_handle_modifiers() {}
+
+static void keyboard_handle_repeat_info(
+    void * /* data */,
+    struct wl_keyboard * /* keyboard */,
+    int32_t /* rate */,
+    int32_t /* delay */
+) {
+    // There is no typing needed, so an implementation here isn't necessary.
+}
+
+static struct wl_keyboard_listener keyboard_listener = {
+    .keymap = keyboard_handle_keymap,
+    .enter = keyboard_handle_enter,
+    .leave = keyboard_handle_leave,
+    .key = keyboard_handle_key,
+    .modifiers = keyboard_handle_modifiers,
+    .repeat_info = keyboard_handle_repeat_info,
+};
+
 static void seat_handle_capabilities(
     void *data,
     struct wl_seat * /* seat */,
@@ -206,11 +295,26 @@ static void seat_handle_capabilities(
             wp_cursor_shape_device_v1_destroy(
                 dispatcher->pointer_data.shape_device
             );
-            wl_pointer_destroy(dispatcher->pointer);
+            wl_pointer_release(dispatcher->pointer);
+            dispatcher->pointer = NULL;
         }
     }
 
-    // TODO: other types of input
+    if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
+        if (!dispatcher->keyboard) {
+            dispatcher->keyboard = wl_seat_get_keyboard(dispatcher->seat);
+            wl_keyboard_add_listener(
+                dispatcher->keyboard, &keyboard_listener, dispatcher
+            );
+        }
+    } else {
+        if (dispatcher->keyboard) {
+            wl_keyboard_release(dispatcher->keyboard);
+            dispatcher->keyboard = NULL;
+        }
+    }
+
+    // TODO: other types of input (touch?)
 }
 
 static void seat_handle_name(void *, struct wl_seat *, const char *) {
@@ -227,6 +331,8 @@ SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
     result->seat = seat;
     wl_seat_add_listener(seat, &seat_listener, result);
     wl_array_init(&result->listeners);
+    result->keyboard_data.context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    assert(result->keyboard_data.context);
     return result;
 }
 
