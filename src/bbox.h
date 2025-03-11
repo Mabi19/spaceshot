@@ -37,6 +37,12 @@ char *bbox_stringify(const BBox src);
 bool bbox_contains(const BBox outer, const BBox inner);
 
 /**
+ * Constrain @p src to some specified boundary, such that the result is
+ * contained within @p max_bounds.
+ */
+BBox bbox_constrain(const BBox src, const BBox max_bounds);
+
+/**
  * Translate a BBox by the specified @p dx and @p dy.
  */
 BBox bbox_translate(const BBox src, double dx, double dy);

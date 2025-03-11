@@ -74,6 +74,19 @@ bool bbox_contains(const BBox outer, const BBox inner) {
            (outer_right >= inner_right) && (outer_bottom >= inner_bottom);
 }
 
+BBox bbox_constrain(const BBox src, const BBox max_bounds) {
+    double left = fmax(src.x, max_bounds.x);
+    double top = fmax(src.y, max_bounds.y);
+    double right = fmin(src.x + src.width, max_bounds.x + max_bounds.width);
+    double bottom = fmin(src.y + src.height, max_bounds.y + max_bounds.height);
+    return (BBox){
+        .x = left,
+        .y = top,
+        .width = right - left,
+        .height = bottom - top,
+    };
+}
+
 BBox bbox_translate(const BBox src, double dx, double dy) {
     return (BBox){
         .x = src.x + dx,

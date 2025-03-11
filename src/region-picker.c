@@ -1,4 +1,5 @@
 #include "region-picker.h"
+#include "bbox.h"
 #include "image.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
@@ -28,8 +29,13 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     };
     result = bbox_scale(result, picker->surface->scale / 120.0);
     result = bbox_expand_to_grid(result);
-    // TODO: Constrain to output bounds
-    // (will be needed when moving the selection box)
+    BBox surface_bounds = {
+        .x = 0,
+        .y = 0,
+        .width = picker->surface->device_width,
+        .height = picker->surface->device_height,
+    };
+    result = bbox_constrain(result, surface_bounds);
     return result;
 }
 
@@ -172,6 +178,9 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
             region_picker_destroy(picker);
             finish_cb(picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){});
         }
+        // TODO: Hold Space to move instead of changing size
+        // TODO: Hold Shift to lock aspect ratio
+        // TODO: Hold Ctrl when releasing mouse button to edit afterwards
     } else if (event.type == KEYBOARD_EVENT_RELEASE) {
         // Nothing here yet
     }
