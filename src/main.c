@@ -1,6 +1,7 @@
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
+#include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
@@ -40,7 +41,9 @@ static void crop_and_save_image(Image *image, BBox crop_bounds) {
         crop_bounds.height
     );
 
-    image_save_png(cropped, "./screenshot.png");
+    char *output_filename = get_output_filename();
+    image_save_png(cropped, output_filename);
+    free(output_filename);
     image_destroy(cropped);
     is_finished = true;
 }

@@ -105,6 +105,7 @@ sources = [
     'bbox.c',
     'image.c',
     'main.c',
+    'paths.c',
     'region-picker.c',
     'wayland/globals.c',
     'wayland/overlay-surface.c',
