@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 static const double BORDER_WIDTH = 2.0;
 // The maximum area below which a click will cancel the selection.
@@ -27,6 +28,8 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     };
     result = bbox_scale(result, picker->surface->scale / 120.0);
     result = bbox_expand_to_grid(result);
+    // TODO: Constrain to output bounds
+    // (will be needed when moving the selection box)
     return result;
 }
 
@@ -159,8 +162,24 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     overlay_surface_queue_draw(picker->surface);
 }
 
+static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
+    RegionPicker *picker = data;
+    if (event.type == KEYBOARD_EVENT_PRESS) {
+        // only cancel once, on the focused surface
+        if (event.keysym == XKB_KEY_Escape &&
+            picker->surface->wl_surface == event.focus) {
+            RegionPickerFinishCallback finish_cb = picker->finish_callback;
+            region_picker_destroy(picker);
+            finish_cb(picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){});
+        }
+    } else if (event.type == KEYBOARD_EVENT_RELEASE) {
+        // Nothing here yet
+    }
+}
+
 static SeatListener region_picker_seat_listener = {
-    .mouse = region_picker_handle_mouse
+    .mouse = region_picker_handle_mouse,
+    .keyboard = region_picker_handle_keyboard
 };
 
 static void region_picker_handle_surface_close(void *data) {

@@ -235,11 +235,12 @@ static void keyboard_handle_enter(
     struct wl_keyboard * /* keyboard */,
     uint32_t /* serial */,
     struct wl_surface *surface,
-    struct wl_array *keys
+    struct wl_array * /* keys */
 ) {
     SeatDispatcher *dispatcher = data;
     dispatcher->keyboard_data.focus = surface;
-    // TODO: handle keys
+    // TODO: handle initial keys
+    // fire a different event with initial key presses?
 }
 
 static void keyboard_handle_leave(
@@ -255,21 +256,59 @@ static void keyboard_handle_leave(
 static void keyboard_handle_key(
     void *data,
     struct wl_keyboard * /* keyboard */,
-    uint32_t,
-    uint32_t,
-    uint32_t,
-    uint32_t
-) {}
+    uint32_t /* serial */,
+    uint32_t /* time */,
+    uint32_t keycode,
+    enum wl_keyboard_key_state key_state
+) {
+    SeatDispatcher *dispatcher = data;
+    KeyboardEventType type;
+    switch (key_state) {
+    case WL_KEYBOARD_KEY_STATE_PRESSED:
+        type = KEYBOARD_EVENT_PRESS;
+        break;
+    case WL_KEYBOARD_KEY_STATE_RELEASED:
+        type = KEYBOARD_EVENT_RELEASE;
+        break;
+    default:
+        // As of writing, there's a new state (REPEATED) merged into wayland but
+        // not in a tagged version. So explicitly do nothing here.
+        return;
+    }
+
+    KeyboardEvent event = {
+        .focus = dispatcher->keyboard_data.focus,
+        .keysym = xkb_state_key_get_one_sym(
+            dispatcher->keyboard_data.state, keycode + 8
+        ),
+        .type = type
+    };
+
+    SeatListenerListEntry *entry;
+    wl_array_for_each(entry, &dispatcher->listeners) {
+        if (!entry->surface)
+            continue;
+
+        if (entry->listener->keyboard) {
+            entry->listener->keyboard(entry->user_data, event);
+        }
+    }
+}
 
 static void keyboard_handle_modifiers(
     void *data,
     struct wl_keyboard * /* keyboard */,
-    uint32_t,
-    uint32_t,
-    uint32_t,
-    uint32_t,
-    uint32_t
-) {}
+    uint32_t /* serial */,
+    uint32_t depressed,
+    uint32_t latched,
+    uint32_t locked,
+    uint32_t group
+) {
+    SeatDispatcher *dispatcher = data;
+    xkb_state_update_mask(
+        dispatcher->keyboard_data.state, depressed, latched, locked, 0, 0, group
+    );
+}
 
 static void keyboard_handle_repeat_info(
     void * /* data */,

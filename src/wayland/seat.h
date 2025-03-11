@@ -19,11 +19,20 @@ typedef struct {
     PointerButtons buttons_released;
 } MouseEvent;
 
+typedef enum { KEYBOARD_EVENT_PRESS, KEYBOARD_EVENT_RELEASE } KeyboardEventType;
+
+typedef struct {
+    struct wl_surface *focus;
+    KeyboardEventType type;
+    xkb_keysym_t keysym;
+} KeyboardEvent;
+
 /**
  * A set of callbacks to receive seat events.
  */
 typedef struct {
     void (*mouse)(void *data, MouseEvent event);
+    void (*keyboard)(void *data, KeyboardEvent event);
 } SeatListener;
 
 typedef struct {
