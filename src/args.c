@@ -51,9 +51,9 @@ Arguments *parse_argv(int argc, char **argv) {
                 "invalid mode %s\n"
                 "Valid modes are 'output <output-name>' "
                 "and 'region [region]'",
-                argv[1]
+                mode
             );
-            if (argv[1][0] == '-') {
+            if (mode[0] == '-') {
                 fprintf(
                     stderr, "note: flags must be specified after the mode\n"
                 );

@@ -1,5 +1,6 @@
 #include "screenshot.h"
 #include "image.h"
+#include "log.h"
 #include "wayland/globals.h"
 #include "wayland/shared-memory.h"
 #include <stdbool.h>
@@ -78,8 +79,7 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
     FrameContext *context = data;
 
     if (!context->has_selected_format) {
-        fprintf(stderr, "Couldn't agree on image format\n");
-        exit(EXIT_FAILURE);
+        report_error_fatal("couldn't agree on screenshot image format");
     }
 
     context->buffer = shared_buffer_new(

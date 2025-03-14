@@ -10,11 +10,17 @@ void set_program_name(const char *name);
 void report_error(const char *format, ...);
 
 /**
- * Report a generic error message (as with repor_error), and exit with a non-0
+ * Report a generic error message (as with report_error), and exit with a non-0
  * status code.
  */
 [[gnu::format(printf, 1, 2)]] [[noreturn]] void
 report_error_fatal(const char *format, ...);
+
+/** Report a warning. */
+[[gnu::format(printf, 1, 2)]] void report_warning(const char *format, ...);
+
+/** Print a debug message to stderr. */
+[[gnu::format(printf, 1, 2)]] void log_debug(const char *format, ...);
 
 #define XSTR(x) STR(x)
 #define STR(x) #x

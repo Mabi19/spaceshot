@@ -1,4 +1,5 @@
 #include "paths.h"
+#include "log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,8 +13,7 @@ const char *get_pictures_directory() {
     if (!result) {
         result = xdg_user_dir_lookup_with_fallback("PICTURES", NULL);
         if (!result) {
-            fprintf(stderr, "error: couldn't find Pictures directory\n");
-            exit(EXIT_FAILURE);
+            report_error_fatal("couldn't find Pictures directory");
         }
     }
     return result;
@@ -28,7 +28,7 @@ char *get_output_filename() {
     if (!strftime(
             filename, 64, "/%Y-%m-%d-%H%M%S-spaceshot.png", &local_time
         )) {
-        fprintf(stderr, "error: output filename too long");
+        report_error("output filename too long");
     }
     char *output = malloc(strlen(pictures_dir) + strlen(filename) + 1);
     strcpy(output, pictures_dir);

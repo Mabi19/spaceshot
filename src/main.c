@@ -121,7 +121,7 @@ static void create_region_picker_for_output(
 }
 
 static void add_new_output(WrappedOutput *output) {
-    printf(
+    log_debug(
         "Got output %p with name %s\n",
         (void *)output->wl_output,
         output->name ? output->name : "NULL"
@@ -129,7 +129,7 @@ static void add_new_output(WrappedOutput *output) {
 
     if (args->mode == CAPTURE_OUTPUT) {
         if (strcmp(output->name, args->output_params.output_name) == 0) {
-            printf("...which is correct\n");
+            log_debug("...which is correct\n");
             correct_output_found = true;
             take_output_screenshot(output, save_image, NULL);
         }
@@ -138,7 +138,7 @@ static void add_new_output(WrappedOutput *output) {
             if (bbox_contains(
                     output->logical_bounds, args->region_params.region
                 )) {
-                printf("... which is correct\n");
+                log_debug("... which is correct\n");
                 correct_output_found = true;
                 take_output_screenshot(
                     output,
@@ -171,14 +171,12 @@ int main(int argc, char **argv) {
 
     struct wl_display *display = wl_display_connect(NULL);
     if (!display) {
-        fprintf(stderr, "Failed to connect to Wayland display.\n");
-        return 1;
+        report_error_fatal("failed to connect to Wayland display");
     }
 
     bool found_everything = find_wayland_globals(display, &add_new_output);
     if (!found_everything) {
-        fprintf(stderr, "Didn't find every required Wayland object\n");
-        return 1;
+        report_error_fatal("didn't find every required Wayland object");
     }
 
     wl_display_roundtrip(display);
@@ -186,19 +184,12 @@ int main(int argc, char **argv) {
         const char *output_name = args->mode == CAPTURE_OUTPUT
                                       ? args->output_params.output_name
                                       : "[unspecified]";
-        fprintf(
-            stderr,
-            "%s: couldn't find output %s\n",
-            args->executable_name,
-            output_name
-        );
-        exit(EXIT_FAILURE);
+        report_error_fatal("couldn't find output %s", output_name);
     }
 
     while (wl_display_dispatch(display) != -1) {
         if (is_finished)
             break;
-        // printf("waiting\n");
     }
 
     wl_display_disconnect(display);

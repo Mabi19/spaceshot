@@ -1,5 +1,6 @@
 #include "wayland/seat.h"
 #include "cursor-shape-client.h"
+#include "log.h"
 #include "wayland/globals.h"
 #include <assert.h>
 #include <linux/input-event-codes.h>
@@ -208,14 +209,12 @@ static void keyboard_handle_keymap(
     }
 
     if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-        fprintf(stderr, "error: unrecognized keyboard format %d\n", format);
-        exit(EXIT_FAILURE);
+        report_error_fatal("error: unrecognized keyboard format %d", format);
     }
 
     char *map_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (map_shm == MAP_FAILED) {
-        fprintf(stderr, "error: couldn't mmap keymap\n");
-        exit(EXIT_FAILURE);
+        report_error_fatal("couldn't mmap keymap");
     }
     dispatcher->keyboard_data.keymap = xkb_keymap_new_from_string(
         dispatcher->keyboard_data.context,
