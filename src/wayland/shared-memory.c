@@ -1,3 +1,4 @@
+#include "log.h"
 #define _POSIX_C_SOURCE 200112L
 #include "shared-memory.h"
 #include "wayland/globals.h"
@@ -71,7 +72,7 @@ SharedBuffer *shared_buffer_new(
 
     struct wl_shm_pool *pool =
         wl_shm_create_pool(wayland_globals.shm, result->fd, size);
-    printf("format: %x\n", result->format);
+    log_debug("format: %x\n", result->format);
     result->wl_buffer = wl_shm_pool_create_buffer(
         pool, 0, result->width, result->height, result->stride, result->format
     );

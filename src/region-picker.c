@@ -1,13 +1,13 @@
 #include "region-picker.h"
 #include "bbox.h"
 #include "image.h"
+#include "log.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
 #include <cairo.h>
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
@@ -46,7 +46,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     if (surface->device_width == picker->last_device_width &&
         surface->device_height == picker->last_device_height &&
         bbox_equal(selection_box, picker->last_drawn_box)) {
-        printf("skipping draw\n");
+        log_debug("skipping draw\n");
         return false;
     }
     picker->last_drawn_box = selection_box;
@@ -146,7 +146,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         RegionPickerFinishCallback finish_cb = picker->finish_callback;
         double selected_region_area =
             fabs((picker->x2 - picker->x1) * (picker->y2 - picker->y1));
-        printf(
+        log_debug(
             "area: %f; %f %f %f %f\n",
             selected_region_area,
             picker->x1,
@@ -229,7 +229,7 @@ RegionPicker *region_picker_new(
 }
 
 void region_picker_destroy(RegionPicker *picker) {
-    printf("destroying region picker %p\n", (void *)picker);
+    log_debug("destroying region picker %p\n", (void *)picker);
 
     seat_dispatcher_remove_listener(
         wayland_globals.seat_dispatcher, picker->surface

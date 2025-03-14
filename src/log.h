@@ -19,7 +19,10 @@ report_error_fatal(const char *format, ...);
 /** Report a warning. */
 [[gnu::format(printf, 1, 2)]] void report_warning(const char *format, ...);
 
-/** Print a debug message to stderr. */
+/**
+ * Print a debug message to stderr. Note that this function does not append a
+ * trailing newline.
+ */
 [[gnu::format(printf, 1, 2)]] void log_debug(const char *format, ...);
 
 #define XSTR(x) STR(x)

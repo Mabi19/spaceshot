@@ -4,7 +4,6 @@
 #include "wayland/globals.h"
 #include "wayland/shared-memory.h"
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <wlr-screencopy-client.h>
@@ -35,7 +34,7 @@ static void frame_handle_buffer(
 ) {
     FrameContext *context = data;
 
-    printf(
+    log_debug(
         "got buffer format %x, %dx%d, stride = %d\n",
         format,
         width,
@@ -44,9 +43,6 @@ static void frame_handle_buffer(
     );
 
     // 10-bit should be preferred if available
-    // TODO: 8-bit BGR (for Sway & other wlr)
-    // actually BGR surfaces should be fully supported,
-    // because wlr can't display XRGB2101010
     if (format == WL_SHM_FORMAT_XRGB2101010 ||
         format == WL_SHM_FORMAT_XBGR2101010) {
         goto accept_format;
@@ -54,7 +50,7 @@ static void frame_handle_buffer(
                !context->has_selected_format) {
         goto accept_format;
     }
-    printf("skipping\n");
+    log_debug("skipping\n");
     return;
 accept_format:
     context->selected_format = format;
@@ -71,7 +67,7 @@ static void frame_handle_linux_dmabuf(
     uint32_t /* width */,
     uint32_t /* height */
 ) {
-    printf("got linux_dmabuf, doing nothing with it\n");
+    log_debug("got linux_dmabuf, doing nothing with it\n");
 }
 
 static void
@@ -90,7 +86,7 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
     );
     zwlr_screencopy_frame_v1_copy(frame, context->buffer->wl_buffer);
 
-    printf("buffer done\n");
+    log_debug("buffer done\n");
 }
 
 static void frame_handle_flags(
@@ -118,13 +114,13 @@ static void frame_handle_ready(
         context->height,
         context->stride
     );
-    printf(
+    log_debug(
         "Got image from wayland: %dx%d, %d bytes in total\n",
         result->width,
         result->height,
         result->stride * result->height
     );
-    printf(
+    log_debug(
         "Top-left pixel: %x, original: %x\n",
         ((uint32_t *)result->data)[0],
         ((uint32_t *)context->buffer->data)[0]

@@ -1,4 +1,5 @@
 #include "overlay-surface.h"
+#include "log.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
 #include <assert.h>
@@ -33,13 +34,13 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *surface) {
                 surface->buffers[i]->shm->height == surface->device_height) {
                 continue;
             }
-            printf("destroyed buffer #%zu\n", i);
+            log_debug("destroyed buffer #%zu\n", i);
             render_buffer_destroy(surface->buffers[i]);
         }
         surface->buffers[i] = render_buffer_new(
             surface->device_width, surface->device_height, surface->pixel_format
         );
-        printf("created buffer #%zu\n", i);
+        log_debug("created buffer #%zu\n", i);
         return surface->buffers[i];
     }
 
@@ -50,7 +51,7 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *surface) {
     surface->buffers[0] = render_buffer_new(
         surface->device_width, surface->device_height, surface->pixel_format
     );
-    printf("overwrote buffer #0 (last resort)\n");
+    log_debug("overwrote buffer #0 (last resort)\n");
 
     return surface->buffers[0];
 }
@@ -83,7 +84,7 @@ static void overlay_surface_handle_configure(
     uint32_t height
 ) {
     OverlaySurface *surface = data;
-    printf(
+    log_debug(
         "Received configure for surface %p with w = %d, h = %d\n",
         data,
         width,
@@ -120,7 +121,7 @@ static void preferred_scale_changed(
     uint32_t scale
 ) {
     OverlaySurface *surface = data;
-    printf(
+    log_debug(
         "Received fractional scale for surface %p with scale = %d\n",
         data,
         scale

@@ -148,13 +148,6 @@ static void registry_handle_global(
 ) {
     WaylandGlobals *globals = data;
 
-    // printf(
-    //     "Interface '%s' version %d with object ID %d\n",
-    //     interface,
-    //     version,
-    //     object_id
-    // );
-
     if (strcmp(interface, wl_compositor_interface.name) == 0) {
         globals->compositor =
             wl_registry_bind(registry, object_id, &wl_compositor_interface, 6);
@@ -232,7 +225,7 @@ static void registry_handle_global_remove(
     void * /* data */, struct wl_registry * /* registry */, uint32_t object_id
 ) {
     // TODO: Is this an output?
-    printf("Global object ID %d just got removed\n", object_id);
+    log_debug("Global object ID %d just got removed\n", object_id);
 }
 
 static const struct wl_registry_listener registry_listener = {
