@@ -104,6 +104,7 @@ sources = [
     'args.c',
     'bbox.c',
     'image.c',
+    'log.c',
     'main.c',
     'paths.c',
     'region-picker.c',

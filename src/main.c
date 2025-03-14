@@ -1,6 +1,7 @@
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
+#include "log.h"
 #include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
@@ -159,10 +160,7 @@ static void add_new_output(WrappedOutput *output) {
             );
         }
     } else {
-        fprintf(
-            stderr, "%s: unhandled mode %d\n", args->executable_name, args->mode
-        );
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("mode", "%x", args->mode);
     }
 }
 

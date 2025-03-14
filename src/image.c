@@ -1,11 +1,12 @@
 #include "image.h"
+#include "log.h"
 #include <assert.h>
 #include <cairo.h>
 #include <spng.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wayland-client-protocol.h>
+#include <wayland-client.h>
 
 // image format conversions
 // TODO: introduce a nicer "assert unreachable" function/macro
@@ -19,8 +20,7 @@ ImageFormat image_format_from_wl(enum wl_shm_format format) {
     case WL_SHM_FORMAT_XBGR2101010:
         return IMAGE_FORMAT_XBGR2101010;
     default:
-        fprintf(stderr, "internal error: unhandled wl format %x\n", format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("wl format", "%x", format);
     }
 }
 enum wl_shm_format image_format_to_wl(ImageFormat format) {
@@ -32,8 +32,7 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
     case IMAGE_FORMAT_XBGR2101010:
         return WL_SHM_FORMAT_XBGR2101010;
     default:
-        fprintf(stderr, "internal error: unhandled image format %x\n", format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("image format", "%x", format);
     }
 }
 cairo_format_t image_format_to_cairo(ImageFormat format) {
@@ -44,8 +43,7 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
     case IMAGE_FORMAT_XBGR2101010:
         return CAIRO_FORMAT_RGB30;
     default:
-        fprintf(stderr, "internal error: unhandled image format %x\n", format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("image format", "%x", format);
     }
 }
 uint32_t image_format_bytes_per_pixel(ImageFormat format) {
@@ -55,8 +53,7 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     case IMAGE_FORMAT_XBGR2101010:
         return 4;
     default:
-        fprintf(stderr, "internal error: unhandled image format %x\n", format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("image format", "%x", format);
     }
 }
 
@@ -150,8 +147,7 @@ void image_save_png(const Image *image, const char *filename) {
         ihdr.bit_depth = 16;
         break;
     default:
-        fprintf(stderr, "internal error: unhandled format %d\n", image->format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("image format", "%x", image->format);
     }
     spng_set_ihdr(ctx, &ihdr);
 
@@ -213,8 +209,7 @@ void image_save_png(const Image *image, const char *filename) {
         }
         result_data = data;
     } else {
-        fprintf(stderr, "internal error: unhandled format %d\n", image->format);
-        exit(EXIT_FAILURE);
+        REPORT_UNHANDLED("image format", "%x", image->format);
     }
 
     int encode_result = spng_encode_image(
@@ -225,8 +220,7 @@ void image_save_png(const Image *image, const char *filename) {
     spng_ctx_free(ctx);
 
     if (encode_result) {
-        fprintf(stderr, "spng error: %s\n", spng_strerror(encode_result));
-        exit(EXIT_FAILURE);
+        report_error_fatal("spng error: %s", spng_strerror(encode_result));
     }
 }
 

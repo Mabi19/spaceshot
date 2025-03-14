@@ -1,5 +1,6 @@
 #include "args.h"
 #include "bbox.h"
+#include "log.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,11 +24,8 @@ Arguments *parse_argv(int argc, char **argv) {
     result->executable_name = argv[0];
 
     if (argc == 1) {
-        fprintf(
-            stderr,
-            "%s: mode is required\nTry '%s --help' for more information.\n",
-            argv[0],
-            argv[0]
+        report_error(
+            "mode is required\nTry '%s --help' for more information.", argv[0]
         );
         goto error;
     }
@@ -49,12 +47,10 @@ Arguments *parse_argv(int argc, char **argv) {
                 (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
             result->region_params.has_region = false;
         } else {
-            fprintf(
-                stderr,
-                "%s: invalid mode %s\n"
+            report_error(
+                "invalid mode %s\n"
                 "Valid modes are 'output <output-name>' "
-                "and 'region [region]'\n",
-                argv[0],
+                "and 'region [region]'",
                 argv[1]
             );
             if (argv[1][0] == '-') {
@@ -80,37 +76,27 @@ Arguments *parse_argv(int argc, char **argv) {
                 if (result->captured_mode_params == 0) {
                     result->output_params.output_name = arg;
                 } else {
-                    fprintf(
-                        stderr,
-                        "%s: too many parameters for mode 'output' (max 1)\n",
-                        argv[0]
+                    report_error("too many parameters for mode 'output' (max 1)"
                     );
                     goto error;
                 }
             } else if (result->mode == CAPTURE_REGION) {
                 if (result->captured_mode_params == 0) {
                     if (!bbox_parse(arg, &result->region_params.region)) {
-                        fprintf(
-                            stderr,
-                            "%s: invalid region\nregion format is 'X,Y WxH'\n",
-                            argv[0]
+                        report_error(
+                            "invalid region\nregion format is 'X,Y WxH'"
                         );
                         goto error;
                     }
 
                     result->region_params.has_region = true;
                 } else {
-                    fprintf(
-                        stderr,
-                        "%s: too many parameters for mode 'region' (max 1)\n",
-                        argv[0]
+                    report_error("too many parameters for mode 'region' (max 1)"
                     );
                     goto error;
                 }
             } else {
-                fprintf(
-                    stderr, "internal error: unhandled mode %d\n", result->mode
-                );
+                REPORT_UNHANDLED("mode", "%d", result->mode);
                 goto error;
             }
 
@@ -120,7 +106,7 @@ Arguments *parse_argv(int argc, char **argv) {
 
     // capture output mode requires an output name
     if (result->mode == CAPTURE_OUTPUT && result->captured_mode_params < 1) {
-        fprintf(stderr, "%s: an output name is required\n", argv[0]);
+        report_error("an output name is required");
         goto error;
     }
 
