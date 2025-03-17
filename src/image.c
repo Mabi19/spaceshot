@@ -9,7 +9,6 @@
 #include <wayland-client.h>
 
 // image format conversions
-// TODO: introduce a nicer "assert unreachable" function/macro
 
 ImageFormat image_format_from_wl(enum wl_shm_format format) {
     switch (format) {

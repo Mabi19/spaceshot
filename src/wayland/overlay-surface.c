@@ -176,8 +176,6 @@ OverlaySurface *overlay_surface_new(
         ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM |
         ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT;
     zwlr_layer_surface_v1_set_anchor(result->layer_surface, ANCHOR);
-    // TODO: Consider changing to EXCLUSIVE here once actual keyboard stuff is
-    // handled
     zwlr_layer_surface_v1_set_keyboard_interactivity(
         result->layer_surface,
         ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE

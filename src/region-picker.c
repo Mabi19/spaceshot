@@ -164,7 +164,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         return;
     }
 
-    // TODO: only do this if the box changed
     overlay_surface_queue_draw(picker->surface);
 }
 
