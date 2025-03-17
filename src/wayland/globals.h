@@ -13,6 +13,7 @@ typedef void (*OutputCallback)(WrappedOutput *);
 
 typedef struct {
     struct wl_compositor *compositor;
+    struct wl_data_device_manager *data_device_manager;
     struct wl_shm *shm;
     struct wp_cursor_shape_manager_v1 *cursor_shape_manager;
     struct wp_fractional_scale_manager_v1 *fractional_scale_manager;

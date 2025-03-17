@@ -153,6 +153,17 @@ static void registry_handle_global(
             wl_registry_bind(registry, object_id, &wl_compositor_interface, 6);
     }
 
+    if (strcmp(interface, wl_data_device_manager_interface.name) == 0) {
+        globals->data_device_manager = wl_registry_bind(
+            registry, object_id, &wl_data_device_manager_interface, 3
+        );
+
+        // if this comes after the seat, give it to the SeatDispatcher
+        seat_dispatcher_attach_data_device(
+            globals->seat_dispatcher, globals->data_device_manager
+        );
+    }
+
     if (strcmp(interface, wl_shm_interface.name) == 0) {
         globals->shm =
             wl_registry_bind(registry, object_id, &wl_shm_interface, 1);
@@ -195,12 +206,13 @@ static void registry_handle_global(
 
     if (strcmp(interface, wl_seat_interface.name) == 0) {
         if (globals->seat_dispatcher) {
-            report_warning("warning: Multiple seats present. Handling this is "
+            report_warning("Multiple seats present. Handling this is "
                            "unimplemented, only one will work");
         } else {
             struct wl_seat *seat =
                 wl_registry_bind(registry, object_id, &wl_seat_interface, 9);
-            globals->seat_dispatcher = seat_dispatcher_new(seat);
+            globals->seat_dispatcher =
+                seat_dispatcher_new(seat, globals->data_device_manager);
         }
     }
 

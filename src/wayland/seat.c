@@ -68,12 +68,14 @@ static void pointer_handle_motion(
 static void pointer_handle_button(
     void *data,
     struct wl_pointer * /* pointer */,
-    uint32_t /* serial */,
+    uint32_t serial,
     uint32_t /* time */,
     uint32_t button,
     enum wl_pointer_button_state state
 ) {
     SeatDispatcher *dispatcher = data;
+    dispatcher->last_clipboard_serial = serial;
+
     PointerButtons button_mask;
     switch (button) {
     case BTN_LEFT:
@@ -255,12 +257,14 @@ static void keyboard_handle_leave(
 static void keyboard_handle_key(
     void *data,
     struct wl_keyboard * /* keyboard */,
-    uint32_t /* serial */,
+    uint32_t serial,
     uint32_t /* time */,
     uint32_t keycode,
     enum wl_keyboard_key_state key_state
 ) {
     SeatDispatcher *dispatcher = data;
+    dispatcher->last_clipboard_serial = serial;
+
     KeyboardEventType type;
     switch (key_state) {
     case WL_KEYBOARD_KEY_STATE_PRESSED:
@@ -380,14 +384,47 @@ static struct wl_seat_listener seat_listener = {
     .name = seat_handle_name,
 };
 
-SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
+SeatDispatcher *seat_dispatcher_new(
+    struct wl_seat *seat, struct wl_data_device_manager *data_device_manager
+) {
     SeatDispatcher *result = calloc(1, sizeof(SeatDispatcher));
     result->seat = seat;
+
+    if (data_device_manager) {
+        seat_dispatcher_attach_data_device(result, data_device_manager);
+    }
+
     wl_seat_add_listener(seat, &seat_listener, result);
     wl_array_init(&result->listeners);
+
     result->keyboard_data.context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     assert(result->keyboard_data.context);
+
     return result;
+}
+
+void seat_dispatcher_attach_data_device(
+    SeatDispatcher *dispatcher,
+    struct wl_data_device_manager *data_device_manager
+) {
+    if (dispatcher->data_device) {
+        report_warning(
+            "Tried to attach data device to seat dispatcher twice, skipping"
+        );
+        return;
+    }
+
+    dispatcher->data_device = wl_data_device_manager_get_data_device(
+        data_device_manager, dispatcher->seat
+    );
+}
+
+void seat_dispatcher_set_selection(
+    SeatDispatcher *dispatcher, struct wl_data_source *data_source
+) {
+    wl_data_device_set_selection(
+        dispatcher->data_device, data_source, dispatcher->last_clipboard_serial
+    );
 }
 
 void seat_dispatcher_add_listener(
