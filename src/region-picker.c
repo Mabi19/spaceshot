@@ -143,7 +143,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     if (event.buttons_released & POINTER_BUTTON_LEFT &&
         picker->surface->wl_surface == event.focus &&
         picker->state == REGION_PICKER_DRAGGING) {
-        RegionPickerFinishCallback finish_cb = picker->finish_callback;
         double selected_region_area =
             fabs((picker->x2 - picker->x1) * (picker->y2 - picker->y1));
         log_debug(
@@ -159,8 +158,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                 ? REGION_PICKER_FINISH_REASON_SELECTED
                 : REGION_PICKER_FINISH_REASON_CANCELLED;
         BBox result_box = get_bbox_containing_selection(picker);
-        region_picker_destroy(picker);
-        finish_cb(picker, reason, result_box);
+        picker->finish_callback(picker, reason, result_box);
         return;
     }
 
@@ -173,9 +171,9 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         // only cancel once, on the focused surface
         if (event.keysym == XKB_KEY_Escape &&
             picker->surface->wl_surface == event.focus) {
-            RegionPickerFinishCallback finish_cb = picker->finish_callback;
-            region_picker_destroy(picker);
-            finish_cb(picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){});
+            picker->finish_callback(
+                picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){}
+            );
         }
         // TODO: Hold Space to move instead of changing size
         // TODO: Hold Shift to lock aspect ratio
@@ -192,9 +190,9 @@ static SeatListener region_picker_seat_listener = {
 
 static void region_picker_handle_surface_close(void *data) {
     RegionPicker *picker = data;
-    RegionPickerFinishCallback finish_cb = picker->finish_callback;
-    region_picker_destroy(picker);
-    finish_cb(picker, REGION_PICKER_FINISH_REASON_DESTROYED, (BBox){});
+    picker->finish_callback(
+        picker, REGION_PICKER_FINISH_REASON_DESTROYED, (BBox){}
+    );
 }
 
 RegionPicker *region_picker_new(

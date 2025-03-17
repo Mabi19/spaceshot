@@ -4,6 +4,7 @@
 #include "log.h"
 #include "paths.h"
 #include "region-picker.h"
+#include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
@@ -18,22 +19,22 @@ typedef struct {
     struct wl_list link;
 } RegionPickerListEntry;
 
+// TODO: Rework how waiting works.
+// First, Wayland should be polled until an "active wait" flag is unset,
+// then the process should detach as to not block when waiting for others to
+// paste, then Wayland should be polled until a "clipboard wait" flag is unset.
+// If a second event loop is added later (such as for notifications),
+// that can go in its own thread that is later join()ed.
 static bool is_finished = false;
 static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 
-static void
-save_image(WrappedOutput * /* output */, Image *image, void * /* data */) {
-    image_save_png(image, "./screenshot.png");
-    image_destroy(image);
-    is_finished = true;
-}
+static void clipboard_copy_finish(void *) { is_finished = true; }
 
-/**
- * Crop an image using device (pixel) coordinates.
- */
-static void crop_and_save_image(Image *image, BBox crop_bounds) {
+// Note that this function uses pixels (device coordinates).
+static void
+crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
     Image *cropped = image_crop(
         image,
         crop_bounds.x,
@@ -44,14 +45,34 @@ static void crop_and_save_image(Image *image, BBox crop_bounds) {
 
     char *output_filename = get_output_filename();
     image_save_png(cropped, output_filename);
+
+    // copying to clipboard via the core protocol can only be done when focused
+    // TODO: use wl-clipboard or wlr_data_control when non-interactive
+    if (is_interactive) {
+        clipboard_copy(
+            "hello world",
+            strlen("hello world"),
+            "text/plain",
+            clipboard_copy_finish
+        );
+    } else {
+        // no need to wait for copy
+        is_finished = true;
+    }
+
     free(output_filename);
     image_destroy(cropped);
+}
+
+static void finish_output_screenshot(
+    WrappedOutput * /* output */, Image *image, void * /* data */
+) {
+    image_save_png(image, "./screenshot.png");
+    image_destroy(image);
     is_finished = true;
 }
 
-/**
- * Crop an image using global logical coordinates and save it.
- */
+// This function uses logical coordinates
 static void finish_predefined_region_screenshot(
     WrappedOutput *output, Image *image, void *data
 ) {
@@ -70,16 +91,13 @@ static void finish_predefined_region_screenshot(
     // potential inaccuracies
     crop_bounds = bbox_round(crop_bounds);
 
-    crop_and_save_image(image, crop_bounds);
+    crop_and_save_image(image, crop_bounds, false);
     image_destroy(image);
 }
 
 static void region_picker_finish(
     RegionPicker *picker, RegionPickerFinishReason reason, BBox result_region
 ) {
-    // Note that when this function is called, the picker is already destroyed
-    bool should_delete_others = false;
-
     RegionPickerListEntry *entry, *tmp;
     wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
         if (entry->picker != picker) {
@@ -87,20 +105,21 @@ static void region_picker_finish(
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            crop_and_save_image(entry->image, result_region);
-            should_delete_others = true;
+            crop_and_save_image(entry->image, result_region, true);
         } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
-            should_delete_others = true;
             is_finished = true;
         }
 
+        region_picker_destroy(entry->picker);
         image_destroy(entry->image);
         wl_list_remove(&entry->link);
         free(entry);
     }
 
-    if (should_delete_others) {
+    // The DESTROYED reason is the only one that isn't user-initiated,
+    // and shouldn't destroy all the others.
+    if (reason != REGION_PICKER_FINISH_REASON_DESTROYED) {
         wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
             region_picker_destroy(entry->picker);
             image_destroy(entry->image);
@@ -131,7 +150,7 @@ static void add_new_output(WrappedOutput *output) {
         if (strcmp(output->name, args->output_params.output_name) == 0) {
             log_debug("...which is correct\n");
             correct_output_found = true;
-            take_output_screenshot(output, save_image, NULL);
+            take_output_screenshot(output, finish_output_screenshot, NULL);
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {

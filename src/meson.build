@@ -108,6 +108,7 @@ sources = [
     'main.c',
     'paths.c',
     'region-picker.c',
+    'wayland/clipboard.c',
     'wayland/globals.c',
     'wayland/overlay-surface.c',
     'wayland/render.c',

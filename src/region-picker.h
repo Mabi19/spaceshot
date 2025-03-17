@@ -11,7 +11,8 @@ typedef enum {
     /** The selection was cancelled (e.g. via the Escape key)  */
     REGION_PICKER_FINISH_REASON_CANCELLED,
     /**
-     * The region picker was destroyed through external means
+     * The region picker was destroyed through external means, such as its
+     * output disappearing
      */
     REGION_PICKER_FINISH_REASON_DESTROYED
 } RegionPickerFinishReason;
@@ -19,7 +20,7 @@ typedef enum {
 struct RegionPicker;
 /**
  * A function to be called when the picker is done doing stuff, and is about to
- * be destroyed. It will be destroyed automatically after the callback returns.
+ * be destroyed. It should always call `region_picker_destroy`.
  */
 typedef void (*RegionPickerFinishCallback)(
     struct RegionPicker *picker, RegionPickerFinishReason, BBox region
