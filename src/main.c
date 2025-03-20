@@ -19,7 +19,6 @@ typedef struct {
     struct wl_list link;
 } RegionPickerListEntry;
 
-// TODO: Rework how waiting works.
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
@@ -31,7 +30,10 @@ static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 
-static void clipboard_copy_finish(void *) { should_clipboard_wait = false; }
+static void clipboard_copy_finish(void *stale_clipboard_data) {
+    free(stale_clipboard_data);
+    should_clipboard_wait = false;
+}
 
 // Note that this function uses pixels (device coordinates).
 static void
@@ -44,17 +46,22 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
         crop_bounds.height
     );
 
+    void *encoded_buf;
+    size_t encoded_size;
+    image_save_png(image, &encoded_buf, &encoded_size);
+    image_destroy(image);
+
     char *output_filename = get_output_filename();
-    image_save_png(cropped, output_filename);
+    FILE *out_file = fopen(output_filename, "w");
+    assert(out_file);
+    fwrite(encoded_buf, encoded_size, 1, out_file);
+    fclose(out_file);
 
     // copying to clipboard via the core protocol can only be done when focused
     // TODO: use wl-clipboard or wlr_data_control when non-interactive
     if (is_interactive) {
         clipboard_copy(
-            "hello world",
-            strlen("hello world"),
-            "text/plain",
-            clipboard_copy_finish
+            encoded_buf, encoded_size, "image/png", clipboard_copy_finish
         );
         should_clipboard_wait = true;
     }
@@ -67,8 +74,26 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
 static void finish_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
-    image_save_png(image, "./screenshot.png");
+    void *encoded_buf;
+    size_t encoded_size;
+    // TODO: consider being cheesy and not waiting for data to copy
+    // we only need a file when copying and saving
+    // Also, this didn't use to be slow. Did my system configuration change?
+    // Combined with potential optimizations, this will probably resolve the
+    // pausing issue.
+    image_save_png(image, &encoded_buf, &encoded_size);
     image_destroy(image);
+
+    // FIXME: this is temporary for debugging; I really should add config and
+    // arguments
+    // char *output_filename = get_output_filename();
+    char *output_filename = "./screenshot.png";
+    FILE *out_file = fopen(output_filename, "w");
+    assert(out_file);
+    fwrite(encoded_buf, encoded_size, 1, out_file);
+    fclose(out_file);
+    free(encoded_buf);
+
     should_active_wait = false;
 }
 
@@ -207,15 +232,21 @@ int main(int argc, char **argv) {
         report_error_fatal("couldn't find output %s", output_name);
     }
 
-    while (should_active_wait && wl_display_dispatch(display) != -1) {
-        // do nothing
+    while (wl_display_dispatch(display) != -1) {
+        if (!should_active_wait) {
+            break;
+        }
     }
 
     // TODO: call daemon() here
     // but also include a flag to not do that
 
-    while (should_clipboard_wait && wl_display_dispatch(display) != -1) {
-        // do nothing
+    if (should_clipboard_wait) {
+        while (wl_display_dispatch(display) != -1) {
+            if (!should_clipboard_wait) {
+                break;
+            }
+        }
     }
 
     // TODO: clean up wayland_globals

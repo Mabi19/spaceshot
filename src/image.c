@@ -2,10 +2,12 @@
 #include "log.h"
 #include <assert.h>
 #include <cairo.h>
+#include <png.h>
 #include <spng.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <wayland-client.h>
 
 // image format conversions
@@ -131,35 +133,73 @@ cairo_surface_t *image_make_cairo_surface(Image *image) {
     );
 }
 
-void image_save_png(const Image *image, const char *filename) {
+static int timespec_subtract(
+    struct timespec *result, struct timespec *x, struct timespec *y
+) {
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_nsec < y->tv_nsec) {
+        int nsec = (y->tv_nsec - x->tv_nsec) / 1000000000 + 1;
+        y->tv_nsec -= 1000000000 * nsec;
+        y->tv_sec += nsec;
+    }
+    if (x->tv_nsec - y->tv_nsec > 1000000000) {
+        int nsec = (x->tv_nsec - y->tv_nsec) / 1000000000;
+        y->tv_nsec += 1000000000 * nsec;
+        y->tv_sec -= nsec;
+    }
+
+    /* Compute the time remaining to wait.
+       tv_nsec is certainly positive. */
+    result->tv_sec = x->tv_sec - y->tv_sec;
+    result->tv_nsec = x->tv_nsec - y->tv_nsec;
+
+    /* Return 1 if result is negative. */
+    return x->tv_sec < y->tv_sec;
+}
+
+void image_save_png(
+    const Image *image, void **output_buf, size_t *output_size
+) {
+    // TODO: Add a toggle to switch between spng and libpng, for benchmarking.
+    // But we're doing a bunch of complex image ops which libpng has direct
+    // support for, so it might be better to only use libpng. (Or make a new
+    // branch for libpng.)
+
     spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
-    struct spng_ihdr ihdr = {0};
-    ihdr.width = image->width;
-    ihdr.height = image->height;
-    ihdr.color_type = SPNG_COLOR_TYPE_TRUECOLOR;
+    spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
+    png_image png_data;
+    memset(&png_data, 0, sizeof(png_data));
+
+    int png_bit_depth;
     switch (image->format) {
     case IMAGE_FORMAT_XRGB8888:
-        ihdr.bit_depth = 8;
+        png_bit_depth = 8;
         break;
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
-        ihdr.bit_depth = 16;
+        png_bit_depth = 16;
         break;
     default:
         REPORT_UNHANDLED("image format", "%x", image->format);
     }
+
+    struct spng_ihdr ihdr = {0};
+    ihdr.width = image->width;
+    ihdr.height = image->height;
+    ihdr.color_type = SPNG_COLOR_TYPE_TRUECOLOR;
+    ihdr.bit_depth = png_bit_depth;
     spng_set_ihdr(ctx, &ihdr);
 
-    FILE *out_file = fopen(filename, "w");
-    spng_set_png_file(ctx, out_file);
+    struct timespec t_start;
+    clock_gettime(CLOCK_MONOTONIC, &t_start);
 
-    void *result_data;
-    uint32_t result_len;
+    void *transcoded_data;
+    uint32_t transcoded_len;
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(image->format);
     if (image->format == IMAGE_FORMAT_XRGB8888) {
         // libspng expects 3 bytes per pixel
-        result_len = image->width * image->height * 3;
-        uint8_t *data = malloc(result_len);
+        transcoded_len = image->width * image->height * 3;
+        uint8_t *data = malloc(transcoded_len);
         uint8_t *current_pixel = data;
         for (uint32_t y = 0; y < image->height; y++) {
             for (uint32_t x = 0; x < image->width; x++) {
@@ -172,11 +212,11 @@ void image_save_png(const Image *image, const char *filename) {
                 current_pixel += 3;
             }
         }
-        result_data = data;
+        transcoded_data = data;
     } else if (image->format == IMAGE_FORMAT_XRGB2101010) {
         // libspng expects 6 bytes per pixel
-        result_len = image->width * image->height * 6;
-        uint16_t *data = malloc(result_len);
+        transcoded_len = image->width * image->height * 6;
+        uint16_t *data = malloc(transcoded_len);
         uint16_t *current_pixel = data;
         for (uint32_t y = 0; y < image->height; y++) {
             for (uint32_t x = 0; x < image->width; x++) {
@@ -189,11 +229,11 @@ void image_save_png(const Image *image, const char *filename) {
                 current_pixel += 3;
             }
         }
-        result_data = data;
+        transcoded_data = data;
     } else if (image->format == IMAGE_FORMAT_XBGR2101010) {
         // libspng expects 6 bytes per pixel
-        result_len = image->width * image->height * 6;
-        uint16_t *data = malloc(result_len);
+        transcoded_len = image->width * image->height * 6;
+        uint16_t *data = malloc(transcoded_len);
         uint16_t *current_pixel = data;
         for (uint32_t y = 0; y < image->height; y++) {
             for (uint32_t x = 0; x < image->width; x++) {
@@ -206,21 +246,45 @@ void image_save_png(const Image *image, const char *filename) {
                 current_pixel += 3;
             }
         }
-        result_data = data;
+        transcoded_data = data;
     } else {
         REPORT_UNHANDLED("image format", "%x", image->format);
     }
 
-    int encode_result = spng_encode_image(
-        ctx, result_data, result_len, SPNG_FMT_PNG, SPNG_ENCODE_FINALIZE
+    struct timespec t_transcode;
+    clock_gettime(CLOCK_MONOTONIC, &t_transcode);
+    struct timespec t_diff;
+    timespec_subtract(&t_diff, &t_transcode, &t_start);
+    fprintf(
+        stderr, "transcode took %lds %09ldns\n", t_diff.tv_sec, t_diff.tv_nsec
     );
-    free(result_data);
-    fclose(out_file);
-    spng_ctx_free(ctx);
+
+    int encode_result = spng_encode_image(
+        ctx, transcoded_data, transcoded_len, SPNG_FMT_PNG, SPNG_ENCODE_FINALIZE
+    );
+    free(transcoded_data);
+
+    struct timespec t_image;
+    clock_gettime(CLOCK_MONOTONIC, &t_image);
+    struct timespec t_diff2;
+    timespec_subtract(&t_diff2, &t_image, &t_transcode);
+    fprintf(
+        stderr,
+        "png encode took %lds %09ldns\n",
+        t_diff2.tv_sec,
+        t_diff2.tv_nsec
+    );
 
     if (encode_result) {
         report_error_fatal("spng error: %s", spng_strerror(encode_result));
     }
+
+    int buffer_result;
+    *output_buf = spng_get_png_buffer(ctx, output_size, &buffer_result);
+    if (buffer_result) {
+        report_error_fatal("spng error: %s", spng_strerror(buffer_result));
+    }
+    spng_ctx_free(ctx);
 }
 
 void image_destroy(Image *image) {

@@ -55,5 +55,5 @@ Image *image_crop(
  */
 cairo_surface_t *image_make_cairo_surface(Image *image);
 
-void image_save_png(const Image *image, const char *filename);
+void image_save_png(const Image *image, void **output_buf, size_t *output_size);
 void image_destroy(Image *image);
