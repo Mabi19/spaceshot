@@ -25,12 +25,13 @@ typedef struct {
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
 // If a second event loop is added later (such as for notifications),
 // that can go in its own thread that is later join()ed.
-static bool is_finished = false;
+static bool should_active_wait = true;
+static bool should_clipboard_wait = false;
 static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 
-static void clipboard_copy_finish(void *) { is_finished = true; }
+static void clipboard_copy_finish(void *) { should_clipboard_wait = false; }
 
 // Note that this function uses pixels (device coordinates).
 static void
@@ -55,13 +56,12 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
             "text/plain",
             clipboard_copy_finish
         );
-    } else {
-        // no need to wait for copy
-        is_finished = true;
+        should_clipboard_wait = true;
     }
 
     free(output_filename);
     image_destroy(cropped);
+    should_active_wait = false;
 }
 
 static void finish_output_screenshot(
@@ -69,7 +69,7 @@ static void finish_output_screenshot(
 ) {
     image_save_png(image, "./screenshot.png");
     image_destroy(image);
-    is_finished = true;
+    should_active_wait = false;
 }
 
 // This function uses logical coordinates
@@ -108,7 +108,7 @@ static void region_picker_finish(
             crop_and_save_image(entry->image, result_region, true);
         } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
-            is_finished = true;
+            should_active_wait = false;
         }
 
         region_picker_destroy(entry->picker);
@@ -207,10 +207,18 @@ int main(int argc, char **argv) {
         report_error_fatal("couldn't find output %s", output_name);
     }
 
-    while (wl_display_dispatch(display) != -1) {
-        if (is_finished)
-            break;
+    while (should_active_wait && wl_display_dispatch(display) != -1) {
+        // do nothing
     }
+
+    // TODO: call daemon() here
+    // but also include a flag to not do that
+
+    while (should_clipboard_wait && wl_display_dispatch(display) != -1) {
+        // do nothing
+    }
+
+    // TODO: clean up wayland_globals
 
     wl_display_disconnect(display);
     return 0;
