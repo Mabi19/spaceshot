@@ -211,7 +211,7 @@ static void keyboard_handle_keymap(
     }
 
     if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-        report_error_fatal("error: unrecognized keyboard format %d", format);
+        report_error_fatal("unrecognized keyboard format %d", format);
     }
 
     char *map_shm = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
