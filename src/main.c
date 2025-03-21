@@ -8,6 +8,7 @@
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,24 +47,19 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
         crop_bounds.height
     );
 
-    void *encoded_buf;
-    size_t encoded_size;
-    image_save_png(image, &encoded_buf, &encoded_size);
-    image_destroy(image);
-
     char *output_filename = get_output_filename();
-    FILE *out_file = fopen(output_filename, "w");
-    assert(out_file);
-    fwrite(encoded_buf, encoded_size, 1, out_file);
-    fclose(out_file);
+    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC);
+    assert(out_fd != -1);
+    image_save_png(image, out_fd);
+    image_destroy(image);
 
     // copying to clipboard via the core protocol can only be done when focused
     // TODO: use wl-clipboard or wlr_data_control when non-interactive
     if (is_interactive) {
-        clipboard_copy(
-            encoded_buf, encoded_size, "image/png", clipboard_copy_finish
-        );
-        should_clipboard_wait = true;
+        // clipboard_copy(
+        //     encoded_buf, encoded_size, "image/png", clipboard_copy_finish
+        // );
+        // should_clipboard_wait = true;
     }
 
     free(output_filename);
@@ -74,25 +70,17 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
 static void finish_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
-    void *encoded_buf;
-    size_t encoded_size;
     // TODO: consider being cheesy and not waiting for data to copy
     // we only need a file when copying and saving
-    // Also, this didn't use to be slow. Did my system configuration change?
-    // Combined with potential optimizations, this will probably resolve the
-    // pausing issue.
-    image_save_png(image, &encoded_buf, &encoded_size);
-    image_destroy(image);
 
     // FIXME: this is temporary for debugging; I really should add config and
     // arguments
     // char *output_filename = get_output_filename();
     char *output_filename = "./screenshot.png";
-    FILE *out_file = fopen(output_filename, "w");
-    assert(out_file);
-    fwrite(encoded_buf, encoded_size, 1, out_file);
-    fclose(out_file);
-    free(encoded_buf);
+    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC);
+    assert(out_fd != -1);
+    image_save_png(image, out_fd);
+    image_destroy(image);
 
     should_active_wait = false;
 }

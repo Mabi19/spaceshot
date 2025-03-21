@@ -44,6 +44,7 @@ Image *image_new_from_wayland(
     uint32_t height,
     uint32_t stride
 );
+void image_destroy(Image *image);
 
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
@@ -55,5 +56,4 @@ Image *image_crop(
  */
 cairo_surface_t *image_make_cairo_surface(Image *image);
 
-void image_save_png(const Image *image, void **output_buf, size_t *output_size);
-void image_destroy(Image *image);
+void image_save_png(const Image *image, int out_fd);
