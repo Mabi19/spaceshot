@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <cairo.h>
 #include <png.h>
-#include <spng.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -160,15 +160,20 @@ static int timespec_subtract(
 void image_save_png(
     const Image *image, void **output_buf, size_t *output_size
 ) {
-    // TODO: Add a toggle to switch between spng and libpng, for benchmarking.
-    // But we're doing a bunch of complex image ops which libpng has direct
-    // support for, so it might be better to only use libpng. (Or make a new
-    // branch for libpng.)
+    png_structp png_data =
+        png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_data) {
+        report_error_fatal("libpng error: couldn't create png_structp");
+    }
 
-    spng_ctx *ctx = spng_ctx_new(SPNG_CTX_ENCODER);
-    spng_set_option(ctx, SPNG_ENCODE_TO_BUFFER, 1);
-    png_image png_data;
-    memset(&png_data, 0, sizeof(png_data));
+    png_infop png_info = png_create_info_struct(png_data);
+    if (!png_info) {
+        report_error_fatal("libpng: couldn't create png_infop");
+    }
+
+    if (setjmp(png_jmpbuf(png_data))) {
+        report_error_fatal("libpng error");
+    }
 
     int png_bit_depth;
     switch (image->format) {
@@ -182,13 +187,6 @@ void image_save_png(
     default:
         REPORT_UNHANDLED("image format", "%x", image->format);
     }
-
-    struct spng_ihdr ihdr = {0};
-    ihdr.width = image->width;
-    ihdr.height = image->height;
-    ihdr.color_type = SPNG_COLOR_TYPE_TRUECOLOR;
-    ihdr.bit_depth = png_bit_depth;
-    spng_set_ihdr(ctx, &ihdr);
 
     struct timespec t_start;
     clock_gettime(CLOCK_MONOTONIC, &t_start);
