@@ -48,7 +48,7 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
     );
 
     char *output_filename = get_output_filename();
-    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC);
+    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC, 0666);
     assert(out_fd != -1);
     image_save_png(image, out_fd);
     image_destroy(image);
@@ -77,7 +77,7 @@ static void finish_output_screenshot(
     // arguments
     // char *output_filename = get_output_filename();
     char *output_filename = "./screenshot.png";
-    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC);
+    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC, 0666);
     assert(out_fd != -1);
     image_save_png(image, out_fd);
     image_destroy(image);
