@@ -104,6 +104,7 @@ sources = [
     'args.c',
     'bbox.c',
     'image.c',
+    'link-buffer.c',
     'log.c',
     'main.c',
     'paths.c',
@@ -119,6 +120,7 @@ sources = [
 
 cairo_dep = dependency('cairo')
 spng_dep = dependency('spng')
+# TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
 xkbcommon_dep = dependency('xkbcommon')
 

@@ -1,4 +1,5 @@
 #include "clipboard.h"
+#include "link-buffer.h"
 #include "log.h"
 #include "wayland/globals.h"
 #include <stdarg.h>
@@ -7,8 +8,7 @@
 #include <wayland-client.h>
 
 typedef struct {
-    void *data;
-    size_t data_len;
+    LinkBuffer *data;
     ClipboardFinishCallback finish_cb;
 } ClipboardDataSource;
 
@@ -33,7 +33,7 @@ static void data_source_handle_send(
         close(fd);
         report_error_fatal("couldn't open clipboard fd %d", fd);
     }
-    fwrite(source->data, source->data_len, 1, wrapped_fd);
+    link_buffer_write(source->data, wrapped_fd);
     fclose(wrapped_fd);
 }
 
@@ -43,8 +43,9 @@ static void data_source_handle_cancelled(
     ClipboardDataSource *source = data;
     wl_data_source_destroy(wl_data_source);
 
-    ClipboardFinishCallback finish_cb = source->finish_cb;
+    auto finish_cb = source->finish_cb;
     finish_cb(source->data);
+
     free(source);
 }
 
@@ -59,11 +60,8 @@ static struct wl_data_source_listener data_source_listener = {
     .action = NULL
 };
 
-void clipboard_copy(
-    void *data,
-    size_t data_len,
-    const char *mime_type,
-    ClipboardFinishCallback finish_callback
+void clipboard_copy_link_buffer(
+    LinkBuffer *data, const char *mime_type, ClipboardFinishCallback finish_cb
 ) {
     struct wl_data_source *data_source =
         wl_data_device_manager_create_data_source(
@@ -72,8 +70,7 @@ void clipboard_copy(
 
     ClipboardDataSource *source = malloc(sizeof(ClipboardDataSource));
     source->data = data;
-    source->data_len = data_len;
-    source->finish_cb = finish_callback;
+    source->finish_cb = finish_cb;
 
     wl_data_source_offer(data_source, mime_type);
     wl_data_source_add_listener(data_source, &data_source_listener, source);

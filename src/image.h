@@ -1,5 +1,6 @@
 #pragma once
 
+#include "link-buffer.h"
 #include <cairo.h>
 #include <stdint.h>
 #include <wayland-client.h>
@@ -56,4 +57,4 @@ Image *image_crop(
  */
 cairo_surface_t *image_make_cairo_surface(Image *image);
 
-void image_save_png(const Image *image, int out_fd);
+LinkBuffer *image_save_png(const Image *image);
