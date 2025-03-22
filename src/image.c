@@ -1,4 +1,5 @@
 #include "image.h"
+#include "link-buffer.h"
 #include "log.h"
 #include <assert.h>
 #include <cairo.h>
@@ -157,11 +158,20 @@ static int timespec_subtract(
     return x->tv_sec < y->tv_sec;
 }
 
-void image_save_png(const Image *image, int out_fd) {
-    FILE *wrapped_fd = fdopen(out_fd, "wb");
-    if (!wrapped_fd) {
-        report_error_fatal("couldn't open file to write PNG");
-    }
+static void
+write_png_data(png_structp png_data, png_bytep data, png_size_t length) {
+    link_buffer_append(png_get_io_ptr(png_data), data, length);
+}
+
+static void flush_png_data(png_structp /* png_data */) {
+    // there is no file, so no need to flush
+}
+
+LinkBuffer *image_save_png(const Image *image) {
+    // Writing to a link buffer can change the current block, so the start needs
+    // to be saved
+    LinkBuffer *result = link_buffer_new();
+    LinkBuffer *curr_block = result;
 
     png_structp png_data =
         png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -178,7 +188,12 @@ void image_save_png(const Image *image, int out_fd) {
         report_error_fatal("libpng error");
     }
 
-    png_init_io(png_data, wrapped_fd);
+    // Lowering the compression level (default = 6) results in about 33% faster
+    // encoding in my testing, with a not very significant size hit.
+    // TODO: make this configurable
+    png_set_compression_level(png_data, 4);
+    // png_init_io(png_data, wrapped_fd);
+    png_set_write_fn(png_data, &curr_block, write_png_data, flush_png_data);
 
     // set up all the metadata
 
@@ -281,7 +296,8 @@ void image_save_png(const Image *image, int out_fd) {
     );
 
     png_destroy_write_struct(&png_data, &png_info);
-    fclose(wrapped_fd);
+
+    return result;
 }
 
 void image_destroy(Image *image) {

@@ -1,6 +1,7 @@
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
+#include "link-buffer.h"
 #include "log.h"
 #include "paths.h"
 #include "region-picker.h"
@@ -31,8 +32,8 @@ static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 
-static void clipboard_copy_finish(void *stale_clipboard_data) {
-    free(stale_clipboard_data);
+static void clipboard_copy_finish(LinkBuffer *stale_clipboard_data) {
+    link_buffer_free(stale_clipboard_data);
     should_clipboard_wait = false;
 }
 
@@ -46,24 +47,31 @@ crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
         crop_bounds.width,
         crop_bounds.height
     );
+    image_destroy(image);
+
+    LinkBuffer *out_data = image_save_png(cropped);
+    image_destroy(cropped);
 
     char *output_filename = get_output_filename();
-    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC, 0666);
-    assert(out_fd != -1);
-    image_save_png(image, out_fd);
-    image_destroy(image);
+    FILE *out_file = fopen(output_filename, "wb");
+    assert(out_file);
+    link_buffer_write(out_data, out_file);
+    fclose(out_file);
+    link_buffer_free(out_data);
+    free(output_filename);
 
     // copying to clipboard via the core protocol can only be done when focused
     // TODO: use wl-clipboard or wlr_data_control when non-interactive
     if (is_interactive) {
-        // clipboard_copy(
-        //     encoded_buf, encoded_size, "image/png", clipboard_copy_finish
-        // );
-        // should_clipboard_wait = true;
+        clipboard_copy_link_buffer(
+            out_data, "image/png", clipboard_copy_finish
+        );
+        should_clipboard_wait = true;
+    } else {
+        // clipboard_copy_finish normally frees this
+        link_buffer_free(out_data);
     }
 
-    free(output_filename);
-    image_destroy(cropped);
     should_active_wait = false;
 }
 
@@ -73,14 +81,18 @@ static void finish_output_screenshot(
     // TODO: consider being cheesy and not waiting for data to copy
     // we only need a file when copying and saving
 
+    LinkBuffer *out_data = image_save_png(image);
+    image_destroy(image);
+
     // FIXME: this is temporary for debugging; I really should add config and
     // arguments
-    // char *output_filename = get_output_filename();
     char *output_filename = "./screenshot.png";
-    int out_fd = open(output_filename, O_CREAT | O_RDWR | O_TRUNC, 0666);
-    assert(out_fd != -1);
-    image_save_png(image, out_fd);
-    image_destroy(image);
+    // char *output_filename = get_output_filename();
+    FILE *out_file = fopen(output_filename, "wb");
+    assert(out_file);
+    link_buffer_write(out_data, out_file);
+    fclose(out_file);
+    link_buffer_free(out_data);
 
     should_active_wait = false;
 }
@@ -118,6 +130,10 @@ static void region_picker_finish(
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
+            // TODO: Move the actual saving here down.
+            // But copying still needs to be done right here.
+            // Moving the saving into a separate thread might be easier,
+            // actually.
             crop_and_save_image(entry->image, result_region, true);
         } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
