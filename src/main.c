@@ -9,7 +9,6 @@
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include <assert.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
