@@ -5,13 +5,15 @@
 #include "log.h"
 #include "paths.h"
 #include "region-picker.h"
-#include "wayland/clipboard.h"
+// #include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
+#include "wayland/seat.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <wayland-client.h>
 
 typedef struct {
@@ -30,68 +32,31 @@ static bool should_clipboard_wait = false;
 static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
+static struct wl_display *display;
 
-static void clipboard_copy_finish(LinkBuffer *stale_clipboard_data) {
-    link_buffer_free(stale_clipboard_data);
-    should_clipboard_wait = false;
-}
-
-// Note that this function uses pixels (device coordinates).
-static void
-crop_and_save_image(Image *image, BBox crop_bounds, bool is_interactive) {
-    Image *cropped = image_crop(
-        image,
-        crop_bounds.x,
-        crop_bounds.y,
-        crop_bounds.width,
-        crop_bounds.height
-    );
-    image_destroy(image);
-
-    LinkBuffer *out_data = image_save_png(cropped);
-    image_destroy(cropped);
-
-    char *output_filename = get_output_filename();
+/**
+ * Save an already-encoded image to disk.
+ */
+static void save_screenshot(LinkBuffer *encoded_image) {
+    // char *output_filename = get_output_filename();
+    // FIXME: this is temporary for debugging; I really should add config and
+    // arguments
+    char *output_filename = "screenshot.png";
     FILE *out_file = fopen(output_filename, "wb");
     assert(out_file);
-    link_buffer_write(out_data, out_file);
+    link_buffer_write(encoded_image, out_file);
     fclose(out_file);
-    link_buffer_free(out_data);
-    free(output_filename);
-
-    // copying to clipboard via the core protocol can only be done when focused
-    // TODO: use wl-clipboard or wlr_data_control when non-interactive
-    if (is_interactive) {
-        clipboard_copy_link_buffer(
-            out_data, "image/png", clipboard_copy_finish
-        );
-        should_clipboard_wait = true;
-    } else {
-        // clipboard_copy_finish normally frees this
-        link_buffer_free(out_data);
-    }
-
-    should_active_wait = false;
+    // free(output_filename);
 }
 
 static void finish_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
-    // TODO: consider being cheesy and not waiting for data to copy
-    // we only need a file when copying and saving
-
     LinkBuffer *out_data = image_save_png(image);
     image_destroy(image);
 
-    // FIXME: this is temporary for debugging; I really should add config and
-    // arguments
-    char *output_filename = "./screenshot.png";
-    // char *output_filename = get_output_filename();
-    FILE *out_file = fopen(output_filename, "wb");
-    assert(out_file);
-    link_buffer_write(out_data, out_file);
-    fclose(out_file);
-    link_buffer_free(out_data);
+    save_screenshot(out_data);
+    link_buffer_destroy(out_data);
 
     should_active_wait = false;
 }
@@ -115,25 +80,97 @@ static void finish_predefined_region_screenshot(
     // potential inaccuracies
     crop_bounds = bbox_round(crop_bounds);
 
-    crop_and_save_image(image, crop_bounds, false);
+    Image *cropped = image_crop(
+        image,
+        crop_bounds.x,
+        crop_bounds.y,
+        crop_bounds.width,
+        crop_bounds.height
+    );
     image_destroy(image);
+
+    LinkBuffer *out_data = image_save_png(cropped);
+    image_destroy(cropped);
+
+    save_screenshot(out_data);
+    link_buffer_destroy(out_data);
+
+    should_active_wait = false;
 }
+
+static void clipboard_handle_target(
+    void * /* data */,
+    struct wl_data_source * /* data_source */,
+    const char * /* mime_type */
+) {
+    // This space intentionally left blank
+}
+
+static void clipboard_handle_send(
+    void *data,
+    struct wl_data_source * /* wl_data_source */,
+    const char * /* mime_type */,
+    int fd
+) {
+    LinkBuffer *data_to_send = data;
+    FILE *wrapped_fd = fdopen(fd, "w");
+    if (!wrapped_fd) {
+        perror("fdopen");
+        close(fd);
+        report_error_fatal("couldn't open clipboard fd %d", fd);
+    }
+    link_buffer_write(data_to_send, wrapped_fd);
+    fclose(wrapped_fd);
+}
+
+static void
+clipboard_handle_cancelled(void *data, struct wl_data_source *data_source) {
+    LinkBuffer *stale_clipboard_data = data;
+    link_buffer_destroy(stale_clipboard_data);
+    wl_data_source_destroy(data_source);
+    should_clipboard_wait = false;
+}
+
+// Most of these can be NULL because they're for DND data sources,
+// and this is a clipboard source.
+static struct wl_data_source_listener clipboard_source_listener = {
+    .target = clipboard_handle_target,
+    .send = clipboard_handle_send,
+    .cancelled = clipboard_handle_cancelled,
+    .dnd_drop_performed = NULL,
+    .dnd_finished = NULL,
+    .action = NULL
+};
 
 static void region_picker_finish(
     RegionPicker *picker, RegionPickerFinishReason reason, BBox result_region
 ) {
     RegionPickerListEntry *entry, *tmp;
+    Image *to_save = NULL;
+    struct wl_data_source *data_source;
     wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
         if (entry->picker != picker) {
             continue;
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            // TODO: Move the actual saving here down.
-            // But copying still needs to be done right here.
-            // Moving the saving into a separate thread might be easier,
-            // actually.
-            crop_and_save_image(entry->image, result_region, true);
+            // Set up the copy while the picker's still alive
+            data_source = wl_data_device_manager_create_data_source(
+                wayland_globals.data_device_manager
+            );
+            wl_data_source_offer(data_source, "image/png");
+            seat_dispatcher_set_selection(
+                wayland_globals.seat_dispatcher, data_source
+            );
+
+            to_save = image_crop(
+                entry->image,
+                result_region.x,
+                result_region.y,
+                result_region.width,
+                result_region.height
+            );
+            // should_active_wait is unset later
         } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
             should_active_wait = false;
@@ -154,6 +191,28 @@ static void region_picker_finish(
             wl_list_remove(&entry->link);
             free(entry);
         }
+    }
+
+    if (to_save) {
+        // saving is an expensive operation - flush the display first so that
+        // the region picker is properly closed before we block
+        // TODO: properly poll the display fd if EAGAIN
+        if (wl_display_flush(display) == -1) {
+            report_warning(
+                "flushing Wayland display failed before encoding image"
+            );
+        }
+
+        LinkBuffer *out_data = image_save_png(to_save);
+        image_destroy(to_save);
+        wl_data_source_add_listener(
+            data_source, &clipboard_source_listener, out_data
+        );
+
+        save_screenshot(out_data);
+
+        should_active_wait = false;
+        should_clipboard_wait = true;
     }
 }
 
@@ -217,7 +276,7 @@ int main(int argc, char **argv) {
     set_program_name(argv[0]);
     args = parse_argv(argc, argv);
 
-    struct wl_display *display = wl_display_connect(NULL);
+    display = wl_display_connect(NULL);
     if (!display) {
         report_error_fatal("failed to connect to Wayland display");
     }
