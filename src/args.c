@@ -1,6 +1,7 @@
 #include "args.h"
 #include "bbox.h"
 #include "log.h"
+#include <build-config.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,10 @@ static void print_help(char *program_name) {
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
     );
+}
+
+static void print_version(char *program_name) {
+    printf("%s version %s\n", program_name, SPACESHOT_VERSION);
 }
 
 Arguments *parse_argv(int argc, char **argv) {
@@ -38,6 +43,12 @@ Arguments *parse_argv(int argc, char **argv) {
             exit(EXIT_SUCCESS);
         }
 
+        if (strcmp(mode, "version") == 0 || strcmp(mode, "--version") == 0 ||
+            strcmp(mode, "-v") == 0) {
+            print_version(argv[0]);
+            exit(EXIT_SUCCESS);
+        }
+
         if (strcmp(mode, "output") == 0) {
             result->mode = CAPTURE_OUTPUT;
             result->output_params = (OutputCaptureParams){.output_name = NULL};
@@ -46,6 +57,7 @@ Arguments *parse_argv(int argc, char **argv) {
             result->region_params.region =
                 (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
             result->region_params.has_region = false;
+
         } else {
             report_error(
                 "invalid mode %s\n"
