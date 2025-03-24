@@ -1,9 +1,12 @@
 #include "paths.h"
+#include "config.h"
 #include "log.h"
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 static char *
 xdg_user_dir_lookup_with_fallback(const char *type, const char *fallback);
@@ -19,21 +22,75 @@ const char *get_pictures_directory() {
     return result;
 }
 
+const char *get_home_directory() {
+    static char *result = NULL;
+    // if already computed, return it
+    if (result) {
+        return result;
+    }
+    // $HOME overrides /etc/passwd
+    result = getenv("HOME");
+    if (result) {
+        return result;
+    }
+    result = getpwuid(getuid())->pw_dir;
+    return result;
+}
+
 char *get_output_filename() {
-    const char *pictures_dir = get_pictures_directory();
-    char filename[64];
+    char *template = get_config()->output_file;
+    int template_len = strlen(template);
+    int tilde_count = 0;
+    while (tilde_count < template_len && template[tilde_count] == '~') {
+        tilde_count++;
+    }
+    if (tilde_count == template_len - 1 || template[tilde_count] != '/') {
+        report_error_fatal("invalid filename template, ~ characters at the "
+                           "beginning must be followed by a /");
+    }
+
+    char *expanded_template;
+    if (tilde_count == 0) {
+        // regular absolute/relative path
+        // make a copy so that we can always free later
+        expanded_template = strdup(template);
+    } else if (tilde_count == 1) {
+        // ~/ expands to home directory
+        const char *home_dir = get_home_directory();
+        // remove ~, add \0
+        expanded_template =
+            malloc(strlen(home_dir) + strlen(template) - tilde_count + 1);
+        strcpy(expanded_template, home_dir);
+        strcat(expanded_template, template + tilde_count);
+    } else if (tilde_count == 2) {
+        // ~~/ expands to pictures directory
+        const char *pictures_dir = get_pictures_directory();
+        // remove ~~, add \0
+        expanded_template =
+            malloc(strlen(pictures_dir) + strlen(template) - tilde_count + 1);
+        strcpy(expanded_template, pictures_dir);
+        strcat(expanded_template, template + tilde_count);
+    } else {
+        report_error_fatal(
+            "invalid filename template, can't expand %d ~ characters",
+            tilde_count
+        );
+    }
+
+    size_t filename_buf_size = strlen(expanded_template) + 64;
+    char *filename = malloc(filename_buf_size);
     time_t timestamp = time(NULL);
     struct tm local_time;
     localtime_r(&timestamp, &local_time);
     if (!strftime(
-            filename, 64, "/%Y-%m-%d-%H%M%S-spaceshot.png", &local_time
+            filename, filename_buf_size, expanded_template, &local_time
         )) {
         report_error("output filename too long");
     }
-    char *output = malloc(strlen(pictures_dir) + strlen(filename) + 1);
-    strcpy(output, pictures_dir);
-    strcat(output, filename);
-    return output;
+    free(expanded_template);
+    log_debug("output filename: %s\n", filename);
+
+    return filename;
 }
 
 /*

@@ -1,11 +1,11 @@
 #include "args.h"
 #include "bbox.h"
+#include "config.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
 #include "paths.h"
 #include "region-picker.h"
-// #include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/screenshot.h"
 #include "wayland/seat.h"
@@ -38,10 +38,7 @@ static struct wl_display *display;
  * Save an already-encoded image to disk.
  */
 static void save_screenshot(LinkBuffer *encoded_image) {
-    // char *output_filename = get_output_filename();
-    // FIXME: this is temporary for debugging; I really should add config and
-    // arguments
-    char *output_filename = "screenshot.png";
+    char *output_filename = get_output_filename();
     FILE *out_file = fopen(output_filename, "wb");
     assert(out_file);
     link_buffer_write(encoded_image, out_file);
@@ -273,6 +270,7 @@ static void add_new_output(WrappedOutput *output) {
 int main(int argc, char **argv) {
     wl_list_init(&active_pickers);
 
+    load_config();
     set_program_name(argv[0]);
     args = parse_argv(argc, argv);
 
