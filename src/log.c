@@ -92,7 +92,7 @@ void timing_display(
     timespec_subtract(&ts_diff, end, start);
     fprintf(
         stderr,
-        "%s took %03ldms\n",
+        "%s took %ldms\n",
         name,
         ts_diff.tv_sec * 1000 + ts_diff.tv_nsec / 1'000'000
     );
