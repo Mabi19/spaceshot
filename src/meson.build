@@ -118,7 +118,6 @@ sources = [
 ]
 
 cairo_dep = dependency('cairo')
-spng_dep = dependency('spng')
 # TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
 xkbcommon_dep = dependency('xkbcommon')
@@ -133,7 +132,6 @@ executable(
     dependencies: [
         cairo_dep,
         libpng_dep,
-        spng_dep,
         xkbcommon_dep,
         m_dep,
         wl_dep,
