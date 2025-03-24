@@ -134,30 +134,6 @@ cairo_surface_t *image_make_cairo_surface(Image *image) {
     );
 }
 
-static int timespec_subtract(
-    struct timespec *result, struct timespec *x, struct timespec *y
-) {
-    /* Perform the carry for the later subtraction by updating y. */
-    if (x->tv_nsec < y->tv_nsec) {
-        int nsec = (y->tv_nsec - x->tv_nsec) / 1000000000 + 1;
-        y->tv_nsec -= 1000000000 * nsec;
-        y->tv_sec += nsec;
-    }
-    if (x->tv_nsec - y->tv_nsec > 1000000000) {
-        int nsec = (x->tv_nsec - y->tv_nsec) / 1000000000;
-        y->tv_nsec += 1000000000 * nsec;
-        y->tv_sec -= nsec;
-    }
-
-    /* Compute the time remaining to wait.
-       tv_nsec is certainly positive. */
-    result->tv_sec = x->tv_sec - y->tv_sec;
-    result->tv_nsec = x->tv_nsec - y->tv_nsec;
-
-    /* Return 1 if result is negative. */
-    return x->tv_sec < y->tv_sec;
-}
-
 static void
 write_png_data(png_structp png_data, png_bytep data, png_size_t length) {
     link_buffer_append(png_get_io_ptr(png_data), data, length);
@@ -233,9 +209,7 @@ LinkBuffer *image_save_png(const Image *image) {
     png_write_info(png_data, png_info);
 
     // transform and write image
-
-    struct timespec t_start;
-    clock_gettime(CLOCK_MONOTONIC, &t_start);
+    TIMING_START(png_encode);
 
     png_bytepp row_ptrs = malloc(image->height * sizeof(png_bytep));
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(image->format);
@@ -284,16 +258,7 @@ LinkBuffer *image_save_png(const Image *image) {
     free(row_ptrs);
     png_write_end(png_data, png_info);
 
-    struct timespec t_image;
-    clock_gettime(CLOCK_MONOTONIC, &t_image);
-    struct timespec t_diff2;
-    timespec_subtract(&t_diff2, &t_image, &t_start);
-    fprintf(
-        stderr,
-        "png encode took %lds %09ldns\n",
-        t_diff2.tv_sec,
-        t_diff2.tv_nsec
-    );
+    TIMING_END(png_encode);
 
     png_destroy_write_struct(&png_data, &png_info);
 

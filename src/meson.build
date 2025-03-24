@@ -130,6 +130,7 @@ m_dep = cc.find_library('m', required: false)
 executable(
     'spaceshot',
     sources,
+    include_directories: build_conf_include,
     dependencies: [
         cairo_dep,
         libpng_dep,
