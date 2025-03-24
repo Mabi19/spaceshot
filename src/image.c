@@ -233,15 +233,15 @@ LinkBuffer *image_save_png(const Image *image) {
                 uint32_t *source_pixel =
                     (uint32_t *)(image->data + y * image->stride +
                                  x * bytes_per_pixel);
-                current_pixel[0] = ((*source_pixel >> 20) & 0x3ff) << 6;
+                current_pixel[0] = (*source_pixel & 0x3ff) << 6;
                 current_pixel[1] = ((*source_pixel >> 10) & 0x3ff) << 6;
-                current_pixel[2] = (*source_pixel & 0x3ff) << 6;
+                current_pixel[2] = ((*source_pixel >> 20) & 0x3ff) << 6;
                 current_pixel += 3;
             }
         }
 
         for (uint32_t y = 0; y < image->height; y++) {
-            row_ptrs[y] = (png_bytep)&transcoded_data[y * image->width];
+            row_ptrs[y] = (png_bytep)&transcoded_data[y * image->width * 3];
         }
 
         // endianness, yay!
