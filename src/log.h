@@ -1,4 +1,9 @@
 #pragma once
+#include <build-config.h>
+
+#ifdef SPACESHOT_TIMING
+#include <time.h>
+#endif
 
 // This header contains functions similar to the glibc `error` extension.
 
@@ -45,3 +50,23 @@ report_error_fatal(const char *format, ...);
     REPORT_ERROR_INTERNAL(                                                     \
         "unhandled " description " " printf_specifier, (value)                 \
     )
+
+#ifdef SPACESHOT_TIMING
+
+void timing_display(
+    const char *name, struct timespec *start, struct timespec *end
+);
+
+#define TIMING_START(name)                                                     \
+    struct timespec ts_start_##name;                                           \
+    clock_gettime(CLOCK_MONOTONIC, &ts_start_##name)
+
+#define TIMING_END(name)                                                       \
+    struct timespec ts_end_##name;                                             \
+    clock_gettime(CLOCK_MONOTONIC, &ts_end_##name);                            \
+    timing_display(#name, &ts_start_##name, &ts_end_##name)
+
+#else
+#define TIMING_START(name)
+#define TIMING_END(name)
+#endif

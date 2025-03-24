@@ -1,0 +1,1 @@
+option('timing', type: 'boolean', value: false)

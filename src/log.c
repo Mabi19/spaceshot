@@ -58,3 +58,44 @@ void log_debug(const char *format, ...) {
     vfprintf(stderr, format, args);
     va_end(args);
 }
+
+#ifdef SPACESHOT_TIMING
+
+static int timespec_subtract(
+    struct timespec *result, struct timespec *x, struct timespec *y
+) {
+    /* Perform the carry for the later subtraction by updating y. */
+    if (x->tv_nsec < y->tv_nsec) {
+        int nsec = (y->tv_nsec - x->tv_nsec) / 1000000000 + 1;
+        y->tv_nsec -= 1000000000 * nsec;
+        y->tv_sec += nsec;
+    }
+    if (x->tv_nsec - y->tv_nsec > 1000000000) {
+        int nsec = (x->tv_nsec - y->tv_nsec) / 1000000000;
+        y->tv_nsec += 1000000000 * nsec;
+        y->tv_sec -= nsec;
+    }
+
+    /* Compute the time remaining to wait.
+       tv_nsec is certainly positive. */
+    result->tv_sec = x->tv_sec - y->tv_sec;
+    result->tv_nsec = x->tv_nsec - y->tv_nsec;
+
+    /* Return 1 if result is negative. */
+    return x->tv_sec < y->tv_sec;
+}
+
+void timing_display(
+    const char *name, struct timespec *start, struct timespec *end
+) {
+    struct timespec ts_diff;
+    timespec_subtract(&ts_diff, end, start);
+    fprintf(
+        stderr,
+        "%s took %03ldms\n",
+        name,
+        ts_diff.tv_sec * 1000 + ts_diff.tv_nsec / 1'000'000
+    );
+}
+
+#endif
