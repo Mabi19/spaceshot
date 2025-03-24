@@ -23,4 +23,4 @@ void link_buffer_append(LinkBuffer **block, void *data, size_t length);
  */
 void link_buffer_write(LinkBuffer *buffer, FILE *out);
 
-void link_buffer_free(LinkBuffer *buffer);
+void link_buffer_destroy(LinkBuffer *buffer);

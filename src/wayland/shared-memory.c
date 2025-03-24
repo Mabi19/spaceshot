@@ -1,6 +1,6 @@
-#include "log.h"
 #define _POSIX_C_SOURCE 200112L
 #include "shared-memory.h"
+#include "log.h"
 #include "wayland/globals.h"
 #include <assert.h>
 #include <errno.h>

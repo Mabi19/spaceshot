@@ -33,7 +33,7 @@ void link_buffer_write(LinkBuffer *buffer, FILE *out) {
     }
 }
 
-void link_buffer_free(LinkBuffer *buffer) {
+void link_buffer_destroy(LinkBuffer *buffer) {
     while (buffer != NULL) {
         LinkBuffer *to_free = buffer;
         buffer = buffer->next;
