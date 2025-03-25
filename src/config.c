@@ -1,4 +1,5 @@
 #include "config.h"
+#include "log.h"
 #include "paths.h"
 #include <iniparser.h>
 #include <memory.h>
@@ -23,11 +24,35 @@ static Config config;
         }                                                                      \
     } while (false)
 
+void config_string(
+    dictionary *config_dict, char **config_loc, const char *key
+) {
+    const char *value = iniparser_getstring(config_dict, key, NULL);
+    if (value) {
+        free(*config_loc);
+        *config_loc = strdup(value);
+    }
+}
+
+void config_bool(dictionary *config_dict, bool *config_loc, const char *key) {
+    const char *value = iniparser_getstring(config_dict, key, NULL);
+    if (!value)
+        return;
+
+    if (strcmp(value, "true") == 0) {
+        *config_loc = true;
+    } else if (strcmp(value, "false") == 0) {
+        *config_loc = false;
+    } else {
+        report_warning("config: invalid boolean %s", value);
+    }
+}
+
 void load_config() {
     // TODO: make more config options, actually make the get_config_locations
     // function
-    // also consider loading only a single configuration file instead of
-    // merging; look at what walker does?
+
+    TIMING_START(config_load);
 
     // default config; strings must be malloc'd because overriding them frees
     // their previous versions
@@ -51,12 +76,14 @@ void load_config() {
             continue;
         }
 
-        dictionary *config_dict = iniparser_load_file(config_file, path_buf);
-        CONFIG_STRING(config.output_file, "output-file");
-        CONFIG_BOOL(config.is_verbose, "verbose");
+        dictionary *d = iniparser_load_file(config_file, path_buf);
+        config_string(d, &config.output_file, "output-file");
+        config_bool(d, &config.is_verbose, "verbose");
 
-        iniparser_freedict(config_dict);
+        iniparser_freedict(d);
     }
+
+    TIMING_END(config_load);
 }
 
 Config *get_config() { return &config; }
