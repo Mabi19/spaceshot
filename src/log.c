@@ -1,6 +1,7 @@
 #include "log.h"
 #include "config.h"
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,12 +94,12 @@ void timing_display(
 ) {
     struct timespec ts_diff;
     timespec_subtract(&ts_diff, end, start);
-    fprintf(
-        stderr,
-        "%s took %ldms\n",
-        name,
-        ts_diff.tv_sec * 1000 + ts_diff.tv_nsec / 1'000'000
-    );
+    uint64_t us = ts_diff.tv_sec * 1'000'000 + ts_diff.tv_nsec / 1000;
+    if (us >= 1000) {
+        fprintf(stderr, "%s took %ldms\n", name, us / 1000);
+    } else {
+        fprintf(stderr, "%s took %ldµs\n", name, us);
+    }
 }
 
 #endif
