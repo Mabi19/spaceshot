@@ -37,7 +37,11 @@ typedef struct RegionPicker {
     // In logical coordinates
     double x1, y1;
     double x2, y2;
+    // holding Space or Alt moves the region instead of resizing it
+    bool move_flag;
     // These are kept for optimization purposes
+    bool has_last_drawn_box;
+    // This flag needs to be unset every time the selection is cleared.
     BBox last_drawn_box;
     uint32_t last_device_width;
     uint32_t last_device_height;

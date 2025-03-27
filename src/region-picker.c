@@ -65,10 +65,8 @@ static void calculate_clip_regions(
     }
 
     BBox *last_sel = &picker->last_drawn_box;
-    if (last_sel->width == 0 && last_sel->height == 0) {
-        // there is no previous box
-        // note that get_bbox_containing_selection() ensures boxes are at least
-        // 1x1
+    if (!picker->has_last_drawn_box) {
+        // no previous box = entire selection needs to be damaged
         *outer = *curr_sel;
         inner->width = 0;
         inner->height = 0;
@@ -142,6 +140,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 #endif
 
     picker->last_drawn_box = selection_box;
+    picker->has_last_drawn_box = true;
     picker->last_device_width = surface->device_width;
     picker->last_device_height = surface->device_height;
 
@@ -245,11 +244,21 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         } else {
             // only one selection is allowed at a time
             picker->state = REGION_PICKER_EMPTY;
+            picker->has_last_drawn_box = false;
         }
     } else if (event.buttons_held & POINTER_BUTTON_LEFT) {
         if (picker->surface->wl_surface == event.focus) {
-            picker->x2 = surface_x;
-            picker->y2 = surface_y;
+            if (picker->move_flag) {
+                double dx = surface_x - picker->x2;
+                double dy = surface_y - picker->y2;
+                picker->x1 += dx;
+                picker->y1 += dy;
+                picker->x2 += dx;
+                picker->y2 += dy;
+            } else {
+                picker->x2 = surface_x;
+                picker->y2 = surface_y;
+            }
         }
     }
 
@@ -280,20 +289,23 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
 
 static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
     RegionPicker *picker = data;
-    if (event.type == KEYBOARD_EVENT_PRESS) {
+    switch (event.keysym) {
+    case XKB_KEY_Escape:
         // only cancel once, on the focused surface
-        if (event.keysym == XKB_KEY_Escape &&
+        if (event.type == KEYBOARD_EVENT_RELEASE &&
             picker->surface->wl_surface == event.focus) {
             picker->finish_callback(
                 picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){}
             );
         }
-        // TODO: Hold Space to move instead of changing size
-        // TODO: Hold Shift to lock aspect ratio
-        // TODO: Hold Ctrl when releasing mouse button to edit afterwards
-    } else if (event.type == KEYBOARD_EVENT_RELEASE) {
-        // Nothing here yet
+        break;
+    case XKB_KEY_space:
+    case XKB_KEY_Alt_L:
+        picker->move_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
+        break;
     }
+    // TODO: Hold Shift to lock aspect ratio
+    // TODO: Hold Ctrl when releasing mouse button to edit afterwards
 }
 
 static SeatListener region_picker_seat_listener = {
