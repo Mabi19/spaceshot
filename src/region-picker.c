@@ -53,8 +53,24 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     picker->last_device_width = surface->device_width;
     picker->last_device_height = surface->device_height;
 
+    TIMING_START(frame);
+
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
+
+    double x_scale = (double)surface->device_width /
+                     (double)cairo_image_surface_get_width(picker->background);
+    double y_scale = (double)surface->device_height /
+                     (double)cairo_image_surface_get_height(picker->background);
+
+    cairo_save(cr);
+    if (x_scale != 1.0 || y_scale != 1.0) {
+        log_debug("background requires scaling\n");
+        cairo_scale(cr, x_scale, y_scale);
+    }
+    cairo_set_source(cr, picker->background_pattern);
+    cairo_paint(cr);
+    cairo_restore(cr);
 
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
@@ -97,6 +113,8 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         );
         cairo_stroke(cr);
     }
+
+    TIMING_END(frame);
 
     // TODO: use last_drawn_box here to damage a smaller region
     // we can do slices, or just get the superset of the prev and curr frame
