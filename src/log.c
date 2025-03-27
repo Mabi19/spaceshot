@@ -1,4 +1,5 @@
 #include "log.h"
+#include "config.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +53,9 @@ void report_warning(const char *format, ...) {
 }
 
 void log_debug(const char *format, ...) {
-    // TODO: only show these in debug mode or with verbose option
+    if (!get_config()->is_verbose) {
+        return;
+    }
     va_list args;
     va_start(args);
     vfprintf(stderr, format, args);
