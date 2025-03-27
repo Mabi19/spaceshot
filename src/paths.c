@@ -110,7 +110,9 @@ char *get_output_filename() {
     while (tilde_count < template_len && template[tilde_count] == '~') {
         tilde_count++;
     }
-    if (tilde_count == template_len - 1 || template[tilde_count] != '/') {
+    if (tilde_count > 0 &&
+        // if a path is all ~s, it won't match the null terminator
+        template[tilde_count] != '/') {
         report_error_fatal("invalid filename template, ~ characters at the "
                            "beginning must be followed by a /");
     }

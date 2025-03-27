@@ -1,5 +1,6 @@
 #include "args.h"
 #include "bbox.h"
+#include "config.h"
 #include "log.h"
 #include <build-config.h>
 #include <ctype.h>
@@ -20,8 +21,8 @@ static void print_help(const char *program_name) {
     );
 }
 
-static void print_version(const char *program_name) {
-    printf("%s version %s\n", program_name, SPACESHOT_VERSION);
+static void print_version() {
+    printf("spaceshot version %s\n", SPACESHOT_VERSION);
 }
 
 static void interpret_option(Arguments *args, char opt, char *value) {
@@ -29,8 +30,15 @@ static void interpret_option(Arguments *args, char opt, char *value) {
     case 'h':
         print_help(args->executable_name);
         exit(EXIT_SUCCESS);
+    case 'o':
+        get_config()->output_file = value;
+        break;
+    case 'V':
+        // this option doesn't have a short version (-V is not exposed)
+        get_config()->is_verbose = true;
+        break;
     case 'v':
-        print_version(args->executable_name);
+        print_version();
         exit(EXIT_SUCCESS);
     default:
         REPORT_UNHANDLED("converted option", "%c", opt);
@@ -44,7 +52,7 @@ typedef struct {
 } LongOption;
 
 static const LongOption LONG_OPTIONS[] = {
-    {"output", 'o', true}, {"verbose", 'V', false}
+    {"help", 'h', false}, {"output", 'o', true}, {"verbose", 'V', false}
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
@@ -62,15 +70,41 @@ Arguments *parse_argv(int argc, char **argv) {
                 // long option
                 char *option_contents = arg + 2;
                 char *equals_sign = strchr(arg, '=');
-                size_t provided_len = equals_sign
-                                          ? equals_sign - option_contents
-                                          : strlen(option_contents);
+                size_t provided_len =
+                    equals_sign ? (size_t)(equals_sign - option_contents)
+                                : strlen(option_contents);
 
-                for (int i = 0; i < LONG_OPTION_COUNT; i++) {
-                    // TODO
-                    REPORT_UNHANDLED(
-                        "long options are unimplemented", "%s", ":("
-                    );
+                for (int j = 0; j < LONG_OPTION_COUNT; j++) {
+                    const LongOption *option = &LONG_OPTIONS[j];
+                    for (size_t k = 0; k < provided_len; k++) {
+                        if (option->long_name[k] != option_contents[k]) {
+                            goto next;
+                        }
+                    }
+                    if (option->has_parameter) {
+                        if (equals_sign) {
+                            interpret_option(
+                                result, option->short_name, equals_sign + 1
+                            );
+                        } else {
+                            if (j + 1 >= argc) {
+                                report_error(
+                                    "option --%s requires an argument",
+                                    option_contents
+                                );
+                                goto error;
+                            }
+                            interpret_option(
+                                result, option->short_name, argv[i + 1]
+                            );
+                            // the next argument is consumed
+                            j++;
+                        }
+                    } else {
+                        interpret_option(result, option->short_name, NULL);
+                    }
+                    goto finish_option;
+                next:
                 }
 
                 report_error(
@@ -79,39 +113,49 @@ Arguments *parse_argv(int argc, char **argv) {
                     argv[0]
                 );
                 goto error;
+
+            finish_option:
             } else {
                 // short option, map to equiv. short option
-                for (int i = 1; arg[i] != '\0'; i++) {
-                    switch (arg[i]) {
+                for (int j = 1; arg[j] != '\0'; j++) {
+                    switch (arg[j]) {
                     // no-argument options
                     case 'h':
                     case 'v':
-                        interpret_option(result, arg[i], NULL);
+                        interpret_option(result, arg[j], NULL);
                         break;
                     // options with arguments
                     // must be at the end of the string
                     case 'o':
-                        if (arg[i + 1] != '\0') {
+                        if (arg[j + 1] != '\0') {
                             report_error(
                                 "option -%c requires an argument and "
                                 "can't be placed here",
-                                arg[i]
+                                arg[j]
                             );
+                            goto error;
                         }
-                        if (i + 1 >= argc) {
+                        if (j + 1 >= argc) {
                             report_error(
-                                "option -%c requires an argument", arg[i]
+                                "option -%c requires an argument", arg[j]
                             );
+                            goto error;
                         }
-                        interpret_option(result, arg[i], argv[i + 1]);
+                        interpret_option(result, arg[j], argv[i + 1]);
                         // the next argument is consumed
                         i++;
                         break;
                     default:
+                        log_debug(
+                            "arg: %s, i: %d, argv[i + 1]: %s\n",
+                            arg,
+                            j,
+                            argv[i + 1]
+                        );
                         report_error(
-                            "invalid option %c\ntry %s --help for more "
+                            "invalid option -%c\ntry %s --help for more "
                             "information",
-                            arg[i],
+                            arg[j],
                             argv[0]
                         );
                         goto error;
@@ -128,7 +172,7 @@ Arguments *parse_argv(int argc, char **argv) {
                 }
 
                 if (strcmp(mode, "version") == 0) {
-                    print_version(argv[0]);
+                    print_version();
                     exit(EXIT_SUCCESS);
                 }
 
@@ -191,6 +235,7 @@ Arguments *parse_argv(int argc, char **argv) {
         report_error(
             "a mode is required\ntry %s --help for more information", argv[0]
         );
+        goto error;
     }
 
     // capture output mode requires an output name
