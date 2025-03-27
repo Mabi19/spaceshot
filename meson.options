@@ -1,1 +1,2 @@
-option('timing', type: 'boolean', value: false)
+option('timing', type: 'boolean', value: false, description: 'Record timing information')
+option('debug-clipping', type: 'boolean', value: false, description: 'Draw clip regions on screen instead of applying them')

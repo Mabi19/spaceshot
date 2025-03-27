@@ -11,7 +11,12 @@ build_conf.set_quoted('SPACESHOT_VERSION', meson.project_version())
 build_conf.set(
     'SPACESHOT_TIMING',
     get_option('timing'),
-    description: 'Record timing information',
+    description: 'Record timing information'
+)
+build_conf.set(
+    'SPACESHOT_DEBUG_CLIPPING',
+    get_option('debug-clipping'),
+    description: 'Draw clip regions on screen instead of applying them'
 )
 
 configure_file(

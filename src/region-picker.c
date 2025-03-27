@@ -39,6 +39,72 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     return result;
 }
 
+static void calculate_clip_regions(
+    RegionPicker *picker, const BBox *curr_sel, BBox *outer, BBox *inner
+) {
+    uint32_t device_width = picker->surface->device_width;
+    uint32_t device_height = picker->surface->device_height;
+    double border_width_pixels =
+        round((BORDER_WIDTH * picker->surface->scale) / 120.0);
+
+    if (device_width != picker->last_device_width ||
+        device_height != picker->last_device_height) {
+        // needs full redraw
+        outer->x = 0;
+        outer->y = 0;
+        outer->width = device_width;
+        outer->height = device_height;
+        return;
+    }
+
+    if (picker->state == REGION_PICKER_EMPTY) {
+        // selection can't have changed
+        outer->width = 0;
+        outer->height = 0;
+        return;
+    }
+
+    BBox *last_sel = &picker->last_drawn_box;
+    if (last_sel->width == 0 && last_sel->height == 0) {
+        // there is no previous box
+        // note that get_bbox_containing_selection() ensures boxes are at least
+        // 1x1
+        *outer = *curr_sel;
+        inner->width = 0;
+        inner->height = 0;
+    } else {
+        double last_right = last_sel->x + last_sel->width;
+        double last_bottom = last_sel->y + last_sel->height;
+        double curr_right = curr_sel->x + curr_sel->width;
+        double curr_bottom = curr_sel->y + curr_sel->height;
+
+        outer->x = fmin(last_sel->x, curr_sel->x);
+        outer->y = fmin(last_sel->y, curr_sel->y);
+        outer->width = fmax(last_right, curr_right) - outer->x;
+        outer->height = fmax(last_bottom, curr_bottom) - outer->y;
+
+        inner->x = fmax(last_sel->x, curr_sel->x);
+        inner->y = fmax(last_sel->y, curr_sel->y);
+        inner->width = fmin(last_right, curr_right) - inner->x;
+        inner->height = fmin(last_bottom, curr_bottom) - inner->y;
+    }
+
+    // adjust for borders
+    outer->x -= border_width_pixels;
+    outer->y -= border_width_pixels;
+    outer->width += 2 * border_width_pixels;
+    outer->height += 2 * border_width_pixels;
+}
+
+// Like cairo_rectangle(), but in the reverse winding order.
+static void cairo_bbox_reverse(cairo_t *cr, BBox rect) {
+    cairo_move_to(cr, rect.x, rect.y);
+    cairo_line_to(cr, rect.x, rect.y + rect.height);
+    cairo_line_to(cr, rect.x + rect.width, rect.y + rect.height);
+    cairo_line_to(cr, rect.x + rect.width, rect.y);
+    cairo_close_path(cr);
+}
+
 static bool region_picker_draw(void *data, cairo_t *cr) {
     RegionPicker *picker = data;
     OverlaySurface *surface = picker->surface;
@@ -49,6 +115,32 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         log_debug("skipping draw\n");
         return false;
     }
+
+    BBox inner_clip_region, outer_clip_region;
+    calculate_clip_regions(
+        picker, &selection_box, &outer_clip_region, &inner_clip_region
+    );
+
+#ifndef SPACESHOT_DEBUG_CLIPPING
+    cairo_reset_clip(cr);
+    if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
+        // apply the clip regions
+        cairo_rectangle(
+            cr,
+            outer_clip_region.x,
+            outer_clip_region.y,
+            outer_clip_region.width,
+            outer_clip_region.height
+        );
+
+        if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
+            cairo_bbox_reverse(cr, inner_clip_region);
+        }
+
+        cairo_clip(cr);
+    }
+#endif
+
     picker->last_drawn_box = selection_box;
     picker->last_device_width = surface->device_width;
     picker->last_device_height = surface->device_height;
@@ -73,7 +165,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     cairo_restore(cr);
 
     // background
-    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
     const double GRAY_LEVEL = 0.05;
     // no need for eventual flip because R = B
     cairo_set_source_rgba(cr, GRAY_LEVEL, GRAY_LEVEL, GRAY_LEVEL, 0.4);
@@ -84,13 +176,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
         selection_box.height != 0) {
         // poke a hole in it
-        cairo_rectangle(
-            cr,
-            selection_box.x,
-            selection_box.y,
-            selection_box.width,
-            selection_box.height
-        );
+        cairo_bbox_reverse(cr, selection_box);
     }
     cairo_fill(cr);
 
@@ -116,18 +202,27 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     TIMING_END(frame);
 
-    // TODO: use last_drawn_box here to damage a smaller region
-    // we can do slices, or just get the superset of the prev and curr frame
-    // it'd also be nice if the boxes got cairo_clipped as well
-    overlay_surface_damage(
-        surface,
-        (BBox){
-            .x = 0,
-            .y = 0,
-            .width = surface->device_width,
-            .height = surface->device_height,
+#ifdef SPACESHOT_DEBUG_CLIPPING
+    if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
+        // draw the clip regions
+        cairo_rectangle(
+            cr,
+            outer_clip_region.x,
+            outer_clip_region.y,
+            outer_clip_region.width,
+            outer_clip_region.height
+        );
+
+        if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
+            cairo_bbox_reverse(cr, inner_clip_region);
         }
-    );
+
+        cairo_set_source_rgba(cr, 0.0, 0.5, 0.0, 0.5);
+        cairo_fill(cr);
+    }
+#endif
+
+    overlay_surface_damage(surface, outer_clip_region);
     return true;
 }
 
