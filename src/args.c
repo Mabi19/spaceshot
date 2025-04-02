@@ -27,6 +27,9 @@ static void print_version() {
 
 static void interpret_option(Arguments *args, char opt, char *value) {
     switch (opt) {
+    case 'b':
+        get_config()->move_to_background = true;
+        break;
     case 'h':
         print_help(args->executable_name);
         exit(EXIT_SUCCESS);
@@ -52,7 +55,10 @@ typedef struct {
 } LongOption;
 
 static const LongOption LONG_OPTIONS[] = {
-    {"help", 'h', false}, {"output", 'o', true}, {"verbose", 'V', false}
+    {"background", 'b', false},
+    {"help", 'h', false},
+    {"output", 'o', true},
+    {"verbose", 'V', false}
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
@@ -120,6 +126,7 @@ Arguments *parse_argv(int argc, char **argv) {
                 for (int j = 1; arg[j] != '\0'; j++) {
                     switch (arg[j]) {
                     // no-argument options
+                    case 'b':
                     case 'h':
                     case 'v':
                         interpret_option(result, arg[j], NULL);

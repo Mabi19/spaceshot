@@ -66,9 +66,6 @@ void config_int(dictionary *config_dict, int *config_loc, const char *key) {
     } while (false)
 
 void load_config() {
-    // TODO: make more config options, actually make the get_config_locations
-    // function
-
     TIMING_START(config_load);
 
     // default config; strings must be malloc'd because overriding them frees
@@ -77,6 +74,7 @@ void load_config() {
         .output_file = strdup("~~/%Y-%m-%d-%H%M%S-spaceshot.png"),
         .is_verbose = false,
         .png_compression_level = 4,
+        .move_to_background = false,
     };
 
     const char *const CONFIG_SUBPATH = "/spaceshot/config.ini";

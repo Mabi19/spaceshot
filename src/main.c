@@ -10,6 +10,8 @@
 #include "wayland/screenshot.h"
 #include "wayland/seat.h"
 #include <assert.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -298,10 +300,28 @@ int main(int argc, char **argv) {
         }
     }
 
-    // TODO: call daemon() here
-    // but also include a flag to not do that
-
     if (should_clipboard_wait) {
+        if (get_config()->move_to_background) {
+            int dev_null = open("/dev/null", O_RDWR);
+            if (dev_null >= 0) {
+                dup2(dev_null, STDOUT_FILENO);
+                dup2(dev_null, STDIN_FILENO);
+                dup2(dev_null, STDERR_FILENO);
+            } else {
+                close(STDOUT_FILENO);
+                close(STDIN_FILENO);
+                close(STDERR_FILENO);
+            }
+
+            chdir("/");
+            signal(SIGHUP, SIG_IGN);
+
+            pid_t pid = fork();
+            if (pid > 0) {
+                return 0;
+            }
+        }
+
         while (wl_display_dispatch(display) != -1) {
             if (!should_clipboard_wait) {
                 break;
