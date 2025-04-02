@@ -11,7 +11,6 @@
 #include "wayland/seat.h"
 #include <assert.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -302,6 +301,23 @@ int main(int argc, char **argv) {
 
     if (should_clipboard_wait) {
         if (get_config()->move_to_background) {
+            // double-fork
+            // I'm not quite sure why this works, but according to daemon(7)
+            // it should prevent the process from re-acquiring terminals
+            pid_t pid = fork();
+            if (pid == 0) {
+                // child
+                setsid();
+                pid_t pid = fork();
+                if (pid != 0) {
+                    // parent
+                    return 0;
+                }
+            } else {
+                // parent
+                return 0;
+            }
+
             int dev_null = open("/dev/null", O_RDWR);
             if (dev_null >= 0) {
                 dup2(dev_null, STDOUT_FILENO);
@@ -314,12 +330,6 @@ int main(int argc, char **argv) {
             }
 
             chdir("/");
-            signal(SIGHUP, SIG_IGN);
-
-            pid_t pid = fork();
-            if (pid > 0) {
-                return 0;
-            }
         }
 
         while (wl_display_dispatch(display) != -1) {
