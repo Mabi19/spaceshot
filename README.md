@@ -25,7 +25,7 @@ Planned:
 - Sending notifications
 
 ## Building
-You will need a C23-capable compiler and [https://mesonbuild.com](Meson).
+You will need a C23-capable compiler and [Meson](https://mesonbuild.com).
 Dependencies:
 - cairo
 - iniparser
