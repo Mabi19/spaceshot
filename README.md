@@ -9,7 +9,6 @@ It takes a screenshot first and then allows selecting a region on it, which make
 - Integrated copying to clipboard (only in interactive modes)
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
-- Hold Alt or Space to move selection instead of resizing
 
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
@@ -23,6 +22,11 @@ Planned:
     - ext-image-capture-source-v1 is ideal, but support is limited
     - May be implemented using hyprland-toplevel-export-v1 first
 - Sending notifications
+
+### Controls
+- Click and drag to select a region
+- Press Esc or click in place to cancel
+- Hold Alt or Space to move the selection instead of resizing it
 
 ## Building
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com).
@@ -43,5 +47,9 @@ meson compile -C build
 meson install -C build
 ```
 
+## Running
+Run `spaceshot --help` for the help text.
+// TODO document options
+
 ## Configuration
-Currently undocumented
+Currently undocumented. // TODO fix
