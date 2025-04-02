@@ -161,6 +161,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         log_debug("background requires scaling\n");
         cairo_scale(cr, x_scale, y_scale);
     }
+    cairo_pattern_set_filter(picker->background_pattern, CAIRO_FILTER_FAST);
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
     cairo_restore(cr);
