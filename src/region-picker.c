@@ -44,6 +44,8 @@ static void calculate_clip_regions(
 ) {
     uint32_t device_width = picker->surface->device_width;
     uint32_t device_height = picker->surface->device_height;
+    //* This will need to be adjusted if the picker gains an edit mode
+    // (which will draw further outside the bounds)
     double border_width_pixels =
         round((BORDER_WIDTH * picker->surface->scale) / 120.0);
 
@@ -301,6 +303,7 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         break;
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
+        // TODO: change cursor shape
         picker->move_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
         break;
     }

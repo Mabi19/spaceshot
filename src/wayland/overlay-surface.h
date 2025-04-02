@@ -41,8 +41,9 @@ typedef struct {
     OverlaySurfaceDrawCallback draw_callback;
     OverlaySurfaceCloseCallback close_callback;
     void *user_data;
-    // used for deduplicating frame() requests
+    // used for frame pacing
     bool has_requested_frame;
+    bool has_queued_render;
 } OverlaySurface;
 
 OverlaySurface *overlay_surface_new(

@@ -63,8 +63,11 @@ static void recompute_device_size(OverlaySurface *surface) {
         round((surface->logical_height * surface->scale) / 120.0);
 }
 
-/** Call the draw_callback immediately. Prefer using
- * overlay_surface_queue_draw() over this if possible. */
+/**
+ * Call the draw_callback immediately. Prefer using
+ * overlay_surface_queue_draw() over this if possible.
+ * Note that this function does not call wl_surface_commit.
+ */
 static void overlay_surface_draw_immediate(OverlaySurface *surface) {
     RenderBuffer *draw_buf = get_unused_buffer(surface);
     bool did_update = surface->draw_callback(surface->user_data, draw_buf->cr);
@@ -73,7 +76,6 @@ static void overlay_surface_draw_immediate(OverlaySurface *surface) {
     }
     cairo_surface_flush(draw_buf->cairo_surface);
     render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
-    wl_surface_commit(surface->wl_surface);
 }
 
 static void overlay_surface_handle_configure(
@@ -101,6 +103,7 @@ static void overlay_surface_handle_configure(
     recompute_device_size(surface);
 
     overlay_surface_draw_immediate(surface);
+    wl_surface_commit(surface->wl_surface);
 }
 
 static void overlay_surface_handle_closed(
@@ -130,6 +133,7 @@ static void preferred_scale_changed(
     recompute_device_size(surface);
 
     overlay_surface_draw_immediate(surface);
+    wl_surface_commit(surface->wl_surface);
 }
 
 static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
@@ -187,26 +191,43 @@ OverlaySurface *overlay_surface_new(
     return result;
 }
 
+static void draw_immediate_and_request_frame(OverlaySurface *);
+
 static void overlay_surface_handle_frame(
     void *data, struct wl_callback * /* callback */, uint32_t /* timestamp */
 ) {
     OverlaySurface *surface = data;
-    overlay_surface_draw_immediate(surface);
-    surface->has_requested_frame = false;
+    if (surface->has_queued_render) {
+        // request a frame callback again, if another render is queued
+        draw_immediate_and_request_frame(surface);
+        surface->has_queued_render = false;
+    } else {
+        // no frame queued and we've waited, so next time we can draw
+        // immediately
+        surface->has_requested_frame = false;
+    }
 }
 
 static struct wl_callback_listener frame_callback_listener = {
     .done = overlay_surface_handle_frame
 };
 
-void overlay_surface_queue_draw(OverlaySurface *surface) {
-    if (surface->has_requested_frame) {
-        return;
-    }
+static void draw_immediate_and_request_frame(OverlaySurface *surface) {
     surface->has_requested_frame = true;
     struct wl_callback *callback = wl_surface_frame(surface->wl_surface);
     wl_callback_add_listener(callback, &frame_callback_listener, surface);
+    overlay_surface_draw_immediate(surface);
     wl_surface_commit(surface->wl_surface);
+}
+
+void overlay_surface_queue_draw(OverlaySurface *surface) {
+    // if we're not waiting on anything, draw right now
+    if (!surface->has_requested_frame) {
+        draw_immediate_and_request_frame(surface);
+    } else {
+        // render at the frame() callback
+        surface->has_queued_render = true;
+    }
 }
 
 void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
