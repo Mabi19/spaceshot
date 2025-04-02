@@ -1,28 +1,12 @@
 #include "config.h"
 #include "log.h"
 #include "paths.h"
+#include <errno.h>
 #include <iniparser.h>
 #include <memory.h>
 #include <stdlib.h>
 
 static Config config;
-
-#define CONFIG_STRING(config_loc, key)                                         \
-    do {                                                                       \
-        const char *value;                                                     \
-        if ((value = iniparser_getstring(config_dict, key, NULL))) {           \
-            free(config_loc);                                                  \
-            config_loc = strdup(value);                                        \
-        }                                                                      \
-    } while (false)
-
-#define CONFIG_BOOL(config_loc, key)                                           \
-    do {                                                                       \
-        int value;                                                             \
-        if ((value = iniparser_getboolean(config_dict, key, -1) != -1)) {      \
-            config_loc = value;                                                \
-        }                                                                      \
-    } while (false)
 
 void config_string(
     dictionary *config_dict, char **config_loc, const char *key
@@ -48,6 +32,39 @@ void config_bool(dictionary *config_dict, bool *config_loc, const char *key) {
     }
 }
 
+void config_int(dictionary *config_dict, int *config_loc, const char *key) {
+    const char *value_str = iniparser_getstring(config_dict, key, NULL);
+    if (!value_str)
+        return;
+
+    char *endptr;
+    errno = 0;
+    int val = strtol(value_str, &endptr, 0);
+    if (value_str[0] == '\0' || *endptr != '\0' || errno) {
+        report_warning(
+            "config: invalid integer '%s' (for key %s)", value_str, key
+        );
+        return;
+    }
+    *config_loc = val;
+}
+
+#define CONFIG_INT_VALIDATE(config_dict, config_loc, key, validate)            \
+    do {                                                                       \
+        int old = *config_loc;                                                 \
+        config_int(config_dict, config_loc, key);                              \
+        int x = *config_loc;                                                   \
+        if (!(validate)) {                                                     \
+            report_warning(                                                    \
+                "config: value %d for key %s is invalid (needs to be %s)",     \
+                x,                                                             \
+                key,                                                           \
+                #validate                                                      \
+            );                                                                 \
+            *config_loc = old;                                                 \
+        }                                                                      \
+    } while (false)
+
 void load_config() {
     // TODO: make more config options, actually make the get_config_locations
     // function
@@ -59,6 +76,7 @@ void load_config() {
     config = (Config){
         .output_file = strdup("~~/%Y-%m-%d-%H%M%S-spaceshot.png"),
         .is_verbose = false,
+        .png_compression_level = 4,
     };
 
     const char *const CONFIG_SUBPATH = "/spaceshot/config.ini";
@@ -79,6 +97,12 @@ void load_config() {
         dictionary *d = iniparser_load_file(config_file, path_buf);
         config_string(d, &config.output_file, "output-file");
         config_bool(d, &config.is_verbose, "verbose");
+        CONFIG_INT_VALIDATE(
+            d,
+            &config.png_compression_level,
+            "png-compression-level",
+            0 <= x && x <= 9
+        );
 
         iniparser_freedict(d);
     }

@@ -1,4 +1,5 @@
 #include "image.h"
+#include "config.h"
 #include "link-buffer.h"
 #include "log.h"
 #include <assert.h>
@@ -164,10 +165,10 @@ LinkBuffer *image_save_png(const Image *image) {
         report_error_fatal("libpng error");
     }
 
-    // Lowering the compression level (default = 6) results in about 33% faster
-    // encoding in my testing, with a not very significant size hit.
-    // TODO: make this configurable
-    png_set_compression_level(png_data, 4);
+    // Lowering the compression level (libpng default = 6, my default = 4)
+    // results in about 33% faster encoding in my testing, with a not very
+    // significant size hit.
+    png_set_compression_level(png_data, get_config()->png_compression_level);
     // png_init_io(png_data, wrapped_fd);
     png_set_write_fn(png_data, &curr_block, write_png_data, flush_png_data);
 
