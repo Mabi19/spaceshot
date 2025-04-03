@@ -140,4 +140,5 @@ executable(
         wl_dep,
         extra_protocol_deps,
     ],
+    install: true
 )
