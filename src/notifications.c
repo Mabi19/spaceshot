@@ -85,7 +85,7 @@ static void handle_notification_closed(NotifyNotification *, GMainLoop *loop) {
 }
 
 static const char *const BODY_TEMPLATE =
-    "Image saved in %s and copied to the clipboard";
+    "Image saved in <i>%s</i> and copied to the clipboard.";
 
 static int notify_run_func(void *data) {
     NotifyData *params = data;
