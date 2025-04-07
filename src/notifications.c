@@ -1,4 +1,5 @@
 #include "notifications.h"
+#include "gio/gio.h"
 #include "glib.h"
 #include "log.h"
 #include <libnotify/notification.h>
@@ -35,11 +36,47 @@ static void handle_notification_open(
 }
 
 static void handle_notification_directory(
-    NotifyNotification * /* n */, char * /* action */, void *user_data
+    NotifyNotification *n, char * /* action */, void *user_data
 ) {
     NotifyData *params = user_data;
-    // TODO: call dbus FileManager1
-    log_debug("Notification directory('%s')\n", params->filepath);
+    GError *error = NULL;
+    GDBusProxy *proxy = g_dbus_proxy_new_for_bus_sync(
+        G_BUS_TYPE_SESSION,
+        G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES |
+            G_DBUS_PROXY_FLAGS_DO_NOT_CONNECT_SIGNALS,
+        NULL,
+        "org.freedesktop.FileManager1",
+        "/org/freedesktop/FileManager1",
+        "org.freedesktop.FileManager1",
+        NULL,
+        &error
+    );
+    if (error) {
+        report_error("Couldn't connect to org.freedesktop.FileManager1");
+        return;
+    }
+    GVariantBuilder *path_array_builder =
+        g_variant_builder_new(G_VARIANT_TYPE_STRING_ARRAY);
+    g_variant_builder_add(path_array_builder, "s", params->filepath);
+    GVariant *result = g_dbus_proxy_call_sync(
+        proxy,
+        "ShowItems",
+        g_variant_new("(ass)", path_array_builder, ""),
+        G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        NULL,
+        &error
+    );
+    g_variant_builder_unref(path_array_builder);
+    if (error) {
+        report_error("Couldn't open file manager via D-Bus");
+        return;
+    }
+    g_variant_unref(result);
+
+    if (!notify_notification_close(n, &error)) {
+        report_error("Couldn't close notification");
+    };
 }
 
 static void handle_notification_closed(NotifyNotification *, GMainLoop *loop) {
