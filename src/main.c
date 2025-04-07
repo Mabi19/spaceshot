@@ -4,6 +4,7 @@
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
+#include "notifications.h"
 #include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
@@ -14,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 #include <unistd.h>
 #include <wayland-client.h>
 
@@ -34,17 +36,20 @@ static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 static struct wl_display *display;
+#ifdef SPACESHOT_NOTIFICATIONS
+static bool has_notify_thread;
+static thrd_t notify_thread;
+#endif
 
 /**
  * Save an already-encoded image to disk.
  */
-static void save_screenshot(LinkBuffer *encoded_image) {
-    char *output_filename = get_output_filename();
+static void
+save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
     FILE *out_file = fopen(output_filename, "wb");
     assert(out_file);
     link_buffer_write(encoded_image, out_file);
     fclose(out_file);
-    // free(output_filename);
 }
 
 static void finish_output_screenshot(
@@ -53,7 +58,10 @@ static void finish_output_screenshot(
     LinkBuffer *out_data = image_save_png(image);
     image_destroy(image);
 
-    save_screenshot(out_data);
+    char *output_filename = get_output_filename();
+    save_screenshot(out_data, output_filename);
+    // TODO: consider sending a notification here
+    free(output_filename);
     link_buffer_destroy(out_data);
 
     should_active_wait = false;
@@ -90,7 +98,10 @@ static void finish_predefined_region_screenshot(
     LinkBuffer *out_data = image_save_png(cropped);
     image_destroy(cropped);
 
-    save_screenshot(out_data);
+    char *output_filename = get_output_filename();
+    save_screenshot(out_data, output_filename);
+    // TODO: consider sending a notification here
+    free(output_filename);
     link_buffer_destroy(out_data);
 
     should_active_wait = false;
@@ -207,7 +218,17 @@ static void region_picker_finish(
             data_source, &clipboard_source_listener, out_data
         );
 
-        save_screenshot(out_data);
+        char *output_filename = get_output_filename();
+        save_screenshot(out_data, output_filename);
+
+#ifdef SPACESHOT_NOTIFICATIONS
+        if (!notify_for_file(&notify_thread, strdup(output_filename))) {
+            report_error("Couldn't spawn notification thread");
+        } else {
+            has_notify_thread = true;
+        }
+#endif
+        free(output_filename);
 
         should_active_wait = false;
         should_clipboard_wait = true;
@@ -338,6 +359,12 @@ int main(int argc, char **argv) {
             }
         }
     }
+
+#ifdef SPACESHOT_NOTIFICATIONS
+    if (has_notify_thread) {
+        thrd_join(notify_thread, NULL);
+    }
+#endif
 
     // TODO: clean up wayland_globals
 

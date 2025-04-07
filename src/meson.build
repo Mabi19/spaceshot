@@ -100,6 +100,23 @@ foreach protocol : extra_protocols
     extra_protocol_deps += protocol_dep
 endforeach
 
+cairo_dep = dependency('cairo')
+iniparser_dep = dependency('iniparser')
+# TODO: add an option to compile a custom libpng, probably with zlib-ng
+libpng_dep = dependency('libpng')
+xkbcommon_dep = dependency('xkbcommon')
+
+if get_option('notifications')
+    libnotify_dep = dependency('libnotify')
+    notification_sources = ['notifications.c']
+else
+    libnotify_dep = dependency('', required: false)
+    notification_sources = ['notifications.c']
+endif
+
+cc = meson.get_compiler('c')
+m_dep = cc.find_library('m', required: false)
+
 sources = [
     'args.c',
     'bbox.c',
@@ -116,16 +133,8 @@ sources = [
     'wayland/screenshot.c',
     'wayland/seat.c',
     'wayland/shared-memory.c',
+    notification_sources
 ]
-
-cairo_dep = dependency('cairo')
-iniparser_dep = dependency('iniparser')
-# TODO: add an option to compile a custom libpng, probably with zlib-ng
-libpng_dep = dependency('libpng')
-xkbcommon_dep = dependency('xkbcommon')
-
-cc = meson.get_compiler('c')
-m_dep = cc.find_library('m', required: false)
 
 executable(
     'spaceshot',
@@ -134,6 +143,7 @@ executable(
     dependencies: [
         cairo_dep,
         iniparser_dep,
+        libnotify_dep,
         libpng_dep,
         xkbcommon_dep,
         m_dep,

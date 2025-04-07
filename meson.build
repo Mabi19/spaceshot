@@ -18,6 +18,11 @@ build_conf.set(
     get_option('debug-clipping'),
     description: 'Draw clip regions on screen instead of applying them'
 )
+build_conf.set(
+    'SPACESHOT_NOTIFICATIONS',
+    get_option('notifications'),
+    description: 'Send notifications after screenshotting'
+)
 
 configure_file(
     output: 'build-config.h',
