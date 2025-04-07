@@ -56,7 +56,29 @@ meson install -C build
 
 ## Running
 Run `spaceshot --help` for the help text.
-// TODO document options
+
+Example invocations:
+```sh
+# print version
+spaceshot -v
+# print help
+spaceshot -h
+
+# select a region and screenshot it
+spaceshot region
+# screenshot a predefined region
+# note that the coordinates can be fractional, unlike slurp
+spaceshot region '150,150 300x200'
+# screenshot an output
+# note that there is no output picker yet
+spaceshot output DP-1
+```
 
 ## Configuration
-Currently undocumented. // TODO fix
+Configuration is initialized from the default options, then loaded from $XDG_CONFIG_DIRS/spaceshot/config.ini, then $XDG_CONFIG_HOME/spaceshot/config.ini, and finally from command-line arguments. All configuration files are optional.
+
+Available configuration options:
+- `move-to-background` (boolean, default: `false`): whether to move to the background after screenshotting. If set to false, the process will block until the clipboard is overridden and the notification is dismissed. Also available via the `-b`/`--background` option
+- `output-file` (string, default: `~~/%Y-%m-%d-%H%M%S-spaceshot.png`): a template for the output filename. `~/` expands to `$HOME`, `~~/` expands to `$(xdg-user-dir PICTURES)`. Accepts `strftime` specifiers. Also available via the `-o`/`--output-file` option
+- `png-compression-level` (integer in the range [0, 9], default: 4): the compression level to save PNGs at. Note that this is lowered by default to improve performance, at a small expense in file size
+- `verbose` (boolean, default: `false`): whether to enable debug logging. Also available via the `--verbose` option

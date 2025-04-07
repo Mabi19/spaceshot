@@ -101,6 +101,7 @@ void load_config() {
             "png-compression-level",
             0 <= x && x <= 9
         );
+        config_bool(d, &config.move_to_background, "move-to-background");
 
         iniparser_freedict(d);
     }

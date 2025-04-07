@@ -18,6 +18,12 @@ static void print_help(const char *program_name) {
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
+        "Options:\n"
+        "  -h, --help        display this help and exit\n"
+        "  -v, --version     output version information and exit\n"
+        "  -b, --background  move to background after screenshotting\n"
+        "  -o, --output-file set output file path template\n"
+        "  --verbose         enable debug logging\n"
     );
 }
 
@@ -57,7 +63,7 @@ typedef struct {
 static const LongOption LONG_OPTIONS[] = {
     {"background", 'b', false},
     {"help", 'h', false},
-    {"output", 'o', true},
+    {"output-file", 'o', true},
     {"verbose", 'V', false}
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
