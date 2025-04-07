@@ -5,6 +5,8 @@ typedef struct {
     bool is_verbose;
     int png_compression_level;
     bool move_to_background;
+    bool should_copy_to_clipboard;
+    bool should_notify;
 } Config;
 
 void load_config();

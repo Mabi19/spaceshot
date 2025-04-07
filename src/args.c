@@ -22,6 +22,10 @@ static void print_help(const char *program_name) {
         "  -h, --help        display this help and exit\n"
         "  -v, --version     output version information and exit\n"
         "  -b, --background  move to background after screenshotting\n"
+        "  -c, --copy        copy screenshot to clipboard\n"
+        "  --no-copy         do not copy the screenshot\n"
+        "  -n, --notify      send a notification after screenshotting\n"
+        "  --no-notify       do not send notifications\n"
         "  -o, --output-file set output file path template\n"
         "  --verbose         enable debug logging\n"
     );
@@ -39,11 +43,24 @@ static void interpret_option(Arguments *args, char opt, char *value) {
     case 'h':
         print_help(args->executable_name);
         exit(EXIT_SUCCESS);
+    case 'c':
+        get_config()->should_copy_to_clipboard = true;
+        break;
+    case 'C':
+        // only as --no-copy
+        get_config()->should_copy_to_clipboard = false;
+        break;
+    case 'n':
+        get_config()->should_notify = true;
+        break;
+    case 'N':
+        get_config()->should_notify = false;
+        break;
     case 'o':
         get_config()->output_file = value;
         break;
     case 'V':
-        // this option doesn't have a short version (-V is not exposed)
+        // only as --verbose
         get_config()->is_verbose = true;
         break;
     case 'v':
@@ -62,7 +79,11 @@ typedef struct {
 
 static const LongOption LONG_OPTIONS[] = {
     {"background", 'b', false},
+    {"copy", 'c', false},
+    {"no-copy", 'C', false},
     {"help", 'h', false},
+    {"notify", 'n', false},
+    {"no-notify", 'N', false},
     {"output-file", 'o', true},
     {"verbose", 'V', false}
 };
@@ -133,6 +154,8 @@ Arguments *parse_argv(int argc, char **argv) {
                     switch (arg[j]) {
                     // no-argument options
                     case 'b':
+                    case 'c':
+                    case 'n':
                     case 'h':
                     case 'v':
                         interpret_option(result, arg[j], NULL);

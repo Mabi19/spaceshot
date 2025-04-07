@@ -37,7 +37,7 @@ static Arguments *args;
 static struct wl_list active_pickers;
 static struct wl_display *display;
 #ifdef SPACESHOT_NOTIFICATIONS
-static bool has_notify_thread;
+static bool has_notify_thread = false;
 static thrd_t notify_thread;
 #endif
 
@@ -163,14 +163,16 @@ static void region_picker_finish(
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            // Set up the copy while the picker's still alive
-            data_source = wl_data_device_manager_create_data_source(
-                wayland_globals.data_device_manager
-            );
-            wl_data_source_offer(data_source, "image/png");
-            seat_dispatcher_set_selection(
-                wayland_globals.seat_dispatcher, data_source
-            );
+            if (get_config()->should_copy_to_clipboard) {
+                // Set up the copy while the picker's still alive
+                data_source = wl_data_device_manager_create_data_source(
+                    wayland_globals.data_device_manager
+                );
+                wl_data_source_offer(data_source, "image/png");
+                seat_dispatcher_set_selection(
+                    wayland_globals.seat_dispatcher, data_source
+                );
+            }
 
             to_save = image_crop(
                 entry->image,
@@ -214,24 +216,27 @@ static void region_picker_finish(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        wl_data_source_add_listener(
-            data_source, &clipboard_source_listener, out_data
-        );
+        if (get_config()->should_copy_to_clipboard) {
+            wl_data_source_add_listener(
+                data_source, &clipboard_source_listener, out_data
+            );
+            should_clipboard_wait = true;
+        }
 
         char *output_filename = get_output_filename();
         save_screenshot(out_data, output_filename);
 
 #ifdef SPACESHOT_NOTIFICATIONS
-        if (!notify_for_file(&notify_thread, strdup(output_filename))) {
-            report_error("Couldn't spawn notification thread");
-        } else {
-            has_notify_thread = true;
+        if (get_config()->should_notify) {
+            if (!notify_for_file(&notify_thread, strdup(output_filename))) {
+                report_error("Couldn't spawn notification thread");
+            } else {
+                has_notify_thread = true;
+            }
         }
 #endif
         free(output_filename);
-
         should_active_wait = false;
-        should_clipboard_wait = true;
     }
 }
 

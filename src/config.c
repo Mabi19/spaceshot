@@ -75,6 +75,8 @@ void load_config() {
         .is_verbose = false,
         .png_compression_level = 4,
         .move_to_background = false,
+        .should_copy_to_clipboard = true,
+        .should_notify = true,
     };
 
     const char *const CONFIG_SUBPATH = "/spaceshot/config.ini";
@@ -102,6 +104,8 @@ void load_config() {
             0 <= x && x <= 9
         );
         config_bool(d, &config.move_to_background, "move-to-background");
+        config_bool(d, &config.should_copy_to_clipboard, "copy-to-clipboard");
+        config_bool(d, &config.should_notify, "notify:enabled");
 
         iniparser_freedict(d);
     }
