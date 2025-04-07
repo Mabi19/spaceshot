@@ -1,6 +1,9 @@
 # Spaceshot
 A batteries-included screenshot tool for wlroots-compatible Wayland compositors.
 
+> [!WARNING]
+> This is still a work-in-progress, but largely usable.
+
 It takes a screenshot first and then allows selecting a region on it, which makes taking screenshots of moving things and popups (which would disappear when focus changes) possible.
 
 ## Features
