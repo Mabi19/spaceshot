@@ -52,6 +52,18 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
     fclose(out_file);
 }
 
+static void send_notification(char *output_filename) {
+#ifdef SPACESHOT_NOTIFICATIONS
+    if (get_config()->should_notify) {
+        if (!notify_for_file(&notify_thread, strdup(output_filename))) {
+            report_error("Couldn't spawn notification thread");
+        } else {
+            has_notify_thread = true;
+        }
+    }
+#endif
+}
+
 static void finish_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
@@ -60,7 +72,8 @@ static void finish_output_screenshot(
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    // TODO: consider sending a notification here
+    send_notification(output_filename);
+
     free(output_filename);
     link_buffer_destroy(out_data);
 
@@ -100,7 +113,8 @@ static void finish_predefined_region_screenshot(
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    // TODO: consider sending a notification here
+    send_notification(output_filename);
+
     free(output_filename);
     link_buffer_destroy(out_data);
 
@@ -225,16 +239,8 @@ static void region_picker_finish(
 
         char *output_filename = get_output_filename();
         save_screenshot(out_data, output_filename);
+        send_notification(output_filename);
 
-#ifdef SPACESHOT_NOTIFICATIONS
-        if (get_config()->should_notify) {
-            if (!notify_for_file(&notify_thread, strdup(output_filename))) {
-                report_error("Couldn't spawn notification thread");
-            } else {
-                has_notify_thread = true;
-            }
-        }
-#endif
         free(output_filename);
         should_active_wait = false;
     }

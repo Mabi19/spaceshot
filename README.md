@@ -19,12 +19,12 @@ Planned:
 - Snapping to predefined aspect ratios (Shift?)
 - Hold a key (Ctrl?) when releasing mouse button to edit selection afterwards
 - A better selection border that will be visible on both light and dark backgrounds
-- More configuration options
+- More configuration options (mostly concerning appearance)
 - Screenshotting individual windows
     - There isn't a widely-supported protocol for this yet
     - ext-image-capture-source-v1 is ideal, but support is limited
     - May be implemented using hyprland-toplevel-export-v1 first
-- Edit action for notifications
+- Edit action for notifications (to launch an external editor)
 
 ### Controls
 - Click and drag to select a region
