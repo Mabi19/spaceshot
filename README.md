@@ -9,10 +9,13 @@ It takes a screenshot first and then allows selecting a region on it, which make
 - Integrated copying to clipboard (only in interactive modes)
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
+- Sending notifications, with actions to open the result file and view it in a file manager
 
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
 Planned:
+- An output picker
+    - As a workaround, use `spaceshot output $(slurp -o -f "%o")`
 - Snapping to predefined aspect ratios (Shift?)
 - Hold a key (Ctrl?) when releasing mouse button to edit selection afterwards
 - A better selection border that will be visible on both light and dark backgrounds
@@ -21,7 +24,7 @@ Planned:
     - There isn't a widely-supported protocol for this yet
     - ext-image-capture-source-v1 is ideal, but support is limited
     - May be implemented using hyprland-toplevel-export-v1 first
-- Sending notifications
+- Edit action for notifications
 
 ### Controls
 - Click and drag to select a region
@@ -39,6 +42,10 @@ Dependencies:
 
 > [!NOTE]
 > All Wayland protocols are currently sourced from the system; the Arch Linux repos have them, but I don't know about other Linux distributions / OSes.
+
+If the `notifications` build option is enabled (it is on by default):
+- libnotify is required to build,
+- xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime.
 
 ```sh
 meson setup build
