@@ -106,18 +106,10 @@ iniparser_dep = dependency('iniparser')
 libpng_dep = dependency('libpng')
 xkbcommon_dep = dependency('xkbcommon')
 
-if get_option('notifications')
-    libnotify_dep = dependency('libnotify')
-    notification_sources = ['notifications.c']
-else
-    libnotify_dep = dependency('', required: false)
-    notification_sources = ['notifications.c']
-endif
-
 cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
-sources = [
+sources = files([
     'args.c',
     'bbox.c',
     'config.c',
@@ -133,8 +125,7 @@ sources = [
     'wayland/screenshot.c',
     'wayland/seat.c',
     'wayland/shared-memory.c',
-    notification_sources
-]
+])
 
 executable(
     'spaceshot',
@@ -143,7 +134,6 @@ executable(
     dependencies: [
         cairo_dep,
         iniparser_dep,
-        libnotify_dep,
         libpng_dep,
         xkbcommon_dep,
         m_dep,

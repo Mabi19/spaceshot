@@ -31,3 +31,6 @@ configure_file(
 build_conf_include = include_directories('.')
 
 subdir('src')
+if get_option('notifications')
+    subdir('notify')
+endif

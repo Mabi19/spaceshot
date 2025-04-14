@@ -4,7 +4,6 @@
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
-#include "notifications.h"
 #include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
@@ -28,18 +27,12 @@ typedef struct {
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
-// If a second event loop is added later (such as for notifications),
-// that can go in its own thread that is later join()ed.
 static bool should_active_wait = true;
 static bool should_clipboard_wait = false;
 static bool correct_output_found = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 static struct wl_display *display;
-#ifdef SPACESHOT_NOTIFICATIONS
-static bool has_notify_thread = false;
-static thrd_t notify_thread;
-#endif
 
 /**
  * Save an already-encoded image to disk.
@@ -55,11 +48,8 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
 static void send_notification(char *output_filename) {
 #ifdef SPACESHOT_NOTIFICATIONS
     if (get_config()->should_notify) {
-        if (!notify_for_file(&notify_thread, strdup(output_filename))) {
-            report_error("Couldn't spawn notification thread");
-        } else {
-            has_notify_thread = true;
-        }
+        // TODO: invoke spaceshot-notify
+        log_debug("notifying for %s\n", output_filename);
     }
 #endif
 }
@@ -370,12 +360,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
-#ifdef SPACESHOT_NOTIFICATIONS
-    if (has_notify_thread) {
-        thrd_join(notify_thread, NULL);
-    }
-#endif
 
     // TODO: clean up wayland_globals
 
