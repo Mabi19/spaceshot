@@ -5,7 +5,9 @@ public class NotifyServer: Object {
     private HashTable<uint, string> active_notifications;
 
     construct {
-        this.active_notifications = new HashTable<uint, string>(int_hash, int_equal);
+        // I'm not sure why this works with direct hash (and not int hash).
+        // The vala compiler casts the integers to pointers.
+        this.active_notifications = new HashTable<uint, string>(null, null);
         try {
             this.notification_service = Bus.get_proxy_sync(
                 BusType.SESSION,
@@ -16,7 +18,8 @@ public class NotifyServer: Object {
             this.notification_service.notification_closed.connect(this.handle_notification_closed);
             this.notification_service.action_invoked.connect(this.handle_notification_action);
         } catch (IOError e) {
-            critical("Couldn't connect to notification service: %s", e.message);
+            printerr("Couldn't connect to notification service: %s", e.message);
+            Posix.exit(1);
         }
     }
 
@@ -41,7 +44,7 @@ public class NotifyServer: Object {
                         null
                     );
                 } catch (SpawnError e) {
-                    error("Couldn't spawn xdg-open: %s", e.message);
+                    printerr("Couldn't spawn xdg-open: %s", e.message);
                 }
                 break;
             case "directory":
@@ -56,7 +59,7 @@ public class NotifyServer: Object {
                             var file_manager = Bus.get_proxy.end<FileManager>(res);
                             file_manager.show_items({path}, "");
                         } catch (Error e) {
-                            error("Couldn't invoke file manager through D-Bus");
+                            printerr("Couldn't invoke file manager through D-Bus");
                         }
                     }
                 );
