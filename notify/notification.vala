@@ -1,5 +1,5 @@
 [DBus(name = "org.freedesktop.Notifications")]
-interface NotificationService: Object {
+interface NotificationService: DBusProxy {
     public abstract string[] get_capabilities() throws DBusError, IOError;
     public abstract uint notify(
         string app_name,

@@ -7,6 +7,7 @@ dependencies = [
 ]
 
 sources = files([
+    'file-manager.vala',
     'main.vala',
     'notification.vala',
     'server.vala',

@@ -5,7 +5,7 @@ public class NotifyServer: Object {
     private HashTable<uint, string> active_notifications;
 
     construct {
-        this.active_notifications = new HashTable<uint, string>(null, null);
+        this.active_notifications = new HashTable<uint, string>(int_hash, int_equal);
         try {
             this.notification_service = Bus.get_proxy_sync(
                 BusType.SESSION,
@@ -30,22 +30,36 @@ public class NotifyServer: Object {
 
         switch (key) {
             case "default":
-                Pid child_pid;
                 try {
+                    // If the server is set up to ever exit, child processes will need to be cleaned up
                     Process.spawn_async(
                         null,
                         {"xdg-open", path},
                         null,
                         SpawnFlags.SEARCH_PATH | SpawnFlags.DO_NOT_REAP_CHILD,
                         null,
-                        out child_pid
+                        null
                     );
                 } catch (SpawnError e) {
                     error("Couldn't spawn xdg-open: %s", e.message);
                 }
                 break;
             case "directory":
-                // TODO: invoke org.freedesktop.FileManager1
+                Bus.get_proxy.begin<FileManager>(
+                    BusType.SESSION,
+                    "org.freedesktop.FileManager1",
+                    "/org/freedesktop/FileManager1",
+                    DBusProxyFlags.NONE,
+                    null,
+                    (obj, res) => {
+                        try {
+                            var file_manager = Bus.get_proxy.end<FileManager>(res);
+                            file_manager.show_items({path}, "");
+                        } catch (Error e) {
+                            error("Couldn't invoke file manager through D-Bus");
+                        }
+                    }
+                );
                 break;
             default:
                 assert_not_reached();
@@ -61,6 +75,7 @@ public class NotifyServer: Object {
     public void notify_for_file(string path) throws DBusError, IOError {
         const string[] ACTIONS = {"default", "Open", "directory", "View in directory"};
         var hints = new HashTable<string, Variant>(str_hash, str_equal);
+        hints.insert("image-path", new Variant("s", path));
 
         uint id = this.notification_service.notify(
             "Spaceshot",
