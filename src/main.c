@@ -296,6 +296,11 @@ static void add_new_output(WrappedOutput *output) {
         output->name ? output->name : "NULL"
     );
 
+    // New outputs shouldn't be accepted if spaceshot is in the background
+    if (!should_active_wait) {
+        return;
+    }
+
     if (args->mode == CAPTURE_OUTPUT) {
         if (strcmp(output->name, args->output_params.output_name) == 0) {
             log_debug("...which is correct\n");
