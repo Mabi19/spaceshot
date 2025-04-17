@@ -85,7 +85,8 @@ static const LongOption LONG_OPTIONS[] = {
     {"notify", 'n', false},
     {"no-notify", 'N', false},
     {"output-file", 'o', true},
-    {"verbose", 'V', false}
+    {"verbose", 'V', false},
+    {"version", 'v', false}
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
