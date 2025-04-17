@@ -47,9 +47,10 @@ Dependencies:
 > All Wayland protocols are currently sourced from the system; the Arch Linux repos have them, but I don't know about other Linux distributions / OSes.
 
 If the `notifications` build option is enabled (it is on by default):
-- libnotify is required to build,
+- the Vala toolchain is required to build,
 - xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime.
 
+Note that notifications depend on a D-Bus service, and the easiest way to make that available is via `meson install`. However, for testing, setting the environment variable `$SPACESHOT_NOTIFY_PATH` and running `./build/notify/spaceshot-notify -s` will also work.
 ```sh
 meson setup build
 meson compile -C build
