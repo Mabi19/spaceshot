@@ -1,5 +1,6 @@
 #pragma once
 #include "bbox.h"
+#include <wayland-client.h>
 
 // These declarations live in their own header to prevent circular includes.
 
@@ -14,7 +15,9 @@ typedef enum {
 typedef struct {
     struct wl_output *wl_output;
     struct zxdg_output_v1 *xdg_output;
-    const char *name;
+    char *name;
     BBox logical_bounds;
     WrappedOutputFillState fill_state;
+    struct wl_list link;
+    uint32_t object_id;
 } WrappedOutput;

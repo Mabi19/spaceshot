@@ -22,10 +22,16 @@ typedef struct {
     struct zwlr_screencopy_manager_v1 *screencopy_manager;
     struct zxdg_output_manager_v1 *output_manager;
     SeatDispatcher *seat_dispatcher;
+    struct wl_list outputs;
     OutputCallback handle_output_create;
 } WaylandGlobals;
 extern WaylandGlobals wayland_globals;
 
 bool find_wayland_globals(
-    struct wl_display *display, OutputCallback output_callback
+    struct wl_display *display, OutputCallback create_output_callback
 );
+
+/**
+    Returns whether the specified output still exists.
+*/
+bool is_output_valid(WrappedOutput *output);

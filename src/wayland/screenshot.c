@@ -24,6 +24,17 @@ typedef struct {
     void *user_data;
 } FrameContext;
 
+static void frame_context_finalize(
+    FrameContext *context, struct zwlr_screencopy_frame_v1 *frame, Image *result
+) {
+    context->image_callback(context->output, result, context->user_data);
+
+    // cleanup
+    zwlr_screencopy_frame_v1_destroy(frame);
+    shared_buffer_destroy(context->buffer);
+    free(context);
+}
+
 static void frame_handle_buffer(
     void *data,
     struct zwlr_screencopy_frame_v1 * /* frame */,
@@ -125,11 +136,14 @@ static void frame_handle_ready(
         ((uint32_t *)result->data)[0],
         ((uint32_t *)context->buffer->data)[0]
     );
-    context->image_callback(context->output, result, context->user_data);
 
-    // cleanup
-    zwlr_screencopy_frame_v1_destroy(frame);
-    shared_buffer_destroy(context->buffer);
+    frame_context_finalize(context, frame, result);
+}
+
+static void
+frame_handle_failed(void *data, struct zwlr_screencopy_frame_v1 *frame) {
+    // return a null image to signal error
+    frame_context_finalize(data, frame, NULL);
 }
 
 static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
@@ -138,11 +152,12 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
     .buffer_done = frame_handle_buffer_done,
     .linux_dmabuf = frame_handle_linux_dmabuf,
     .flags = frame_handle_flags,
-    // buffer copy event
+    // this one copies
     .ready = frame_handle_ready,
+    .failed = frame_handle_failed,
 };
 
-void take_output_screenshot(
+void capture_output(
     WrappedOutput *output, ScreenshotCallback image_callback, void *data
 ) {
     struct zwlr_screencopy_frame_v1 *frame =

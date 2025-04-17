@@ -267,6 +267,8 @@ LinkBuffer *image_save_png(const Image *image) {
 }
 
 void image_destroy(Image *image) {
-    free(image->data);
-    free(image);
+    if (image) {
+        free(image->data);
+        free(image);
+    }
 }

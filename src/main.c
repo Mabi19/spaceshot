@@ -100,8 +100,12 @@ static void send_notification(char *output_filename) {
 static void finish_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
+    if (!image) {
+        report_error("Capturing output failed");
+        goto defer;
+    }
+
     LinkBuffer *out_data = image_save_png(image);
-    image_destroy(image);
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
@@ -110,6 +114,8 @@ static void finish_output_screenshot(
     free(output_filename);
     link_buffer_destroy(out_data);
 
+defer:
+    image_destroy(image);
     should_active_wait = false;
 }
 
@@ -117,6 +123,16 @@ static void finish_output_screenshot(
 static void finish_predefined_region_screenshot(
     WrappedOutput *output, Image *image, void *data
 ) {
+    if (!is_output_valid(output)) {
+        report_error("Output disappeared while screenshotting");
+        goto defer;
+    }
+    if (!image) {
+        report_error("Capturing output failed");
+        goto defer;
+    }
+
+    // NOTE: this isn't dynamically allocated
     BBox crop_bounds = *(BBox *)data;
     // move to output space
     crop_bounds = bbox_translate(
@@ -139,7 +155,6 @@ static void finish_predefined_region_screenshot(
         crop_bounds.width,
         crop_bounds.height
     );
-    image_destroy(image);
 
     LinkBuffer *out_data = image_save_png(cropped);
     image_destroy(cropped);
@@ -151,6 +166,8 @@ static void finish_predefined_region_screenshot(
     free(output_filename);
     link_buffer_destroy(out_data);
 
+defer:
+    image_destroy(image);
     should_active_wait = false;
 }
 
@@ -282,6 +299,22 @@ static void region_picker_finish(
 static void create_region_picker_for_output(
     WrappedOutput *output, Image *image, void * /* data */
 ) {
+    if (!is_output_valid(output)) {
+        // Theoretically, if all the outputs disappear (and no new ones appear),
+        // there will be no region pickers, so should_active_wait will never be
+        // unset, so the process will remain forever. But I don't think that
+        // should ever happen.
+        report_error("Output disappeared while screenshotting");
+        return;
+    }
+
+    if (!image) {
+        // Similarly, I don't really have a good way of handling all the
+        // screenshots failing.
+        report_error("Output capture failed");
+        return;
+    }
+
     // Save it in a list so that it can be properly destroyed later
     RegionPickerListEntry *entry = calloc(1, sizeof(RegionPickerListEntry));
     entry->picker = region_picker_new(output, image, region_picker_finish);
@@ -305,7 +338,7 @@ static void add_new_output(WrappedOutput *output) {
         if (strcmp(output->name, args->output_params.output_name) == 0) {
             log_debug("...which is correct\n");
             correct_output_found = true;
-            take_output_screenshot(output, finish_output_screenshot, NULL);
+            capture_output(output, finish_output_screenshot, NULL);
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
@@ -314,7 +347,7 @@ static void add_new_output(WrappedOutput *output) {
                 )) {
                 log_debug("... which is correct\n");
                 correct_output_found = true;
-                take_output_screenshot(
+                capture_output(
                     output,
                     finish_predefined_region_screenshot,
                     &args->region_params.region
@@ -329,9 +362,7 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            take_output_screenshot(
-                output, create_region_picker_for_output, NULL
-            );
+            capture_output(output, create_region_picker_for_output, NULL);
         }
     } else {
         REPORT_UNHANDLED("mode", "%x", args->mode);
@@ -350,6 +381,10 @@ int main(int argc, char **argv) {
         report_error_fatal("failed to connect to Wayland display");
     }
 
+    // Note that there's no need for a destroy callback here: the layer surfaces
+    // should get closed on their own (they don't care about the output after
+    // creation either), and ongoing screenshot operations can't really receive
+    // a destroyed callback (so they will check is_output_valid)
     bool found_everything = find_wayland_globals(display, &add_new_output);
     if (!found_everything) {
         report_error_fatal("didn't find every required Wayland object");

@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <viewporter-client.h>
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 #include <xdg-output-client.h>
@@ -50,6 +49,8 @@ static void output_handle_name(
     void *data, struct wl_output * /* output */, const char *name
 ) {
     WrappedOutput *output = data;
+    // if there was a previous name, free it properly
+    free(output->name);
     output->name = strdup(name);
     output->fill_state |= WRAPPED_OUTPUT_HAS_NAME;
 }
@@ -230,14 +231,31 @@ static void registry_handle_global(
         zxdg_output_v1_add_listener(
             output->xdg_output, &xdg_output_listener, output
         );
+
+        wl_list_insert(&globals->outputs, &output->link);
     }
 }
 
 static void registry_handle_global_remove(
-    void * /* data */, struct wl_registry * /* registry */, uint32_t object_id
+    void *data, struct wl_registry * /* registry */, uint32_t object_id
 ) {
-    // TODO: Is this an output?
+    WaylandGlobals *globals = data;
     log_debug("Global object ID %d just got removed\n", object_id);
+    WrappedOutput *output, *tmp;
+    wl_list_for_each_safe(output, tmp, &globals->outputs, link) {
+        if (output->object_id == object_id) {
+            log_debug("... and it's an output (%s)\n", output->name);
+            // NOTE: It turns out that all the things that could benefit from a
+            // destroy callback can't really receive it.
+            wl_list_remove(&output->link);
+
+            zxdg_output_v1_destroy(output->xdg_output);
+            // I'm not sure this is necessary, but why not do it anyway
+            wl_output_release(output->wl_output);
+            free(output->name);
+            free(output);
+        }
+    }
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -246,11 +264,12 @@ static const struct wl_registry_listener registry_listener = {
 };
 
 bool find_wayland_globals(
-    struct wl_display *display, OutputCallback output_callback
+    struct wl_display *display, OutputCallback create_output_callback
 ) {
     // initialize wayland_globals object
     memset(&wayland_globals, 0, sizeof(WaylandGlobals));
-    wayland_globals.handle_output_create = output_callback;
+    wl_list_init(&wayland_globals.outputs);
+    wayland_globals.handle_output_create = create_output_callback;
 
     struct wl_registry *registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, &wayland_globals);
@@ -267,4 +286,14 @@ bool find_wayland_globals(
     }
 
     return true;
+}
+
+bool is_output_valid(WrappedOutput *test_output) {
+    WrappedOutput *it;
+    wl_list_for_each(it, &wayland_globals.outputs, link) {
+        if (it == test_output) {
+            return true;
+        }
+    }
+    return false;
 }
