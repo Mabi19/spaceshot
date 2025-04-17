@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <threads.h>
 #include <unistd.h>
 #include <wayland-client.h>
@@ -48,8 +49,50 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
 static void send_notification(char *output_filename) {
 #ifdef SPACESHOT_NOTIFICATIONS
     if (get_config()->should_notify) {
-        // TODO: invoke spaceshot-notify
-        log_debug("notifying for %s\n", output_filename);
+        pid_t pid = fork();
+        if (pid == 0) {
+            // child
+            char *notify_bin_path = getenv("SPACESHOT_NOTIFY_PATH");
+            notify_bin_path =
+                notify_bin_path ? notify_bin_path : "spaceshot-notify";
+            execlp(
+                notify_bin_path, "spaceshot-notify", "-p", output_filename, NULL
+            );
+            // if something has gone terribly wrong, exit
+            // 104 is a random number that is used as a heuristic for when
+            // exec() failed
+            exit(104);
+        } else if (pid == -1) {
+            report_error("Couldn't spawn spaceshot-notify");
+        } else {
+            // parent
+            // wait for the child to exit; usually this doesn't take too long
+            // (and the layers are closed by this point)
+            TIMING_START(exec_spaceshot_notify);
+            int status;
+            waitpid(pid, &status, WUNTRACED);
+            if (WIFEXITED(status)) {
+                int status_code = WEXITSTATUS(status);
+                if (status_code != 0) {
+                    if (status_code == 104) {
+                        report_warning(
+                            "Couldn't invoke spaceshot-notify; is it in "
+                            "PATH?\ntip: notifications require installing the "
+                            "spaceshot-notify binary and its D-Bus service "
+                            "definition"
+                        );
+                    } else {
+                        report_warning(
+                            "spaceshot-notify exited with status code %d",
+                            WEXITSTATUS(status)
+                        );
+                    }
+                }
+            } else {
+                report_warning("spaceshot-notify didn't exit?");
+            }
+            TIMING_END(exec_spaceshot_notify);
+        }
     }
 #endif
 }
