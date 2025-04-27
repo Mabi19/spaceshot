@@ -121,9 +121,12 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 {indent}    return;
 {indent}}}'''
 
-    def handle_item(key: str, value: BaseType, qualified_c_name: str, indent: str):
+    def handle_item(key: str, value: BaseType, section: str | None, indent: str):
+        c_key = key.replace("-", "_")
+        qualified_c_name = c_key if section is None else f"{section.replace("-", "_")}.{c_key}"
+
         # this uses key and not qualified_c_name because names need to be unqualified in the struct definition
-        declaration_parts.append(f"{indent}{value.get_c_type()}{key.replace("-", "_")};")
+        declaration_parts.append(f"{indent}{value.get_c_type()}{c_key};")
         definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
 {indent}    {value.get_c_type()}x;
 {value.generate_parse_code(indent + "    ")}
@@ -131,19 +134,24 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 {value.generate_insert_code(qualified_c_name, indent + "    ")}
 {indent}}}''')
 
+    sections: list[tuple[str, dict[str, BaseType]]] = []
+    definition_parts.append(f"{indent}if (section == NULL) {{")
     for key, value in props.items():
-        c_key = key.replace("-", "_")
         if isinstance(value, dict):
-            declaration_parts.append(f"{indent}struct {{")
-            definition_parts.append(f'{indent}if (strcmp(section, "{key}") == 0) {{')
-
-            for subkey, subvalue in value.items():
-                handle_item(subkey, subvalue, f"{c_key}.{subkey.replace("-", "_")}", indent + "    ")
-
-            declaration_parts.append(f"{indent}}} {key.replace("-", "_")};")
-            definition_parts.append(f"{indent}}}")
+            sections.append((key, value))
         else:
-            handle_item(key, value, c_key, indent)
+            handle_item(key, value, None, indent + "    ")
+    definition_parts.append(f"{indent}}}")
+
+    for sec_name, section in sections:
+        declaration_parts.append(f"{indent}struct {{")
+        definition_parts.append(f'{indent}if (strcmp(section, "{sec_name}") == 0) {{')
+
+        for subkey, subvalue in section.items():
+            handle_item(subkey, subvalue, sec_name, indent + "    ")
+
+        declaration_parts.append(f"{indent}}} {key.replace("-", "_")};")
+        definition_parts.append(f"{indent}}}")
 
     declaration_parts.append("} Config;\n")
     definition_parts.append("}\n")
