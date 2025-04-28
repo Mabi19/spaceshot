@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
 
 # Is this overengineered? Yes.
-# Is this worth it? Also yes.
+# Is this cursed? Very yes.
+# Is this worth it? Definitely also yes.
+
+# Quirks:
+# - strings will not clean up properly when in variants (they aren't very useful in variants anyway)
 
 class BaseType(ABC):
     condition: str | None
@@ -11,13 +15,32 @@ class BaseType(ABC):
         self.condition = None
 
     @abstractmethod
-    def get_c_type(self):
+    def get_c_type(self, *, qualified_name: str, indent: str):
         ...
 
     @abstractmethod
-    def generate_parse_code(self, indent: str):
+    def get_parse_expr(self):
         '''Parse data from the value variable and store in the x variable'''
         ...
+
+    def generate_parse_code(self, qualified_c_name: str, indent: str, run_on_success: str | None = None):
+        '''Generate a block of code that assigns the value and returns if successful.'''
+        def generate_condition_check(value: BaseType, indent: str):
+            return f'''{indent}if (!({value.condition})) {{
+{indent}    config_warn("value %s for key %s is invalid (needs to be {value.condition})", value, key);
+{indent}    return;
+{indent}}}'''
+
+        return f"""{indent}{self.get_c_type()}x;
+{indent}if ({self.get_parse_expr()}) {{
+{generate_condition_check(self, indent + "    ") if self.condition else ""}
+{self.generate_insert_code(qualified_c_name, indent + "    ")}{f"\n{indent}    {run_on_success}" if run_on_success else ""}
+{indent}    return;
+{indent}}}"""
+
+    def get_type_signature(self):
+        '''Get a text representation of this type.'''
+        return type(self).__name__
 
     def generate_insert_code(self, c_key: str, indent: str):
         '''Transfer data from the x variable to the config struct.'''
@@ -28,30 +51,94 @@ class BaseType(ABC):
         self.condition = condition
         return self
 
+class variant(BaseType):
+    options: list[BaseType]
+    def __init__(self, *options: list[BaseType]):
+        super()
+        self.options = options
+
+    def _get_option_enum(self, qualified_name: str, option: BaseType):
+        def constantify_identifier(ident: str):
+            return ident.replace(".", "_").replace("'", "").upper()
+
+        return f"CONFIG_{constantify_identifier(qualified_name)}_{constantify_identifier(option.get_type_signature())}"
+
+    def get_c_type(self, qualified_name: str, indent: str):
+        enum_values = [
+            self._get_option_enum(qualified_name, option) + ","
+            for option in self.options
+        ]
+        union_values = [
+            f"{indent}        {option.get_c_type()}v_{option.get_type_signature()};"
+            for option in self.options
+            if option.get_c_type() is not None
+        ]
+
+        # If there are no union values, the enum and thus the struct can be omitted
+        if len(union_values) > 0:
+            return f"""struct {{
+{indent}    enum {{
+{"\n".join([indent + "        " + val for val in enum_values])}
+{indent}    }} type;
+{indent}    union {{
+{"\n".join(union_values)}
+{indent}    }};
+{indent}}} """
+        else:
+            return f"""enum {{
+{"\n".join([indent + "    " + val for val in enum_values])}
+{indent}}} """
+
+    def get_parse_expr(self):
+        raise TypeError("Variant types do not support parse expressions")
+
+    def generate_insert_code(self):
+        raise TypeError("Variant types do not support directly generating insert code")
+
+    def require(self):
+        raise TypeError("Variant types do not support conditions, add checks on their members instead")
+
+    def generate_parse_code(self, qualified_c_name, indent):
+        parts = []
+        for option in self.options:
+            parts.append(f"""{indent}{{
+{option.generate_parse_code(
+    qualified_c_name + ".v_" + option.get_type_signature(),
+    indent + "    ",
+    run_on_success=f"conf->{qualified_c_name}.type = {self._get_option_enum(qualified_c_name, option)};"
+)}
+{indent}}}""")
+
+        return "\n".join(parts)
+
+    def get_type_signature(self):
+        return " | ".join(option.get_type_signature() for option in self.options)
+
+
 class string(BaseType):
-    def get_c_type(self):
+    def get_c_type(self, **kwargs):
         return "char *"
 
-    def generate_parse_code(self, indent: str):
-        return f"{indent}x = value;"
+    def get_parse_expr(self):
+        return "x = value, true"
 
     def generate_insert_code(self, c_key: str, indent: str):
         return f'''{indent}free(conf->{c_key});
 {indent}conf->{c_key} = strdup(x);''';
 
 class bool(BaseType):
-    def get_c_type(self):
+    def get_c_type(self, **kwargs):
         return "bool "
 
-    def generate_parse_code(self, indent: str):
-        return f"{indent}if (!config_parse_bool(&x, value)) {{ return; }}"
+    def get_parse_expr(self):
+        return "config_parse_bool(&x, value)"
 
 class int(BaseType):
-    def get_c_type(self):
+    def get_c_type(self, **kwargs):
         return "int "
 
-    def generate_parse_code(self, indent: str):
-        return f"{indent}if (!config_parse_int(&x, value)) {{ return; }}"
+    def get_parse_expr(self):
+        return "config_parse_int(&x, value)"
 
 def config(props: dict[str, BaseType | dict[str, BaseType]]):
     indent = "    "
@@ -90,13 +177,13 @@ static void config_warn(const char *format, ...) {
 static bool config_parse_bool(bool *x, char *value) {
     if (strcmp(value, "true") == 0) {
         *x = true;
+        return true;
     } else if (strcmp(value, "false") == 0) {
         *x = false;
+        return true;
     } else {
-        config_warn("invalid boolean %s", value);
         return false;
     }
-    return true;
 }
 
 static bool config_parse_int(int *x, char *value) {
@@ -104,7 +191,6 @@ static bool config_parse_int(int *x, char *value) {
     errno = 0;
     *x = strtol(value, &endptr, 0);
     if (value[0] == '\\0' || *endptr != '\\0' || errno) {
-        config_warn("invalid integer %s", value);
         return false;
     }
     return true;
@@ -115,23 +201,15 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 '''
     ]
 
-    def generate_condition_check(value: BaseType, indent: str):
-        return f'''{indent}if (!({value.condition})) {{
-{indent}    config_warn("value %s for key %s is invalid (needs to be %s)", value, key, "{value.condition}");
-{indent}    return;
-{indent}}}'''
-
     def handle_item(key: str, value: BaseType, section: str | None, indent: str):
         c_key = key.replace("-", "_")
         qualified_c_name = c_key if section is None else f"{section.replace("-", "_")}.{c_key}"
 
         # this uses key and not qualified_c_name because names need to be unqualified in the struct definition
-        declaration_parts.append(f"{indent}{value.get_c_type()}{c_key};")
+        declaration_parts.append(f"{indent}{value.get_c_type(qualified_name=qualified_c_name, indent=indent)}{c_key};")
         definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
-{indent}    {value.get_c_type()}x;
-{value.generate_parse_code(indent + "    ")}
-{generate_condition_check(value, indent + "    ") if value.condition else ""}
-{value.generate_insert_code(qualified_c_name, indent + "    ")}
+{value.generate_parse_code(qualified_c_name, indent + "    ")}
+{indent}    config_warn("invalid value %s for key %s (needs to be {value.get_type_signature()})", value, key);
 {indent}}}''')
 
     sections: list[tuple[str, dict[str, BaseType]]] = []
@@ -140,7 +218,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         if isinstance(value, dict):
             sections.append((key, value))
         else:
-            handle_item(key, value, None, indent + "    ")
+            handle_item(key, value, None, indent)
     definition_parts.append(f"{indent}}}")
 
     for sec_name, section in sections:
@@ -150,7 +228,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         for subkey, subvalue in section.items():
             handle_item(subkey, subvalue, sec_name, indent + "    ")
 
-        declaration_parts.append(f"{indent}}} {key.replace("-", "_")};")
+        declaration_parts.append(f"{indent}}} {sec_name.replace("-", "_")};")
         definition_parts.append(f"{indent}}}")
 
     declaration_parts.append("} Config;\n")
