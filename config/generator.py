@@ -14,6 +14,9 @@ class BaseType(ABC):
         super()
         self.condition = None
 
+    def __or__(self, other):
+        return variant(self, other)
+
     @abstractmethod
     def get_c_type(self, *, qualified_name: str, indent: str):
         ...
@@ -56,6 +59,9 @@ class variant(BaseType):
     def __init__(self, *options: list[BaseType]):
         super()
         self.options = options
+
+    def __or__(self, other):
+        self.options.append(other)
 
     def _get_option_enum(self, qualified_name: str, option: BaseType):
         def constantify_identifier(ident: str):
@@ -100,12 +106,13 @@ class variant(BaseType):
 
     def generate_parse_code(self, qualified_c_name, indent):
         parts = []
+        no_union_members = all(option.get_c_type() is not None for option in self.options)
         for option in self.options:
             parts.append(f"""{indent}{{
 {option.generate_parse_code(
     qualified_c_name + ".v_" + option.get_type_signature(),
     indent + "    ",
-    run_on_success=f"conf->{qualified_c_name}.type = {self._get_option_enum(qualified_c_name, option)};"
+    run_on_success=f"conf->{qualified_c_name}{".type" if no_union_members else ""} = {self._get_option_enum(qualified_c_name, option)};"
 )}
 {indent}}}""")
 
@@ -113,6 +120,36 @@ class variant(BaseType):
 
     def get_type_signature(self):
         return " | ".join(option.get_type_signature() for option in self.options)
+
+
+class enum(BaseType):
+    '''An enumeration value. Only meaningful in a variant.'''
+    name: str
+    def __init__(self, name: str):
+        super()
+        self.name = name
+
+    def get_c_type(self, **kwargs):
+        return None
+
+    def get_parse_expr(self):
+        raise TypeError("Enum types do not support parse expressions")
+
+    def generate_insert_code(self, c_key, indent):
+        raise TypeError("Enum types do not support directly generating insert code")
+
+    def require(self, condition):
+        raise TypeError("Enum types do not support conditions")
+
+    def generate_parse_code(self, qualified_c_name: str, indent: str, run_on_success: str | None = None):
+        return f"""{indent}if (strcmp(value, "{self.name}")) {{
+{indent}    {run_on_success}
+{indent}    return;
+{indent}}}"""
+
+    def get_type_signature(self):
+        return f"'{self.name}'"
+
 
 
 class string(BaseType):

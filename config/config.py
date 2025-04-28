@@ -9,6 +9,10 @@ config_c, config_h = sc.config({
     "copy-to-clipboard": sc.bool(),
     "notify": {
         "enabled": sc.bool()
+    },
+    "region": {
+        # TODO: change this to sc.color() once that exists
+        "border-color": sc.int() | sc.enum("smart")
     }
 })
 
