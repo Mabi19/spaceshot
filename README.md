@@ -38,7 +38,6 @@ Planned:
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com).
 Dependencies:
 - cairo
-- iniparser
 - libpng
 - xkbcommon
 - wayland (incl. wlr-protocols and wayland-protocols)
