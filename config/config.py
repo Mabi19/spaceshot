@@ -11,8 +11,9 @@ config_c, config_h = sc.config({
         "enabled": sc.bool()
     },
     "region": {
-        # TODO: change this to sc.color() once that exists
-        "border-color": sc.int() | sc.enum("smart"),
+        "selection-border-color": sc.color() | sc.enum("smart"),
+        "selection-border-width": sc.length(),
+        "background": sc.color(),
     }
 })
 
