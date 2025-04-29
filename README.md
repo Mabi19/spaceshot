@@ -35,7 +35,7 @@ Planned:
 - Hold Alt or Space to move the selection instead of resizing it
 
 ## Building
-You will need a C23-capable compiler and [Meson](https://mesonbuild.com).
+You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work (except that building is broken right now because of reasons)
 Dependencies:
 - cairo
 - libpng
