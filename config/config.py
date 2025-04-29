@@ -12,7 +12,7 @@ config_c, config_h = sc.config({
     },
     "region": {
         # TODO: change this to sc.color() once that exists
-        "border-color": sc.int() | sc.enum("smart")
+        "border-color": sc.int() | sc.enum("smart"),
     }
 })
 

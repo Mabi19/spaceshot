@@ -106,13 +106,13 @@ class variant(BaseType):
 
     def generate_parse_code(self, qualified_c_name, indent):
         parts = []
-        no_union_members = all(option.get_c_type() is not None for option in self.options)
+        no_union_members = all(option.get_c_type() is None for option in self.options)
         for option in self.options:
             parts.append(f"""{indent}{{
 {option.generate_parse_code(
     qualified_c_name + ".v_" + option.get_type_signature(),
     indent + "    ",
-    run_on_success=f"conf->{qualified_c_name}{".type" if no_union_members else ""} = {self._get_option_enum(qualified_c_name, option)};"
+    run_on_success=f"conf->{qualified_c_name}{"" if no_union_members else ".type"} = {self._get_option_enum(qualified_c_name, option)};"
 )}
 {indent}}}""")
 
@@ -255,7 +255,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         if isinstance(value, dict):
             sections.append((key, value))
         else:
-            handle_item(key, value, None, indent)
+            handle_item(key, value, None, indent + "    ")
     definition_parts.append(f"{indent}}}")
 
     for sec_name, section in sections:
