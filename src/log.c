@@ -1,5 +1,5 @@
 #include "log.h"
-#include "config.h"
+#include "config/config.h"
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -54,7 +54,7 @@ void report_warning(const char *format, ...) {
 }
 
 void log_debug(const char *format, ...) {
-    if (!get_config()->is_verbose) {
+    if (!get_config()->verbose) {
         return;
     }
     va_list args;

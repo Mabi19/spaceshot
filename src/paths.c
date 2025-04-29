@@ -1,5 +1,5 @@
 #include "paths.h"
-#include "config.h"
+#include "config/config.h"
 #include "log.h"
 #include <pwd.h>
 #include <stdio.h>
@@ -34,72 +34,6 @@ const char *get_home_directory() {
         return result;
     }
     result = getpwuid(getuid())->pw_dir;
-    return result;
-}
-
-/** Returns a malloc'd string */
-static char *config_dir_to_file(const char *dir) {
-    const char *SUFFIX = "/spaceshot/config.ini";
-    char *result = malloc(strlen(dir) + strlen(SUFFIX) + 1);
-    strcpy(result, dir);
-    strcat(result, SUFFIX);
-    return result;
-}
-
-const char **get_config_locations() {
-    static const char **result = NULL;
-    if (result) {
-        return result;
-    }
-
-    const char *xdg_dirs = getenv("XDG_CONFIG_DIRS");
-    if (!xdg_dirs || xdg_dirs[0] == '\0')
-        xdg_dirs = "/etc/xdg";
-
-    // each : ends the current path and starts a new one
-    // no colons = one path
-    int path_count = 1;
-    for (const char *c = xdg_dirs; *c != 0; c++) {
-        if (*c == ':') {
-            path_count++;
-        }
-    }
-
-    // one member for the file in $XDG_CONFIG_HOME, one member for the
-    // terminating NULL
-    result = calloc(path_count + 2, sizeof(const char *));
-    int i = 0;
-    // read from back to front, so the most important directory is read last
-    char *check_dirs = strdup(xdg_dirs);
-    char *current = check_dirs + strlen(check_dirs);
-    while (current >= check_dirs) {
-        if (*current == ':') {
-            result[i] = config_dir_to_file(current + 1);
-            *current = '\0';
-            i++;
-        }
-        current--;
-    }
-    result[i] = config_dir_to_file(check_dirs);
-    i++;
-
-    const char *config_home = getenv("XDG_CONFIG_HOME");
-    if (config_home && config_home[0] != '\0') {
-        result[i] = config_dir_to_file(config_home);
-        i++;
-    } else {
-        const char *home_dir = get_home_directory();
-        char full_path[strlen(home_dir) + strlen("/.config") + 1];
-        strcpy(full_path, home_dir);
-        strcat(full_path, "/.config");
-        result[i] = config_dir_to_file(full_path);
-        i++;
-    }
-
-    for (int i = 0; result[i] != NULL; i++) {
-        log_debug("location: %s\n", result[i]);
-    }
-
     return result;
 }
 

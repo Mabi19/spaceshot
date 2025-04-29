@@ -1,6 +1,6 @@
 #include "args.h"
 #include "bbox.h"
-#include "config.h"
+#include "config/config.h"
 #include "log.h"
 #include <build-config.h>
 #include <ctype.h>

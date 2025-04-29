@@ -109,23 +109,22 @@ xkbcommon_dep = dependency('xkbcommon')
 cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
-sources = files([
-    'args.c',
-    'bbox.c',
-    'config.c',
-    'image.c',
-    'link-buffer.c',
-    'log.c',
-    'main.c',
-    'paths.c',
-    'region-picker.c',
+sources = files(
     'wayland/globals.c',
     'wayland/overlay-surface.c',
     'wayland/render.c',
     'wayland/screenshot.c',
     'wayland/seat.c',
     'wayland/shared-memory.c',
-])
+    'args.c',
+    'bbox.c',
+    'image.c',
+    'link-buffer.c',
+    'log.c',
+    'main.c',
+    'paths.c',
+    'region-picker.c',
+)
 
 executable(
     'spaceshot',
@@ -139,6 +138,7 @@ executable(
         m_dep,
         wl_dep,
         extra_protocol_deps,
+        config_dep,
     ],
-    install: true
+    install: true,
 )

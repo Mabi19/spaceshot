@@ -1,5 +1,5 @@
 #include "image.h"
-#include "config.h"
+#include "config/config.h"
 #include "link-buffer.h"
 #include "log.h"
 #include <assert.h>
