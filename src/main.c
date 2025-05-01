@@ -1,6 +1,5 @@
 #include "args.h"
 #include "bbox.h"
-#include "config/config.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -10,6 +9,7 @@
 #include "wayland/screenshot.h"
 #include "wayland/seat.h"
 #include <assert.h>
+#include <config/config.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>

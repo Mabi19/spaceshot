@@ -1,5 +1,5 @@
 #pragma once
-#include <spaceshot-config-struct-decl.h>
+#include <spaceshot-config-struct-decl.h> // IWYU pragma: export
 
 Config *get_config();
 

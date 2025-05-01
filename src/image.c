@@ -1,9 +1,9 @@
 #include "image.h"
-#include "config/config.h"
 #include "link-buffer.h"
 #include "log.h"
 #include <assert.h>
 #include <cairo.h>
+#include <config/config.h>
 #include <png.h>
 #include <setjmp.h>
 #include <stdio.h>

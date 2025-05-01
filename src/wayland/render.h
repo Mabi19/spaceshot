@@ -2,6 +2,9 @@
 #include "image.h"
 #include "wayland/shared-memory.h"
 #include <cairo.h>
+#include <config/config.h>
+
+// Render buffers, and miscellaneous functions related to rendering.
 
 /**
  * Wrapper around a SharedBuffer, made for drawing with cairo.
@@ -20,3 +23,13 @@ void render_buffer_attach_to_surface(
     RenderBuffer *buffer, struct wl_surface *surface
 );
 void render_buffer_destroy(RenderBuffer *buffer);
+
+void cairo_set_source_config_color(
+    cairo_t *cr, ConfigColor color, ImageFormat surface_format
+);
+
+/**
+ * Convert a ConfigLength to device pixels, keeping in mind surface scale.
+ * The value is rounded to the nearest pixel.
+ */
+int config_length_to_pixels(ConfigLength length, uint32_t surface_scale);

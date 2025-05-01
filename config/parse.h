@@ -4,9 +4,9 @@ typedef void (*ConfigEntryFunc)(
 );
 
 /**
-    Parse the @p data as an INI file, calling the @p callback for each key-value
-   pair. Note that this function modifies the data in-place.
-*/
+ * Parse the @p data as an INI file, calling the @p callback for each
+ * key-value pair. Note that this function modifies the data in-place.
+ */
 void config_parse_string(
     char *ini_contents, ConfigEntryFunc callback, void *data
 );

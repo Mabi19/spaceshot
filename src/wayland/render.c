@@ -46,3 +46,19 @@ void render_buffer_destroy(RenderBuffer *buffer) {
     shared_buffer_destroy(buffer->shm);
     free(buffer);
 }
+
+void cairo_set_source_config_color(
+    cairo_t *cr, ConfigColor color, ImageFormat surface_format
+) {
+    // cairo only supports RGB order, so trick it if necessary
+    if (surface_format & IMAGE_FORMAT_FLIPPED_ORDER) {
+        cairo_set_source_rgba(cr, color.b, color.g, color.r, color.a);
+    } else {
+        cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
+    }
+}
+
+int config_length_to_pixels(ConfigLength length, uint32_t surface_scale) {
+    // length.unit is only pixels for now
+    return (length.value * surface_scale) / 120.0;
+}

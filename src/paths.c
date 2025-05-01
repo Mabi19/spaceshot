@@ -1,6 +1,6 @@
 #include "paths.h"
-#include "config/config.h"
 #include "log.h"
+#include <config/config.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
