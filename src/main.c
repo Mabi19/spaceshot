@@ -372,7 +372,9 @@ static void add_new_output(WrappedOutput *output) {
 int main(int argc, char **argv) {
     wl_list_init(&active_pickers);
 
+    TIMING_START(config_load);
     load_config();
+    TIMING_END(config_load);
     set_program_name(argv[0]);
     args = parse_argv(argc, argv);
 
