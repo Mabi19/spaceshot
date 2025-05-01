@@ -44,24 +44,24 @@ static void interpret_option(Arguments *args, char opt, char *value) {
         print_help(args->executable_name);
         exit(EXIT_SUCCESS);
     case 'c':
-        get_config()->should_copy_to_clipboard = true;
+        get_config()->copy_to_clipboard = true;
         break;
     case 'C':
         // only as --no-copy
-        get_config()->should_copy_to_clipboard = false;
+        get_config()->copy_to_clipboard = false;
         break;
     case 'n':
-        get_config()->should_notify = true;
+        get_config()->notify.enabled = true;
         break;
     case 'N':
-        get_config()->should_notify = false;
+        get_config()->notify.enabled = false;
         break;
     case 'o':
         get_config()->output_file = value;
         break;
     case 'V':
         // only as --verbose
-        get_config()->is_verbose = true;
+        get_config()->verbose = true;
         break;
     case 'v':
         print_version();

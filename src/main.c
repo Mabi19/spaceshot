@@ -48,7 +48,7 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
 
 static void send_notification(char *output_filename) {
 #ifdef SPACESHOT_NOTIFICATIONS
-    if (get_config()->should_notify) {
+    if (get_config()->notify.enabled) {
         pid_t pid = fork();
         if (pid == 0) {
             // child
@@ -227,7 +227,7 @@ static void region_picker_finish(
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            if (get_config()->should_copy_to_clipboard) {
+            if (get_config()->copy_to_clipboard) {
                 // Set up the copy while the picker's still alive
                 data_source = wl_data_device_manager_create_data_source(
                     wayland_globals.data_device_manager
@@ -280,7 +280,7 @@ static void region_picker_finish(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        if (get_config()->should_copy_to_clipboard) {
+        if (get_config()->copy_to_clipboard) {
             wl_data_source_add_listener(
                 data_source, &clipboard_source_listener, out_data
             );
