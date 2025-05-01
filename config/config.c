@@ -103,6 +103,22 @@ extern void config_parse_entry(
     void *data, const char *section, const char *key, char *value
 );
 
+bool load_config_file(const char *path) {
+    FILE *config_file = fopen(path, "rb");
+    if (!config_file) {
+        return false;
+    }
+    fseek(config_file, 0, SEEK_END);
+    size_t data_len = ftell(config_file);
+    char data[data_len + 1];
+    fseek(config_file, 0, SEEK_SET);
+    fread(data, 1, data_len, config_file);
+    fclose(config_file);
+
+    config_parse_string(data, config_parse_entry, &config);
+    return true;
+}
+
 void load_config() {
     memset(&config, 0, sizeof(config));
     config_parse_string(DEFAULT_CONFIG, config_parse_entry, &config);
@@ -117,17 +133,6 @@ void load_config() {
         strcpy(path_buf, directory);
         strcat(path_buf, CONFIG_SUBPATH);
 
-        FILE *config_file = fopen(path_buf, "rb");
-        if (!config_file) {
-            continue;
-        }
-        fseek(config_file, 0, SEEK_END);
-        size_t data_len = ftell(config_file);
-        char data[data_len + 1];
-        fseek(config_file, 0, SEEK_SET);
-        fread(data, 1, data_len, config_file);
-        fclose(config_file);
-
-        config_parse_string(data, config_parse_entry, &config);
+        load_config_file(path_buf);
     }
 }

@@ -24,6 +24,7 @@ static void print_help(const char *program_name) {
         "  -b, --background  move to background after screenshotting\n"
         "  -c, --copy        copy screenshot to clipboard\n"
         "  --no-copy         do not copy the screenshot\n"
+        "  -C, --config-file load an additional configuration file\n"
         "  -n, --notify      send a notification after screenshotting\n"
         "  --no-notify       do not send notifications\n"
         "  -o, --output-file set output file path template\n"
@@ -46,20 +47,25 @@ static void interpret_option(Arguments *args, char opt, char *value) {
     case 'c':
         get_config()->copy_to_clipboard = true;
         break;
-    case 'C':
+    case '!':
         // only as --no-copy
         get_config()->copy_to_clipboard = false;
+        break;
+    case 'C':
+        if (!load_config_file(value)) {
+            report_warning("couldn't read configuration file %s", value);
+        }
         break;
     case 'n':
         get_config()->notify.enabled = true;
         break;
-    case 'N':
+    case '@':
         get_config()->notify.enabled = false;
         break;
     case 'o':
         get_config()->output_file = value;
         break;
-    case 'V':
+    case '#':
         // only as --verbose
         get_config()->verbose = true;
         break;
@@ -80,12 +86,13 @@ typedef struct {
 static const LongOption LONG_OPTIONS[] = {
     {"background", 'b', false},
     {"copy", 'c', false},
-    {"no-copy", 'C', false},
+    {"no-copy", '!', false},
+    {"config-file", 'C', true},
     {"help", 'h', false},
     {"notify", 'n', false},
-    {"no-notify", 'N', false},
+    {"no-notify", '@', false},
     {"output-file", 'o', true},
-    {"verbose", 'V', false},
+    {"verbose", '#', false},
     {"version", 'v', false}
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
@@ -163,6 +170,7 @@ Arguments *parse_argv(int argc, char **argv) {
                         break;
                     // options with arguments
                     // must be at the end of the string
+                    case 'C':
                     case 'o':
                         if (arg[j + 1] != '\0') {
                             report_error(
