@@ -101,7 +101,6 @@ foreach protocol : extra_protocols
 endforeach
 
 cairo_dep = dependency('cairo')
-iniparser_dep = dependency('iniparser')
 # TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
 xkbcommon_dep = dependency('xkbcommon')
@@ -132,7 +131,6 @@ executable(
     include_directories: build_conf_include,
     dependencies: [
         cairo_dep,
-        iniparser_dep,
         libpng_dep,
         xkbcommon_dep,
         m_dep,
