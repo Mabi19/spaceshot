@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+// This file uses #embed, which ccache doesn't support. Therefore:
+// ccache:disable
+
 static Config config;
 
 Config *get_config() { return &config; }
