@@ -21,10 +21,11 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
         // check that nothing is afterwards
         char *past_end_bracket = end_bracket + 1;
         advance_whitespace(&past_end_bracket);
-        if (*past_end_bracket != '\0' && *past_end_bracket == ';' &&
-            *past_end_bracket == '#') {
+        if (*past_end_bracket != '\0' && *past_end_bracket != ';' &&
+            *past_end_bracket != '#') {
             // TODO: emit a warning
         }
+        *section = line + 1;
     } else {
         // key-value pair
         char *equals_sign = strchr(line, '=');
