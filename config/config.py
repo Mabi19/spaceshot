@@ -4,7 +4,7 @@ import sys
 config_c, config_h = sc.config({
     "output-file": sc.string(),
     "verbose": sc.bool(),
-    "png_compression_level": sc.int().require("0 <= x && x <= 9"),
+    "png-compression-level": sc.int().require("0 <= x && x <= 9"),
     "move-to-background": sc.bool(),
     "copy-to-clipboard": sc.bool(),
     "notify": {
