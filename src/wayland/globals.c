@@ -160,9 +160,11 @@ static void registry_handle_global(
         );
 
         // if this comes after the seat, give it to the SeatDispatcher
-        seat_dispatcher_attach_data_device(
-            globals->seat_dispatcher, globals->data_device_manager
-        );
+        if (globals->seat_dispatcher) {
+            seat_dispatcher_attach_data_device(
+                globals->seat_dispatcher, globals->data_device_manager
+            );
+        }
     }
 
     if (strcmp(interface, wl_shm_interface.name) == 0) {
