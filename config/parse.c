@@ -1,7 +1,33 @@
 #include "parse.h"
 #include <ctype.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+// logging functions
+// src/log.c will not always be available, so these are separate
+static void config_print(const char *prefix, const char *format, va_list args) {
+    char wrapped_format[strlen(prefix) + strlen(format) + 2];
+    strcpy(wrapped_format, prefix);
+    strcat(wrapped_format, format);
+    strcat(wrapped_format, "\\n");
+
+    vprintf(wrapped_format, args);
+}
+
+void config_warn(const char *format, ...) {
+    va_list args;
+    va_start(args);
+    config_print("warning(config): ", format, args);
+    va_end(args);
+}
+
+void config_error(const char *format, ...) {
+    va_list args;
+    va_start(args);
+    config_print("error(config): ", format, args);
+    va_end(args);
+}
 
 static void advance_whitespace(char **str) {
     while (isspace(**str)) {
@@ -23,14 +49,14 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
         advance_whitespace(&past_end_bracket);
         if (*past_end_bracket != '\0' && *past_end_bracket != ';' &&
             *past_end_bracket != '#') {
-            // TODO: emit a warning
+            config_warn("unexpected text after section definition");
         }
         *section = line + 1;
     } else {
         // key-value pair
         char *equals_sign = strchr(line, '=');
         if (!equals_sign) {
-            // TODO: emit a parse error
+            config_error("expected = in key-value pair");
             return;
         }
 
@@ -51,15 +77,15 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
             value++;
             char *other_quote = strchr(value, quote_type);
             if (!other_quote) {
-                // TODO: emit a parse error
+                config_error("missing terminating quote character");
                 return;
             }
             *other_quote = '\0';
             char *past_string = other_quote + 1;
             advance_whitespace(&past_string);
-            if (*past_string != '\0' && *past_string == ';' &&
-                *past_string == '#') {
-                // TODO: emit a warning
+            if (*past_string != '\0' && *past_string != ';' &&
+                *past_string != '#') {
+                config_warn("unexpected text after end of quoted value");
             }
         } else {
             char *end = value;
