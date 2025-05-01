@@ -5,6 +5,7 @@
 #include "wayland/globals.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
+#include "wayland/render.h"
 #include "wayland/seat.h"
 #include <cairo.h>
 #include <math.h>
@@ -168,9 +169,9 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
-    const double GRAY_LEVEL = 0.05;
-    // no need for eventual flip because R = B
-    cairo_set_source_rgba(cr, GRAY_LEVEL, GRAY_LEVEL, GRAY_LEVEL, 0.4);
+    cairo_set_source_config_color(
+        cr, get_config()->region.background, picker->surface->pixel_format
+    );
     cairo_rectangle(
         cr, 0.0, 0.0, surface->device_width, surface->device_height
     );
