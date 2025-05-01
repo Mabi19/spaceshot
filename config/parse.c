@@ -10,7 +10,7 @@ static void config_print(const char *prefix, const char *format, va_list args) {
     char wrapped_format[strlen(prefix) + strlen(format) + 2];
     strcpy(wrapped_format, prefix);
     strcat(wrapped_format, format);
-    strcat(wrapped_format, "\\n");
+    strcat(wrapped_format, "\n");
 
     vprintf(wrapped_format, args);
 }
