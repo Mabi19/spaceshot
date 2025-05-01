@@ -253,7 +253,7 @@ static bool config_parse_int(int *x, char *value) {
 }
 
 static inline float parse_hex_color_channel(char *text) {
-    return ((tolower(text[0]) - '0') << 8 | (tolower(text[1]) - '0')) / 255.0f;
+    return ((tolower(text[0]) - '0') << 4 | (tolower(text[1]) - '0')) / 255.0f;
 }
 
 static bool config_parse_color(ConfigColor *x, char *value) {
