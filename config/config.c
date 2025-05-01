@@ -96,7 +96,9 @@ static char DEFAULT_CONFIG[] = {
     , '\0'
 };
 
-extern ConfigEntryFunc config_parse_entry;
+extern void config_parse_entry(
+    void *data, const char *section, const char *key, char *value
+);
 
 void load_config() {
     memset(&config, 0, sizeof(config));
