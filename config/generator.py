@@ -252,8 +252,12 @@ static bool config_parse_int(int *x, char *value) {
     return true;
 }
 
+static inline int parse_hex_digit(char digit) {
+    return isdigit(digit) ? digit - '0' : tolower(digit) - 'a' + 10;
+}
+
 static inline float parse_hex_color_channel(char *text) {
-    return ((tolower(text[0]) - '0') << 4 | (tolower(text[1]) - '0')) / 255.0f;
+    return (parse_hex_digit(text[0]) << 4 | parse_hex_digit(text[1])) / 255.0f;
 }
 
 static bool config_parse_color(ConfigColor *x, char *value) {
