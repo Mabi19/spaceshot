@@ -341,7 +341,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 
     for sec_name, section in sections:
         declaration_parts.append(f"{indent}struct {{")
-        definition_parts.append(f'{indent}if (strcmp(section, "{sec_name}") == 0) {{')
+        definition_parts[-1] += f' else if (strcmp(section, "{sec_name}") == 0) {{'
 
         for subkey, subvalue in section.items():
             handle_item(subkey, subvalue, sec_name, indent + "    ")
