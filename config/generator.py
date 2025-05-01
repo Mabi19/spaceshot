@@ -229,9 +229,10 @@ typedef struct {''',
 // logging function, modified from log.c
 static void config_warn(const char *format, ...) {
     const char *PREFIX = "warning(config): ";
-    char wrapped_format[strlen(PREFIX) + strlen(format) + 1];
+    char wrapped_format[strlen(PREFIX) + strlen(format) + 2];
     strcpy(wrapped_format, PREFIX);
     strcat(wrapped_format, format);
+    strcat(wrapped_format, "\\n");
 
     va_list args;
     va_start(args);
@@ -316,6 +317,8 @@ static bool config_parse_length(ConfigLength *x, char *value) {
 
 void config_parse_entry(void *data, const char *section, const char *key, char *value) {
     Config *conf = data;
+
+    fprintf(stderr, "conf: '%s' '%s' '%s'\\n", section ? section : "null", key, value);
 '''
     ]
 
@@ -328,6 +331,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
 {value.generate_parse_code(qualified_c_name, indent + "    ")}
 {indent}    config_warn("invalid value %s for key %s (needs to be {value.get_type_signature()})", value, key);
+{indent}    return;
 {indent}}}''')
 
     sections: list[tuple[str, dict[str, BaseType]]] = []
@@ -350,6 +354,12 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         definition_parts.append(f"{indent}}}")
 
     declaration_parts.append("} Config;\n")
+    definition_parts.append(f'''
+{indent}if (section) {{
+{indent}    config_warn("unknown key [%s] %s", section, key);
+{indent}}} else {{
+{indent}    config_warn("unknown key %s", key);
+{indent}}}''')
     definition_parts.append("}\n")
 
     config_h = str.join("\n", declaration_parts)
