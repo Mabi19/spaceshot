@@ -35,7 +35,7 @@ Planned:
 - Hold Alt or Space to move the selection instead of resizing it
 
 ## Building
-You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work (except that building is broken right now because of reasons)
+You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
 Dependencies:
 - cairo
 - libpng
@@ -78,13 +78,8 @@ spaceshot output DP-1
 ```
 
 ## Configuration
-Configuration is initialized from the default options, then loaded from $XDG_CONFIG_DIRS/spaceshot/config.ini, then $XDG_CONFIG_HOME/spaceshot/config.ini, and finally from command-line arguments. All configuration files are optional.
+Configuration is initialized from the default options, then loaded from $XDG_CONFIG_DIRS/spaceshot/config.ini, then $XDG_CONFIG_HOME/spaceshot/config.ini, and finally from command-line arguments. All configuration files are optional, and don't need to specify every property - only the ones you want to override.
 
-Available configuration options:
-- `copy-to-clipboard` (boolean, default: `true`): whether to copy to the clipboard after screenshotting. Note that copying is only available in interactive modes; otherwise this option is ignored. Also available via the `-c`/`--copy` option, or `--no-copy` to disable
-- `move-to-background` (boolean, default: `false`): whether to move to the background after screenshotting. If set to false, the process will block until the clipboard is overridden and the notification is dismissed. Also available via the `-b`/`--background` option
-- `output-file` (string, default: `~~/%Y-%m-%d-%H%M%S-spaceshot.png`): a template for the output filename. `~/` expands to `$HOME`, `~~/` expands to `$(xdg-user-dir PICTURES)`. Accepts `strftime` specifiers. Also available via the `-o`/`--output-file` option
-- `png-compression-level` (integer in the range [0, 9], default: 4): the compression level to save PNGs at. Note that this is lowered by default to improve performance, at a small expense in file size
-- `verbose` (boolean, default: `false`): whether to enable debug logging. Also available via the `--verbose` option
-- In `[notify]` section:
-    - `enabled` (boolean, default: `true`): whether to send a notification after screenshotting. Also available via the `-n`/`--notify` option, or `--no-notify` to disable
+The format is INI-like; most notably values are interpreted based on the associated key's type information. This means that quotes do not mean the value will be a string, they just prevent parsing ; and # within them as comments.
+
+See [config/defaults.ini](config/defaults.ini) for all available options and some descriptions. You can also look at [config/config.py](config/config.py) for the schema.
