@@ -142,7 +142,7 @@ class enum(BaseType):
         raise TypeError("Enum types do not support conditions")
 
     def generate_parse_code(self, qualified_c_name: str, indent: str, run_on_success: str | None = None):
-        return f"""{indent}if (strcmp(value, "{self.name}")) {{
+        return f"""{indent}if (strcmp(value, "{self.name}") == 0) {{
 {indent}    {run_on_success}
 {indent}    return;
 {indent}}}"""
