@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
-static const double BORDER_WIDTH = 2.0;
 // The maximum area below which a click will cancel the selection.
 static const double CANCEL_THRESHOLD = 2.0;
 
@@ -47,8 +46,9 @@ static void calculate_clip_regions(
     uint32_t device_height = picker->surface->device_height;
     //* This will need to be adjusted if the picker gains an edit mode
     // (which will draw further outside the bounds)
-    double border_width_pixels =
-        round((BORDER_WIDTH * picker->surface->scale) / 120.0);
+    double border_width_pixels = config_length_to_pixels(
+        get_config()->region.selection_border_width, picker->surface->scale
+    );
 
     if (device_width != picker->last_device_width ||
         device_height != picker->last_device_height) {
@@ -187,8 +187,9 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         !(picker->x1 == picker->x2 && picker->y1 == picker->y2)) {
         // border
         // the offset is so that it doesn't occlude the visible area
-        double border_width_pixels =
-            round((BORDER_WIDTH * surface->scale) / 120.0);
+        double border_width_pixels = config_length_to_pixels(
+            get_config()->region.selection_border_width, surface->scale
+        );
         double border_offset = border_width_pixels / 2;
         cairo_set_line_width(cr, border_width_pixels);
         // no need for eventual flip because R = B

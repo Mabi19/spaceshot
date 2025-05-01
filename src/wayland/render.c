@@ -60,5 +60,5 @@ void cairo_set_source_config_color(
 
 int config_length_to_pixels(ConfigLength length, uint32_t surface_scale) {
     // length.unit is only pixels for now
-    return (length.value * surface_scale) / 120.0;
+    return round((length.value * surface_scale) / 120.0);
 }
