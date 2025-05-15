@@ -30,6 +30,8 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
         return WL_SHM_FORMAT_XRGB8888;
+    case IMAGE_FORMAT_ARGB8888:
+        return WL_SHM_FORMAT_ARGB8888;
     case IMAGE_FORMAT_XRGB2101010:
         return WL_SHM_FORMAT_XRGB2101010;
     case IMAGE_FORMAT_XBGR2101010:
@@ -42,6 +44,8 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
         return CAIRO_FORMAT_RGB24;
+    case IMAGE_FORMAT_ARGB8888:
+        return CAIRO_FORMAT_ARGB32;
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         return CAIRO_FORMAT_RGB30;
@@ -52,6 +56,7 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
 uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
+    case IMAGE_FORMAT_ARGB8888:
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         return 4;
