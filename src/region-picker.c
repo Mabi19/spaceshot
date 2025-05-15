@@ -1,5 +1,6 @@
 #include "region-picker.h"
 #include "bbox.h"
+#include "cursor-shape-client.h"
 #include "image.h"
 #include "log.h"
 #include "wayland/globals.h"
@@ -306,8 +307,14 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         break;
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
-        // TODO: change cursor shape
         picker->move_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
+        seat_dispatcher_set_cursor_for_surface(
+            wayland_globals.seat_dispatcher,
+            picker->surface,
+            event.type == KEYBOARD_EVENT_PRESS
+                ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
+                : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
+        );
         break;
     }
     // TODO: Hold Shift to lock aspect ratio
@@ -349,6 +356,12 @@ RegionPicker *region_picker_new(
         result->surface,
         &region_picker_seat_listener,
         result
+    );
+
+    seat_dispatcher_set_cursor_for_surface(
+        wayland_globals.seat_dispatcher,
+        result->surface,
+        WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
     );
 
     result->finish_callback = finish_callback;

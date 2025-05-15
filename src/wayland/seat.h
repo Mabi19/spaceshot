@@ -51,6 +51,7 @@ typedef struct {
         enum {
             POINTER_EVENT_MOTION = 1,
         } received_events;
+        uint32_t last_enter_serial;
     } pointer_data;
 
     struct wl_keyboard *keyboard;
@@ -98,6 +99,13 @@ void seat_dispatcher_attach_data_device(
  */
 void seat_dispatcher_set_selection(
     SeatDispatcher *dispatcher, struct wl_data_source *data_source
+);
+
+/** Set the cursor shape for a specific OverlaySurface. */
+void seat_dispatcher_set_cursor_for_surface(
+    SeatDispatcher *dispatcher,
+    OverlaySurface *surface,
+    enum wp_cursor_shape_device_v1_shape shape
 );
 
 /**

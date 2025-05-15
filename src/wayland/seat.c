@@ -20,6 +20,24 @@ typedef struct {
     void *user_data;
 } SeatListenerListEntry;
 
+/** Assumes the passed-in wl_surface has pointer focus. */
+static void
+send_cursor_shape(SeatDispatcher *dispatcher, struct wl_surface *wl_surface) {
+    SeatListenerListEntry *entry;
+    wl_array_for_each(entry, &dispatcher->listeners) {
+        if (!entry->surface)
+            continue;
+
+        if (entry->surface->wl_surface == wl_surface) {
+            wp_cursor_shape_device_v1_set_shape(
+                dispatcher->pointer_data.shape_device,
+                dispatcher->pointer_data.last_enter_serial,
+                entry->surface->cursor_shape
+            );
+        }
+    }
+}
+
 static void pointer_handle_enter(
     void *data,
     struct wl_pointer * /* pointer */,
@@ -33,13 +51,9 @@ static void pointer_handle_enter(
     dispatcher->pointer_data.surface_x = wl_fixed_to_double(x);
     dispatcher->pointer_data.surface_y = wl_fixed_to_double(y);
     dispatcher->pointer_data.received_events |= POINTER_EVENT_MOTION;
+    dispatcher->pointer_data.last_enter_serial = serial;
 
-    // TODO: make this configurable and settable outside of enter events
-    wp_cursor_shape_device_v1_set_shape(
-        dispatcher->pointer_data.shape_device,
-        serial,
-        WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
-    );
+    send_cursor_shape(dispatcher, surface);
 }
 
 static void pointer_handle_leave(
@@ -425,6 +439,19 @@ void seat_dispatcher_set_selection(
     wl_data_device_set_selection(
         dispatcher->data_device, data_source, dispatcher->last_clipboard_serial
     );
+}
+
+void seat_dispatcher_set_cursor_for_surface(
+    SeatDispatcher *dispatcher,
+    OverlaySurface *surface,
+    enum wp_cursor_shape_device_v1_shape shape
+) {
+    surface->cursor_shape = shape;
+    if (dispatcher->pointer_data.focus == surface->wl_surface) {
+        send_cursor_shape(dispatcher, surface->wl_surface);
+    }
+    // If not focused right now, cursor shape will be set later when that
+    // happens.
 }
 
 void seat_dispatcher_add_listener(

@@ -1,4 +1,5 @@
 #include "overlay-surface.h"
+#include "cursor-shape-client.h"
 #include "log.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
@@ -167,6 +168,7 @@ OverlaySurface *overlay_surface_new(
         );
     result->draw_callback = draw_callback;
     result->close_callback = close_callback;
+    result->cursor_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
     result->user_data = user_data;
 
     wp_fractional_scale_v1_add_listener(

@@ -2,6 +2,7 @@
 #include "wayland/output.h"
 #include "wayland/render.h"
 #include <cairo.h>
+#include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>
@@ -40,6 +41,9 @@ typedef struct {
     // callback things
     OverlaySurfaceDrawCallback draw_callback;
     OverlaySurfaceCloseCallback close_callback;
+    // technically also a callback thing.
+    // Consumed by the SeatDispatcher
+    enum wp_cursor_shape_device_v1_shape cursor_shape;
     void *user_data;
     // used for frame pacing
     bool has_requested_frame;
