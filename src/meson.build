@@ -103,6 +103,8 @@ endforeach
 cairo_dep = dependency('cairo')
 # TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
+pango_dep = dependency('pango')
+pangocairo_dep = dependency('pangocairo')
 xkbcommon_dep = dependency('xkbcommon')
 
 cc = meson.get_compiler('c')
@@ -110,6 +112,7 @@ m_dep = cc.find_library('m', required: false)
 
 sources = files(
     'wayland/globals.c',
+    'wayland/label-surface.c',
     'wayland/overlay-surface.c',
     'wayland/render.c',
     'wayland/screenshot.c',
@@ -132,6 +135,8 @@ executable(
     dependencies: [
         cairo_dep,
         libpng_dep,
+        pango_dep,
+        pangocairo_dep,
         xkbcommon_dep,
         m_dep,
         wl_dep,

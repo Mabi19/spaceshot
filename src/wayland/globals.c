@@ -172,6 +172,12 @@ static void registry_handle_global(
             wl_registry_bind(registry, object_id, &wl_shm_interface, 1);
     }
 
+    if (strcmp(interface, wl_subcompositor_interface.name) == 0) {
+        globals->subcompositor = wl_registry_bind(
+            registry, object_id, &wl_subcompositor_interface, 1
+        );
+    }
+
     if (strcmp(interface, wp_cursor_shape_manager_v1_interface.name) == 0) {
         globals->cursor_shape_manager = wl_registry_bind(
             registry, object_id, &wp_cursor_shape_manager_v1_interface, 1
