@@ -407,7 +407,7 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            // capture_output(output, create_output_picker_for_output, NULL);
+            capture_output(output, create_output_picker_for_output, NULL);
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
