@@ -62,6 +62,13 @@ static void label_surface_update(LabelSurface *label) {
         } else {
             label->layout = pango_cairo_create_layout(label->buffer->cr);
         }
+
+        // slightly awkward: the logical size isn't tracked anywhere, so divide
+        wp_viewport_set_destination(
+            label->viewport,
+            (new_device_width * 120.0) / label->scale,
+            (new_device_height * 120.0) / label->scale
+        );
     }
     pango_layout_set_text(label->layout, label->text, -1);
     pango_layout_set_font_description(label->layout, label->font_description);
