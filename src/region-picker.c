@@ -308,14 +308,18 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         break;
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
-        picker->move_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
-        seat_dispatcher_set_cursor_for_surface(
-            wayland_globals.seat_dispatcher,
-            picker->surface,
-            event.type == KEYBOARD_EVENT_PRESS
-                ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
-                : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
-        );
+        // moving the selection only makes sense if a selection exists
+        if (picker->state == REGION_PICKER_DRAGGING) {
+            picker->move_flag =
+                event.type == KEYBOARD_EVENT_PRESS ? true : false;
+            seat_dispatcher_set_cursor_for_surface(
+                wayland_globals.seat_dispatcher,
+                picker->surface,
+                event.type == KEYBOARD_EVENT_PRESS
+                    ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
+                    : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
+            );
+        }
         break;
     }
     // TODO: Hold Shift to lock aspect ratio
