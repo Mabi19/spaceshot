@@ -124,6 +124,7 @@ sources = files(
     'link-buffer.c',
     'log.c',
     'main.c',
+    'output-picker.c',
     'paths.c',
     'region-picker.c',
 )
