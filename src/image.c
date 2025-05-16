@@ -107,6 +107,12 @@ Image *image_new_from_wayland(
     return result;
 }
 
+Image *image_copy(const Image *src) {
+    Image *result = image_new(src->width, src->height, src->format);
+    memcpy(result->data, src->data, src->height * src->stride);
+    return result;
+}
+
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
 ) {
