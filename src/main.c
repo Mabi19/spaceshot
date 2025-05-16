@@ -3,6 +3,7 @@
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
+#include "output-picker.h"
 #include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
@@ -20,10 +21,10 @@
 #include <wayland-client.h>
 
 typedef struct {
-    RegionPicker *picker;
+    void *picker;
     Image *image;
     struct wl_list link;
-} RegionPickerListEntry;
+} PickerListEntry;
 
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
@@ -97,80 +98,6 @@ static void send_notification(char *output_filename) {
 #endif
 }
 
-static void finish_output_screenshot(
-    WrappedOutput * /* output */, Image *image, void * /* data */
-) {
-    if (!image) {
-        report_error("Capturing output failed");
-        goto defer;
-    }
-
-    LinkBuffer *out_data = image_save_png(image);
-
-    char *output_filename = get_output_filename();
-    save_screenshot(out_data, output_filename);
-    send_notification(output_filename);
-
-    free(output_filename);
-    link_buffer_destroy(out_data);
-
-defer:
-    image_destroy(image);
-    should_active_wait = false;
-}
-
-// This function uses logical coordinates
-static void finish_predefined_region_screenshot(
-    WrappedOutput *output, Image *image, void *data
-) {
-    if (!is_output_valid(output)) {
-        report_error("Output disappeared while screenshotting");
-        goto defer;
-    }
-    if (!image) {
-        report_error("Capturing output failed");
-        goto defer;
-    }
-
-    // NOTE: this isn't dynamically allocated
-    BBox crop_bounds = *(BBox *)data;
-    // move to output space
-    crop_bounds = bbox_translate(
-        crop_bounds, -output->logical_bounds.x, -output->logical_bounds.y
-    );
-
-    double scale_factor_x = image->width / output->logical_bounds.width;
-    double scale_factor_y = image->height / output->logical_bounds.height;
-    assert(fabs(scale_factor_x - scale_factor_y) < 0.01);
-    // move to device space
-    crop_bounds = bbox_scale(crop_bounds, scale_factor_x);
-    // cropping takes place in pixels, which are whole, so round off any
-    // potential inaccuracies
-    crop_bounds = bbox_round(crop_bounds);
-
-    Image *cropped = image_crop(
-        image,
-        crop_bounds.x,
-        crop_bounds.y,
-        crop_bounds.width,
-        crop_bounds.height
-    );
-
-    LinkBuffer *out_data = image_save_png(cropped);
-    image_destroy(cropped);
-
-    char *output_filename = get_output_filename();
-    save_screenshot(out_data, output_filename);
-    send_notification(output_filename);
-
-    free(output_filename);
-    link_buffer_destroy(out_data);
-
-defer:
-    image_destroy(image);
-    should_active_wait = false;
-}
-
 static void clipboard_handle_target(
     void * /* data */,
     struct wl_data_source * /* data_source */,
@@ -215,28 +142,128 @@ static struct wl_data_source_listener clipboard_source_listener = {
     .action = NULL
 };
 
+/**
+ * Save an image and send a notification. This automatically destroys @p to_save
+ */
+static LinkBuffer *save_image_and_notify(Image *to_save) {
+    LinkBuffer *out_data = image_save_png(to_save);
+    image_destroy(to_save);
+
+    char *output_filename = get_output_filename();
+    save_screenshot(out_data, output_filename);
+    send_notification(output_filename);
+
+    free(output_filename);
+    return out_data;
+}
+
+static void finish_output_screenshot(
+    WrappedOutput * /* output */, Image *image, void * /* data */
+) {
+    if (!image) {
+        report_error("Capturing output failed");
+        image_destroy(image);
+        goto defer;
+    }
+
+    LinkBuffer *out_data = save_image_and_notify(image);
+    link_buffer_destroy(out_data);
+
+defer:
+    should_active_wait = false;
+}
+
+// This function uses logical coordinates
+static void finish_predefined_region_screenshot(
+    WrappedOutput *output, Image *image, void *data
+) {
+    if (!is_output_valid(output)) {
+        report_error("Output disappeared while screenshotting");
+        goto defer;
+    }
+    if (!image) {
+        report_error("Capturing output failed");
+        goto defer;
+    }
+
+    // NOTE: this isn't dynamically allocated
+    BBox crop_bounds = *(BBox *)data;
+    // move to output space
+    crop_bounds = bbox_translate(
+        crop_bounds, -output->logical_bounds.x, -output->logical_bounds.y
+    );
+
+    double scale_factor_x = image->width / output->logical_bounds.width;
+    double scale_factor_y = image->height / output->logical_bounds.height;
+    assert(fabs(scale_factor_x - scale_factor_y) < 0.01);
+    // move to device space
+    crop_bounds = bbox_scale(crop_bounds, scale_factor_x);
+    // cropping takes place in pixels, which are whole, so round off any
+    // potential inaccuracies
+    crop_bounds = bbox_round(crop_bounds);
+
+    Image *cropped = image_crop(
+        image,
+        crop_bounds.x,
+        crop_bounds.y,
+        crop_bounds.width,
+        crop_bounds.height
+    );
+
+    LinkBuffer *out_data = save_image_and_notify(cropped);
+    link_buffer_destroy(out_data);
+
+defer:
+    image_destroy(image);
+    should_active_wait = false;
+}
+
+/**
+ * Set up a clipboard copy. Later, data must be supplied by attaching a listener
+ * to the wl_data_source.
+ */
+static struct wl_data_source *picker_finish_setup_copy() {
+    struct wl_data_source *data_source = NULL;
+    if (get_config()->copy_to_clipboard) {
+        // Set up the copy while the picker's still alive
+        data_source = wl_data_device_manager_create_data_source(
+            wayland_globals.data_device_manager
+        );
+        wl_data_source_offer(data_source, "image/png");
+        seat_dispatcher_set_selection(
+            wayland_globals.seat_dispatcher, data_source
+        );
+    }
+    return data_source;
+}
+
+static void picker_entry_destroy(PickerListEntry *entry) {
+    region_picker_destroy(entry->picker);
+    image_destroy(entry->image);
+    wl_list_remove(&entry->link);
+    free(entry);
+}
+
+static void picker_entry_destroy_all() {
+    PickerListEntry *entry, *tmp;
+    wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
+        picker_entry_destroy(entry);
+    }
+}
+
 static void region_picker_finish(
     RegionPicker *picker, RegionPickerFinishReason reason, BBox result_region
 ) {
-    RegionPickerListEntry *entry, *tmp;
+    PickerListEntry *entry, *tmp;
     Image *to_save = NULL;
-    struct wl_data_source *data_source;
+    struct wl_data_source *data_source = NULL;
     wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
         if (entry->picker != picker) {
             continue;
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            if (get_config()->copy_to_clipboard) {
-                // Set up the copy while the picker's still alive
-                data_source = wl_data_device_manager_create_data_source(
-                    wayland_globals.data_device_manager
-                );
-                wl_data_source_offer(data_source, "image/png");
-                seat_dispatcher_set_selection(
-                    wayland_globals.seat_dispatcher, data_source
-                );
-            }
+            data_source = picker_finish_setup_copy();
 
             to_save = image_crop(
                 entry->image,
@@ -251,21 +278,13 @@ static void region_picker_finish(
             should_active_wait = false;
         }
 
-        region_picker_destroy(entry->picker);
-        image_destroy(entry->image);
-        wl_list_remove(&entry->link);
-        free(entry);
+        picker_entry_destroy(entry);
     }
 
     // The DESTROYED reason is the only one that isn't user-initiated,
     // and shouldn't destroy all the others.
     if (reason != REGION_PICKER_FINISH_REASON_DESTROYED) {
-        wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
-            region_picker_destroy(entry->picker);
-            image_destroy(entry->image);
-            wl_list_remove(&entry->link);
-            free(entry);
-        }
+        picker_entry_destroy_all();
     }
 
     if (to_save) {
@@ -278,48 +297,58 @@ static void region_picker_finish(
             );
         }
 
-        LinkBuffer *out_data = image_save_png(to_save);
-        image_destroy(to_save);
-        if (get_config()->copy_to_clipboard) {
+        LinkBuffer *out_data = save_image_and_notify(to_save);
+
+        if (data_source) {
             wl_data_source_add_listener(
                 data_source, &clipboard_source_listener, out_data
             );
             should_clipboard_wait = true;
         }
 
-        char *output_filename = get_output_filename();
-        save_screenshot(out_data, output_filename);
-        send_notification(output_filename);
-
-        free(output_filename);
         should_active_wait = false;
     }
 }
 
-static void create_region_picker_for_output(
-    WrappedOutput *output, Image *image, void * /* data */
-) {
+static PickerListEntry *make_picker_entry(WrappedOutput *output, Image *image) {
     if (!is_output_valid(output)) {
         // Theoretically, if all the outputs disappear (and no new ones appear),
         // there will be no region pickers, so should_active_wait will never be
         // unset, so the process will remain forever. But I don't think that
         // should ever happen.
         report_error("Output disappeared while screenshotting");
-        return;
+        return NULL;
     }
 
     if (!image) {
         // Similarly, I don't really have a good way of handling all the
         // screenshots failing.
         report_error("Output capture failed");
-        return;
+        return NULL;
     }
-
-    // Save it in a list so that it can be properly destroyed later
-    RegionPickerListEntry *entry = calloc(1, sizeof(RegionPickerListEntry));
-    entry->picker = region_picker_new(output, image, region_picker_finish);
+    PickerListEntry *entry = calloc(1, sizeof(PickerListEntry));
     entry->image = image;
     wl_list_insert(&active_pickers, &entry->link);
+
+    return entry;
+}
+
+static void create_region_picker_for_output(
+    WrappedOutput *output, Image *image, void * /* data */
+) {
+    PickerListEntry *entry = make_picker_entry(output, image);
+    if (entry) {
+        entry->picker = region_picker_new(output, image, region_picker_finish);
+    }
+}
+
+static void create_output_picker_for_output(
+    WrappedOutput *output, Image *image, void * /* data */
+) {
+    PickerListEntry *entry = make_picker_entry(output, image);
+    if (entry) {
+        entry->picker = output_picker_new(output, image, output_picker_finish);
+    }
 }
 
 static void add_new_output(WrappedOutput *output) {
@@ -335,10 +364,23 @@ static void add_new_output(WrappedOutput *output) {
     }
 
     if (args->mode == CAPTURE_OUTPUT) {
-        if (strcmp(output->name, args->output_params.output_name) == 0) {
-            log_debug("...which is correct\n");
+        if (args->output_params.output_name) {
+            // output specified in command line
+            if (strcmp(output->name, args->output_params.output_name) == 0) {
+                log_debug("...which is correct\n");
+                correct_output_found = true;
+                capture_output(output, finish_output_screenshot, NULL);
+            }
+        } else {
+            // This is for debugging so I don't lock myself out of my terminal
+            const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
+            if (only_output_name &&
+                strcmp(output->name, only_output_name) != 0) {
+                return;
+            }
             correct_output_found = true;
-            capture_output(output, finish_output_screenshot, NULL);
+
+            // capture_output(output, create_output_picker_for_output, NULL);
         }
     } else if (args->mode == CAPTURE_REGION) {
         if (args->region_params.has_region) {
