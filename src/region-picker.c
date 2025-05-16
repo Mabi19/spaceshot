@@ -5,7 +5,6 @@
 #include "image.h"
 #include "log.h"
 #include "wayland/globals.h"
-#include "wayland/label-surface.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/render.h"
@@ -352,19 +351,6 @@ RegionPicker *region_picker_new(
     result->background = image_make_cairo_surface(background);
     result->background_pattern =
         cairo_pattern_create_for_surface(result->background);
-    result->label = label_surface_new(
-        result->surface->wl_surface,
-        "Hello",
-        (LabelSurfaceStyle
-        ){.background_color = {.r = 0.0, .g = 0.0, .b = 0.0, .a = 0.75},
-          .text_color = {.r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0},
-          .corner_radius = 4.0,
-          .padding_x = 6.0,
-          .padding_y = 4.0,
-          .font_family = "Sans",
-          .font_size = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 16}}
-    );
-    // label_surface_show(result->label);
 
     seat_dispatcher_add_listener(
         wayland_globals.seat_dispatcher,

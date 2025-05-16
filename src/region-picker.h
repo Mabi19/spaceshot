@@ -1,6 +1,5 @@
 #pragma once
 #include "image.h"
-#include "wayland/label-surface.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include <wayland-client.h>
@@ -32,7 +31,6 @@ typedef struct RegionPicker {
     RegionPickerState state;
     cairo_surface_t *background;
     cairo_pattern_t *background_pattern;
-    LabelSurface *label;
 
     RegionPickerFinishCallback finish_callback;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.
