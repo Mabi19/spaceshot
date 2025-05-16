@@ -42,8 +42,10 @@ static void label_surface_update(LabelSurface *label) {
     );
     log_debug("measured size: %d %d\n", text_width, text_height);
 
-    double padding_x = round((label->style.padding_x * label->scale) / 120.0);
-    double padding_y = round((label->style.padding_y * label->scale) / 120.0);
+    double padding_x =
+        config_length_to_pixels(label->style.padding_x, label->scale);
+    double padding_y =
+        config_length_to_pixels(label->style.padding_x, label->scale);
 
     uint32_t new_device_width = text_width + 2 * padding_x;
     uint32_t new_device_height = text_height + 2 * padding_y;
@@ -126,7 +128,8 @@ static void preferred_scale_changed(
         label->scale = new_scale;
         pango_font_description_set_absolute_size(
             label->font_description,
-            label->style.font_size.value * PANGO_SCALE * new_scale / 120.0
+            config_length_to_pixels(label->style.font_size, new_scale) *
+                PANGO_SCALE
         );
         label_surface_update(label);
     }

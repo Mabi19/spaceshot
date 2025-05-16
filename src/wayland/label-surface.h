@@ -12,8 +12,8 @@ typedef struct {
     ConfigLength font_size;
     ConfigColor text_color;
     ConfigColor background_color;
-    double padding_x;
-    double padding_y;
+    ConfigLength padding_x;
+    ConfigLength padding_y;
     double corner_radius;
 } LabelSurfaceStyle;
 
