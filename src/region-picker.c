@@ -347,8 +347,11 @@ RegionPicker *region_picker_new(
     result->surface = overlay_surface_new(
         output,
         background->format,
-        region_picker_draw,
-        region_picker_handle_surface_close,
+        (OverlaySurfaceHandlers){
+            .draw = region_picker_draw,
+            .manual_render = NULL,
+            .close = region_picker_handle_surface_close,
+        },
         result
     );
     result->state = REGION_PICKER_EMPTY;

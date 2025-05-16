@@ -16,9 +16,22 @@ constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 typedef bool (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
 
 /**
+ * Like @c OverlaySurfaceDrawCallback, except that you have to attach a buffer
+ * yourself.
+ */
+typedef void (*OverlaySurfaceManualRenderCallback)(void *user_data);
+
+/**
  * Called when the surface is closed. This should call overlay_surface_destroy.
  */
 typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
+
+typedef struct {
+    // Only one of {draw, manual_render} can be defined at once.
+    OverlaySurfaceDrawCallback draw;
+    OverlaySurfaceManualRenderCallback manual_render;
+    OverlaySurfaceCloseCallback close;
+} OverlaySurfaceHandlers;
 
 typedef struct {
     struct wl_surface *wl_surface;
@@ -39,8 +52,7 @@ typedef struct {
     ImageFormat pixel_format;
     RenderBuffer *buffers[OVERLAY_SURFACE_BUFFER_COUNT];
     // callback things
-    OverlaySurfaceDrawCallback draw_callback;
-    OverlaySurfaceCloseCallback close_callback;
+    OverlaySurfaceHandlers handlers;
     // technically also a callback thing.
     // Consumed by the SeatDispatcher
     enum wp_cursor_shape_device_v1_shape cursor_shape;
@@ -53,8 +65,7 @@ typedef struct {
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
     ImageFormat pixel_format,
-    OverlaySurfaceDrawCallback draw_callback,
-    OverlaySurfaceCloseCallback close_callback,
+    OverlaySurfaceHandlers handlers,
     void *user_data
 );
 /** Call the draw_callback sometime in the future and present the result. */

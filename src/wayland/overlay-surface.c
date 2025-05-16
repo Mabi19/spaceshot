@@ -70,13 +70,18 @@ static void recompute_device_size(OverlaySurface *surface) {
  * Note that this function does not call wl_surface_commit.
  */
 static void overlay_surface_draw_immediate(OverlaySurface *surface) {
-    RenderBuffer *draw_buf = get_unused_buffer(surface);
-    bool did_update = surface->draw_callback(surface->user_data, draw_buf->cr);
-    if (!did_update) {
-        return;
+    if (surface->handlers.draw) {
+        RenderBuffer *draw_buf = get_unused_buffer(surface);
+        bool did_update =
+            surface->handlers.draw(surface->user_data, draw_buf->cr);
+        if (!did_update) {
+            return;
+        }
+        cairo_surface_flush(draw_buf->cairo_surface);
+        render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
+    } else {
+        surface->handlers.manual_render(surface->user_data);
     }
-    cairo_surface_flush(draw_buf->cairo_surface);
-    render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
 }
 
 static void overlay_surface_handle_configure(
@@ -111,7 +116,7 @@ static void overlay_surface_handle_closed(
     void *data, struct zwlr_layer_surface_v1 * /* layer_surface */
 ) {
     OverlaySurface *surface = data;
-    surface->close_callback(surface->user_data);
+    surface->handlers.close(surface->user_data);
 }
 
 static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
@@ -143,8 +148,7 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener =
 OverlaySurface *overlay_surface_new(
     WrappedOutput *output,
     ImageFormat pixel_format,
-    OverlaySurfaceDrawCallback draw_callback,
-    OverlaySurfaceCloseCallback close_callback,
+    OverlaySurfaceHandlers handlers,
     void *user_data
 ) {
     OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
@@ -166,8 +170,7 @@ OverlaySurface *overlay_surface_new(
         wp_fractional_scale_manager_v1_get_fractional_scale(
             wayland_globals.fractional_scale_manager, result->wl_surface
         );
-    result->draw_callback = draw_callback;
-    result->close_callback = close_callback;
+    result->handlers = handlers;
     result->cursor_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
     result->user_data = user_data;
 
