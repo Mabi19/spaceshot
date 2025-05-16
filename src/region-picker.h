@@ -1,21 +1,11 @@
 #pragma once
 #include "image.h"
+#include "picker-common.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include <wayland-client.h>
 
 typedef enum { REGION_PICKER_EMPTY, REGION_PICKER_DRAGGING } RegionPickerState;
-typedef enum {
-    /** A region was selected and passed in the region parameter */
-    REGION_PICKER_FINISH_REASON_SELECTED,
-    /** The selection was cancelled (e.g. via the Escape key)  */
-    REGION_PICKER_FINISH_REASON_CANCELLED,
-    /**
-     * The region picker was destroyed through external means, such as its
-     * output disappearing
-     */
-    REGION_PICKER_FINISH_REASON_DESTROYED
-} RegionPickerFinishReason;
 
 struct RegionPicker;
 /**
@@ -23,7 +13,7 @@ struct RegionPicker;
  * be destroyed. It should always call `region_picker_destroy`.
  */
 typedef void (*RegionPickerFinishCallback)(
-    struct RegionPicker *picker, RegionPickerFinishReason, BBox region
+    struct RegionPicker *picker, PickerFinishReason reason, BBox region
 );
 
 typedef struct RegionPicker {

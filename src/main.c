@@ -251,8 +251,11 @@ static void picker_entry_destroy_all() {
     }
 }
 
-static void region_picker_finish(
-    RegionPicker *picker, RegionPickerFinishReason reason, BBox result_region
+static void picker_finish_generic(
+    void *picker,
+    PickerFinishReason reason,
+    Image *(*result_image_callback)(PickerListEntry *entry, void *data),
+    void *data
 ) {
     PickerListEntry *entry, *tmp;
     Image *to_save = NULL;
@@ -262,18 +265,12 @@ static void region_picker_finish(
             continue;
         }
 
-        if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
+        if (reason == PICKER_FINISH_REASON_SELECTED) {
             data_source = picker_finish_setup_copy();
 
-            to_save = image_crop(
-                entry->image,
-                result_region.x,
-                result_region.y,
-                result_region.width,
-                result_region.height
-            );
+            to_save = result_image_callback(entry, data);
             // should_active_wait is unset later
-        } else if (reason == REGION_PICKER_FINISH_REASON_CANCELLED) {
+        } else if (reason == PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
             should_active_wait = false;
         }
@@ -283,7 +280,7 @@ static void region_picker_finish(
 
     // The DESTROYED reason is the only one that isn't user-initiated,
     // and shouldn't destroy all the others.
-    if (reason != REGION_PICKER_FINISH_REASON_DESTROYED) {
+    if (reason != PICKER_FINISH_REASON_DESTROYED) {
         picker_entry_destroy_all();
     }
 
@@ -308,6 +305,36 @@ static void region_picker_finish(
 
         should_active_wait = false;
     }
+}
+
+static Image *
+region_picker_finish_get_image(PickerListEntry *entry, void *data) {
+    BBox result_region = *(BBox *)data;
+    return image_crop(
+        entry->image,
+        result_region.x,
+        result_region.y,
+        result_region.width,
+        result_region.height
+    );
+}
+
+static void region_picker_finish(
+    RegionPicker *picker, PickerFinishReason reason, BBox result_region
+) {
+    picker_finish_generic(
+        picker, reason, region_picker_finish_get_image, &result_region
+    );
+}
+
+static Image *output_picker_finish_get_image(PickerListEntry *entry, void *) {
+    // picker_finish_generic frees this separately from the source image
+    return image_copy(entry->image);
+}
+
+static void
+output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
+    picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
 }
 
 static PickerListEntry *make_picker_entry(WrappedOutput *output, Image *image) {

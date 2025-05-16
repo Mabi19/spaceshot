@@ -282,10 +282,9 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             picker->x2,
             picker->y2
         );
-        RegionPickerFinishReason reason =
-            selected_region_area > CANCEL_THRESHOLD
-                ? REGION_PICKER_FINISH_REASON_SELECTED
-                : REGION_PICKER_FINISH_REASON_CANCELLED;
+        PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
+                                        ? PICKER_FINISH_REASON_SELECTED
+                                        : PICKER_FINISH_REASON_CANCELLED;
         BBox result_box = get_bbox_containing_selection(picker);
         picker->finish_callback(picker, reason, result_box);
         return;
@@ -302,7 +301,7 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         if (event.type == KEYBOARD_EVENT_RELEASE &&
             picker->surface->wl_surface == event.focus) {
             picker->finish_callback(
-                picker, REGION_PICKER_FINISH_REASON_CANCELLED, (BBox){}
+                picker, PICKER_FINISH_REASON_CANCELLED, (BBox){}
             );
         }
         break;
@@ -333,9 +332,7 @@ static SeatListener region_picker_seat_listener = {
 
 static void region_picker_handle_surface_close(void *data) {
     RegionPicker *picker = data;
-    picker->finish_callback(
-        picker, REGION_PICKER_FINISH_REASON_DESTROYED, (BBox){}
-    );
+    picker->finish_callback(picker, PICKER_FINISH_REASON_DESTROYED, (BBox){});
 }
 
 RegionPicker *region_picker_new(
