@@ -15,7 +15,7 @@ typedef struct OutputPicker {
 
     Image *background;
     SharedBuffer *background_buf;
-    SharedBuffer *background_dark_buf;
+    SharedBuffer *background_inactive_buf;
 
 } OutputPicker;
 
