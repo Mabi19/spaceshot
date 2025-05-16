@@ -3,11 +3,17 @@
 #include <pango/pangocairo.h>
 #include <wayland-client.h>
 
+// TODO: Remove the requirement to call update_layout() and draw() manually.
+// The label should be redrawn automatically when its properties change, or when
+// the surface scale changes.
+
 typedef struct {
-    PangoFontDescription *font_description;
+    const char *font_family;
+    ConfigLength font_size;
     ConfigColor text_color;
     ConfigColor background_color;
-    double padding;
+    double padding_x;
+    double padding_y;
     double corner_radius;
 } LabelSurfaceStyle;
 
@@ -15,11 +21,15 @@ typedef struct {
 typedef struct {
     struct wl_surface *wl_surface;
     struct wl_subsurface *wl_subsurface;
+    struct wp_viewport *viewport;
+    struct wp_fractional_scale_v1 *fractional_scale;
+    double scale;
     RenderBuffer *buffer;
     char *text;
     // Note that the LabelSurface does not own the PangoFontDescription within.
     LabelSurfaceStyle style;
     PangoLayout *layout;
+    PangoFontDescription *font_description;
 
     uint32_t logical_width;
     uint32_t logical_height;
@@ -37,17 +47,12 @@ LabelSurface *label_surface_new(
 );
 /**
  * Set the text of the LabelSurface. The @p text is copied.
- * Note that you'll need to call label_surface_draw to make this take effect.
  */
 void label_surface_set_text(LabelSurface *label, const char *text);
 /**
- * This needs to be called after every text update.
+ * Show the label surface (by attaching its buffer to the surface).
+ * This function calls wl_surface_commit.
  */
-void label_surface_update_layout(LabelSurface *label);
-/**
- * Render the contents of the label.
- * Note that this function doesn't actually attach the newly filled-in buffer,
- * nor does it call wl_surface_commit.
- */
-void label_surface_draw(LabelSurface *label);
+void label_surface_show(LabelSurface *label);
+
 void label_surface_destroy(LabelSurface *label);
