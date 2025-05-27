@@ -49,7 +49,7 @@ static void calculate_clip_regions(
     //* This will need to be adjusted if the picker gains an edit mode
     // (which will draw further outside the bounds)
     double border_width_pixels = config_length_to_pixels(
-        get_config()->region.selection_border_width, picker->surface->scale
+        config_get()->region.selection_border_width, picker->surface->scale
     );
 
     if (device_width != picker->last_device_width ||
@@ -172,7 +172,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
     cairo_set_source_config_color(
-        cr, get_config()->region.background, picker->surface->pixel_format
+        cr, config_get()->region.background, picker->surface->pixel_format
     );
     cairo_rectangle(
         cr, 0.0, 0.0, surface->device_width, surface->device_height
@@ -190,7 +190,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         // border
         // the offset is so that it doesn't occlude the visible area
         double border_width_pixels = config_length_to_pixels(
-            get_config()->region.selection_border_width, surface->scale
+            config_get()->region.selection_border_width, surface->scale
         );
         double border_offset = border_width_pixels / 2;
         cairo_set_line_width(cr, border_width_pixels);

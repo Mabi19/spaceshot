@@ -11,7 +11,7 @@
 
 static Config config;
 
-Config *get_config() { return &config; }
+Config *config_get() { return &config; }
 
 static const char *get_home_directory() {
     static char *result = NULL;
@@ -103,7 +103,7 @@ extern void config_parse_entry(
     void *data, const char *section, const char *key, char *value
 );
 
-bool load_config_file(const char *path) {
+bool config_load_file(const char *path) {
     FILE *config_file = fopen(path, "rb");
     if (!config_file) {
         return false;
@@ -119,7 +119,7 @@ bool load_config_file(const char *path) {
     return true;
 }
 
-void load_config() {
+void config_load() {
     memset(&config, 0, sizeof(config));
     config_parse_string(DEFAULT_CONFIG, config_parse_entry, &config);
 
@@ -133,6 +133,6 @@ void load_config() {
         strcpy(path_buf, directory);
         strcat(path_buf, CONFIG_SUBPATH);
 
-        load_config_file(path_buf);
+        config_load_file(path_buf);
     }
 }

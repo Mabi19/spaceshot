@@ -54,7 +54,7 @@ void report_warning(const char *format, ...) {
 }
 
 void log_debug(const char *format, ...) {
-    if (!get_config()->verbose) {
+    if (!config_get()->verbose) {
         return;
     }
     va_list args;

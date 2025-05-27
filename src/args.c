@@ -39,35 +39,35 @@ static void print_version() {
 static void interpret_option(Arguments *args, char opt, char *value) {
     switch (opt) {
     case 'b':
-        get_config()->move_to_background = true;
+        config_get()->move_to_background = true;
         break;
     case 'h':
         print_help(args->executable_name);
         exit(EXIT_SUCCESS);
     case 'c':
-        get_config()->copy_to_clipboard = true;
+        config_get()->copy_to_clipboard = true;
         break;
     case '!':
         // only as --no-copy
-        get_config()->copy_to_clipboard = false;
+        config_get()->copy_to_clipboard = false;
         break;
     case 'C':
-        if (!load_config_file(value)) {
+        if (!config_load_file(value)) {
             report_warning("couldn't read configuration file %s", value);
         }
         break;
     case 'n':
-        get_config()->notify.enabled = true;
+        config_get()->notify.enabled = true;
         break;
     case '@':
-        get_config()->notify.enabled = false;
+        config_get()->notify.enabled = false;
         break;
     case 'o':
-        get_config()->output_file = value;
+        config_get()->output_file = value;
         break;
     case '#':
         // only as --verbose
-        get_config()->verbose = true;
+        config_get()->verbose = true;
         break;
     case 'v':
         print_version();

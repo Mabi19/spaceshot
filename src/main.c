@@ -48,7 +48,7 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
 
 static void send_notification(char *output_filename) {
 #ifdef SPACESHOT_NOTIFICATIONS
-    if (get_config()->notify.enabled) {
+    if (config_get()->notify.enabled) {
         pid_t pid = fork();
         if (pid == 0) {
             // child
@@ -227,7 +227,7 @@ static void region_picker_finish(
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            if (get_config()->copy_to_clipboard) {
+            if (config_get()->copy_to_clipboard) {
                 // Set up the copy while the picker's still alive
                 data_source = wl_data_device_manager_create_data_source(
                     wayland_globals.data_device_manager
@@ -280,7 +280,7 @@ static void region_picker_finish(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        if (get_config()->copy_to_clipboard) {
+        if (config_get()->copy_to_clipboard) {
             wl_data_source_add_listener(
                 data_source, &clipboard_source_listener, out_data
             );
@@ -373,7 +373,7 @@ int main(int argc, char **argv) {
     wl_list_init(&active_pickers);
 
     TIMING_START(config_load);
-    load_config();
+    config_load();
     TIMING_END(config_load);
     set_program_name(argv[0]);
     args = parse_argv(argc, argv);
@@ -407,7 +407,7 @@ int main(int argc, char **argv) {
     }
 
     if (should_clipboard_wait) {
-        if (get_config()->move_to_background) {
+        if (config_get()->move_to_background) {
             // double-fork
             // I'm not quite sure why this works, but according to daemon(7)
             // it should prevent the process from re-acquiring terminals

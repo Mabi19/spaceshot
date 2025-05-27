@@ -38,7 +38,7 @@ const char *get_home_directory() {
 }
 
 char *get_output_filename() {
-    char *template = get_config()->output_file;
+    char *template = config_get()->output_file;
     int template_len = strlen(template);
     int tilde_count = 0;
     while (tilde_count < template_len && template[tilde_count] == '~') {
