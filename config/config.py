@@ -1,7 +1,7 @@
 import generator as sc
 import sys
 
-config_c, config_h = sc.config({
+config_c, config_h, config_vapi = sc.config({
     "output-file": sc.string(),
     "verbose": sc.bool(),
     "png-compression-level": sc.int().require("0 <= x && x <= 9"),
@@ -22,3 +22,6 @@ with open(sys.argv[1], "w") as f:
 
 with open(sys.argv[2], "w") as f:
     f.write(config_h)
+
+with open(sys.argv[3], "w") as f:
+    f.write(config_vapi)

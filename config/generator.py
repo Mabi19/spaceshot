@@ -18,7 +18,7 @@ class BaseType(ABC):
         return variant(self, other)
 
     @abstractmethod
-    def get_c_type(self, *, qualified_name: str, indent: str):
+    def get_c_type(self, *, qualified_name: str, indent: str) -> str:
         ...
 
     @abstractmethod
@@ -62,6 +62,7 @@ class variant(BaseType):
 
     def __or__(self, other):
         self.options.append(other)
+        return self
 
     def _get_option_enum(self, qualified_name: str, option: BaseType):
         def constantify_identifier(ident: str):
@@ -69,7 +70,7 @@ class variant(BaseType):
 
         return f"CONFIG_{constantify_identifier(qualified_name)}_{constantify_identifier(option.get_type_signature())}"
 
-    def get_c_type(self, qualified_name: str, indent: str):
+    def get_c_type(self, *, qualified_name: str, indent: str):
         enum_values = [
             self._get_option_enum(qualified_name, option) + ","
             for option in self.options
@@ -216,6 +217,38 @@ typedef struct {
 typedef struct {''',
     ]
 
+    vapi_parts = [
+'''
+[CCode(cheader_filename = "config.h", lower_case_cprefix = "config_", cprefix = "")]
+namespace SpaceshotConfig {
+    public enum LengthUnit {
+        PX
+    }
+
+    public struct Length {
+        double value;
+        LengthUnit unit;
+    }
+
+    public struct Color {
+        float r;
+        float g;
+        float b;
+        float a;
+    }
+
+    [CCode(destroy_function = "")]
+    public struct Config {
+        string output_file;
+    }
+
+    unowned Config* get();
+    void load_file(string path);
+    void load();
+}
+'''
+    ]
+
     definition_parts = [
 '''#include <spaceshot-config-struct-decl.h>
 #include <ctype.h>
@@ -356,5 +389,6 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 
     config_h = str.join("\n", declaration_parts)
     config_c = str.join("\n", definition_parts)
+    config_vapi = str.join("\n", vapi_parts)
 
-    return config_c, config_h
+    return config_c, config_h, config_vapi
