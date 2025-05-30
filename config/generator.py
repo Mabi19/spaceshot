@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 
 # Quirks:
 # - strings will not clean up properly when in variants (they aren't very useful in variants anyway)
+# - variants do not get bound to Vala
+# (this would require a C rework since Vala doesn't support anonymous structs/enums)
 
 class BaseType(ABC):
     condition: str | None
@@ -40,6 +42,14 @@ class BaseType(ABC):
 {self.generate_insert_code(qualified_c_name, indent + "    ")}{f"\n{indent}    {run_on_success}" if run_on_success else ""}
 {indent}    return;
 {indent}}}"""
+
+    def get_vala_type(self, *, qualified_c_name: str, indent: str):
+        return self.get_c_type(qualified_name=qualified_c_name, indent=indent)
+
+    def generate_vala_decl(self, qualified_c_name: str, indent: str):
+        vala_type = self.get_vala_type(qualified_c_name=qualified_c_name, indent=indent)
+        vala_name = qualified_c_name.replace(".", "_")
+        return f'{indent}[CCode(cname = "{qualified_c_name}")]\n{indent}public {vala_type}{vala_name};'
 
     def get_type_signature(self):
         '''Get a text representation of this type.'''
@@ -102,6 +112,9 @@ class variant(BaseType):
     def generate_insert_code(self):
         raise TypeError("Variant types do not support directly generating insert code")
 
+    def generate_vala_decl(self, qualified_c_name, indent):
+        return None
+
     def require(self):
         raise TypeError("Variant types do not support conditions, add checks on their members instead")
 
@@ -157,6 +170,9 @@ class string(BaseType):
     def get_c_type(self, **kwargs):
         return "char *"
 
+    def get_vala_type(self, **kwargs):
+        return "string "
+
     def get_parse_expr(self):
         return "x = value, true"
 
@@ -182,12 +198,18 @@ class color(BaseType):
     def get_c_type(self, **kwargs):
         return "ConfigColor "
 
+    def get_vala_type(self, **kwargs):
+        return "Color "
+
     def get_parse_expr(self):
         return "config_parse_color(&x, value)"
 
 class length(BaseType):
     def get_c_type(self, **kwargs):
         return "ConfigLength "
+
+    def get_vala_type(self, **kwargs):
+        return "Length "
 
     def get_parse_expr(self):
         return "config_parse_length(&x, value)"
@@ -219,7 +241,7 @@ typedef struct {''',
 
     vapi_parts = [
 '''
-[CCode(cheader_filename = "config.h", lower_case_cprefix = "config_", cprefix = "")]
+[CCode(cheader_filename = "config.h", lower_case_cprefix = "config_", cprefix = "Config")]
 namespace SpaceshotConfig {
     public enum LengthUnit {
         PX
@@ -237,16 +259,9 @@ namespace SpaceshotConfig {
         float a;
     }
 
-    [CCode(destroy_function = "")]
-    public struct Config {
-        string output_file;
-    }
-
-    unowned Config* get();
-    void load_file(string path);
-    void load();
-}
-'''
+    [CCode(destroy_function = "", cname = "Config")]
+    [Compact]
+    public class Config {'''
     ]
 
     definition_parts = [
@@ -350,14 +365,19 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     def handle_item(key: str, value: BaseType, section: str | None, indent: str):
         c_key = key.replace("-", "_")
         qualified_c_name = c_key if section is None else f"{section.replace("-", "_")}.{c_key}"
+        c_type = value.get_c_type(qualified_name=qualified_c_name, indent=indent)
 
         # this uses key and not qualified_c_name because names need to be unqualified in the struct definition
-        declaration_parts.append(f"{indent}{value.get_c_type(qualified_name=qualified_c_name, indent=indent)}{c_key};")
+        declaration_parts.append(f"{indent}{c_type}{c_key};")
         definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
 {value.generate_parse_code(qualified_c_name, indent + "    ")}
 {indent}    config_warn("invalid value %s for key %s (needs to be {value.get_type_signature()})", value, key);
 {indent}    return;
 {indent}}}''')
+        vala_decl = value.generate_vala_decl(qualified_c_name, indent)
+        if (vala_decl):
+            vapi_parts.append(vala_decl)
+
 
     sections: list[tuple[str, dict[str, BaseType]]] = []
     definition_parts.append(f"{indent}if (section == NULL) {{")
@@ -386,6 +406,13 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 {indent}    config_warn("unknown key %s", key);
 {indent}}}''')
     definition_parts.append("}\n")
+    vapi_parts.append('''
+    }
+    unowned Config get();
+    void load_file(string path);
+    void load();
+}
+''')
 
     config_h = str.join("\n", declaration_parts)
     config_c = str.join("\n", definition_parts)
