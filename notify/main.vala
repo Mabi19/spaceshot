@@ -4,10 +4,6 @@ interface NotifyClient: DBusProxy {
 }
 
 int main(string[] args) {
-    SpaceshotConfig.load();
-    var conf = SpaceshotConfig.get();
-    print("config: %p; output_file = %s\n", conf, conf.output_file);
-
     bool is_server = false;
     string screenshot_path = null;
 
