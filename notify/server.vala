@@ -3,6 +3,7 @@ public class NotifyServer: Object {
     private NotificationService notification_service;
     // Maps notification IDs to their paths.
     private HashTable<uint, string> active_notifications;
+    private unowned SpaceshotConfig.Config conf;
 
     construct {
         // I'm not sure why this works with direct hash (and not int hash).
@@ -21,6 +22,7 @@ public class NotifyServer: Object {
             printerr("Couldn't connect to notification service: %s", e.message);
             Posix.exit(1);
         }
+        conf = SpaceshotConfig.get();
     }
 
     private void handle_notification_action(uint id, string key) {
@@ -84,7 +86,7 @@ public class NotifyServer: Object {
             "Spaceshot",
             0,
             "",
-            "Screenshot saved",
+            conf.notify_summary,
             // TODO: make the body more flexible
             // the markup should only be there if the server supports the capability
             // the image isn't necessarily always copied to the clipboard
