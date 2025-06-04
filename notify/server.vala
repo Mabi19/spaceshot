@@ -22,6 +22,7 @@ public class NotifyServer: Object {
             printerr("Couldn't connect to notification service: %s", e.message);
             Posix.exit(1);
         }
+        SpaceshotConfig.load();
         conf = SpaceshotConfig.get();
     }
 

@@ -4,8 +4,6 @@ interface NotifyClient: DBusProxy {
 }
 
 int main(string[] args) {
-    SpaceshotConfig.load();
-
     bool is_server = false;
     bool did_copy = false;
     string screenshot_path = null;
