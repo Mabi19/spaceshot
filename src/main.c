@@ -46,7 +46,7 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
     fclose(out_file);
 }
 
-static void send_notification(char *output_filename) {
+static void send_notification(char *output_filename, bool did_copy) {
 #ifdef SPACESHOT_NOTIFICATIONS
     if (config_get()->notify.enabled) {
         pid_t pid = fork();
@@ -55,9 +55,25 @@ static void send_notification(char *output_filename) {
             char *notify_bin_path = getenv("SPACESHOT_NOTIFY_PATH");
             notify_bin_path =
                 notify_bin_path ? notify_bin_path : "spaceshot-notify";
-            execlp(
-                notify_bin_path, "spaceshot-notify", "-p", output_filename, NULL
-            );
+            if (did_copy) {
+                execlp(
+                    notify_bin_path,
+                    "spaceshot-notify",
+                    "-p",
+                    output_filename,
+                    "-c",
+                    NULL
+                );
+            } else {
+                execlp(
+                    notify_bin_path,
+                    "spaceshot-notify",
+                    "-p",
+                    output_filename,
+                    NULL
+                );
+            }
+
             // if something has gone terribly wrong, exit
             // 104 is a random number that is used as a heuristic for when
             // exec() failed
@@ -109,7 +125,7 @@ static void finish_output_screenshot(
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    send_notification(output_filename);
+    send_notification(output_filename, false);
 
     free(output_filename);
     link_buffer_destroy(out_data);
@@ -161,7 +177,7 @@ static void finish_predefined_region_screenshot(
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    send_notification(output_filename);
+    send_notification(output_filename, false);
 
     free(output_filename);
     link_buffer_destroy(out_data);
@@ -280,7 +296,8 @@ static void region_picker_finish(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        if (config_get()->copy_to_clipboard) {
+        bool should_copy = config_get()->copy_to_clipboard;
+        if (should_copy) {
             wl_data_source_add_listener(
                 data_source, &clipboard_source_listener, out_data
             );
@@ -289,7 +306,7 @@ static void region_picker_finish(
 
         char *output_filename = get_output_filename();
         save_screenshot(out_data, output_filename);
-        send_notification(output_filename);
+        send_notification(output_filename, should_copy);
 
         free(output_filename);
         should_active_wait = false;

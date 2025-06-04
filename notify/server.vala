@@ -77,20 +77,21 @@ public class NotifyServer: Object {
         }
     }
 
-    public void notify_for_file(string path) throws DBusError, IOError {
+    public void notify_for_file(string path, bool did_copy) throws DBusError, IOError {
         const string[] ACTIONS = {"default", "Open", "directory", "View in directory"};
         var hints = new HashTable<string, Variant>(str_hash, str_equal);
         hints.insert("image-path", new Variant("s", path));
+
+        // TODO: make this smarter: detect if server has markup
+        var body_template = did_copy ? conf.notify_body_copy : conf.notify_body_nocopy;
+        var body = body_template.replace("{{path}}", path);
 
         uint id = this.notification_service.notify(
             "Spaceshot",
             0,
             "",
             conf.notify_summary,
-            // TODO: make the body more flexible
-            // the markup should only be there if the server supports the capability
-            // the image isn't necessarily always copied to the clipboard
-            @"Image saved in <i>$path</i> and copied to the clipboard.",
+            body,
             ACTIONS,
             hints,
             -1

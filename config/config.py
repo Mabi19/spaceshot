@@ -10,6 +10,8 @@ config_c, config_h, config_vapi = sc.config({
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),
+        "body-copy": sc.string(),
+        "body-nocopy": sc.string(),
     },
     "region": {
         "selection-border-color": sc.color() | sc.enum("smart"),
