@@ -122,16 +122,8 @@ bool config_load_file(const char *path) {
 void config_load() {
     config_parse_string(DEFAULT_CONFIG, config_parse_entry, &config);
 
-    const char *const CONFIG_SUBPATH = "/spaceshot/config.ini";
-    const int CONFIG_SUBPATH_LENGTH = strlen(CONFIG_SUBPATH);
-
     const char **config_dirs = config_get_locations();
     for (int i = 0; config_dirs[i] != NULL; i++) {
-        const char *directory = config_dirs[i];
-        char path_buf[strlen(directory) + CONFIG_SUBPATH_LENGTH + 1];
-        strcpy(path_buf, directory);
-        strcat(path_buf, CONFIG_SUBPATH);
-
-        config_load_file(path_buf);
+        config_load_file(config_dirs[i]);
     }
 }
