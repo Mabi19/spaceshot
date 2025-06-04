@@ -113,6 +113,7 @@ bool config_load_file(const char *path) {
     char data[data_len + 1];
     fseek(config_file, 0, SEEK_SET);
     fread(data, 1, data_len, config_file);
+    data[data_len] = '\0';
     fclose(config_file);
 
     config_parse_string(data, config_parse_entry, &config);
