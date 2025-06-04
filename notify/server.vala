@@ -4,6 +4,8 @@ public class NotifyServer: Object {
     // Maps notification IDs to their paths.
     private HashTable<uint, string> active_notifications;
     private unowned SpaceshotConfig.Config conf;
+    private List<FileMonitor> config_monitors;
+    private uint config_reload_timeout_id;
 
     construct {
         // I'm not sure why this works with direct hash (and not int hash).
@@ -22,6 +24,38 @@ public class NotifyServer: Object {
             printerr("Couldn't connect to notification service: %s", e.message);
             Posix.exit(1);
         }
+        SpaceshotConfig.load();
+        conf = SpaceshotConfig.get();
+
+        unowned var config_locations = SpaceshotConfig.get_locations();
+        foreach (var location in config_locations) {
+            var file = File.new_for_path(location);
+            try {
+                print("config location: %s\n", location);
+                var monitor = file.monitor_file(FileMonitorFlags.NONE, null);
+                monitor.changed.connect ((file, other_file, event_type) => {
+                    print("config file changed! %s, event: %d\n", file.get_path(), event_type);
+                    if (config_reload_timeout_id != 0) {
+                        Source.remove(config_reload_timeout_id);
+                    }
+                    config_reload_timeout_id = Timeout.add(500, () => {
+                        config_reload_timeout_id = 0;
+                        try {
+                            print("Reloading config...\n");
+                            reload_config();
+                        } catch (Error e) {
+                            printerr("Config reload failed! %s\n", e.message);
+                        }
+                    });
+                });
+                config_monitors.append(monitor);
+            } catch (IOError e) {
+                printerr("Couldn't watch config file %s\n", location);
+            }
+        }
+    }
+
+    public void reload_config() throws DBusError, IOError {
         SpaceshotConfig.load();
         conf = SpaceshotConfig.get();
     }

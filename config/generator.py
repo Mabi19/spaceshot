@@ -408,7 +408,10 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     definition_parts.append("}\n")
     vapi_parts.append('''
     }
+
     unowned Config get();
+    [CCode(array_length = false, array_null_terminated = true)]
+    unowned string[] get_locations();
     void load_file(string path);
     void load();
 }
