@@ -2,6 +2,7 @@
 #include <spaceshot-config-struct-decl.h> // IWYU pragma: export
 
 Config *config_get();
+const char **config_get_locations();
 
 /**
  * Load the file at @p path as configuration.

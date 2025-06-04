@@ -9,7 +9,7 @@
 // This file uses #embed, which ccache doesn't support. Therefore:
 // ccache:disable
 
-static Config config;
+static Config config = {0};
 
 Config *config_get() { return &config; }
 
@@ -41,7 +41,7 @@ static char *config_dir_to_file(const char *dir) {
  * Obtain all of the configuration directories, ordered from least to most
  * important (so they should be loaded in the order they're returned).
  */
-static const char **get_config_locations() {
+const char **config_get_locations() {
     static const char **result = NULL;
     if (result) {
         return result;
@@ -120,13 +120,12 @@ bool config_load_file(const char *path) {
 }
 
 void config_load() {
-    memset(&config, 0, sizeof(config));
     config_parse_string(DEFAULT_CONFIG, config_parse_entry, &config);
 
     const char *const CONFIG_SUBPATH = "/spaceshot/config.ini";
     const int CONFIG_SUBPATH_LENGTH = strlen(CONFIG_SUBPATH);
 
-    const char **config_dirs = get_config_locations();
+    const char **config_dirs = config_get_locations();
     for (int i = 0; config_dirs[i] != NULL; i++) {
         const char *directory = config_dirs[i];
         char path_buf[strlen(directory) + CONFIG_SUBPATH_LENGTH + 1];
