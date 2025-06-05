@@ -12,6 +12,7 @@ config_c, config_h, config_vapi = sc.config({
         "summary": sc.string(),
         "body-copy": sc.string(),
         "body-nocopy": sc.string(),
+        "edit-command": sc.string(),
     },
     "region": {
         "selection-border-color": sc.color() | sc.enum("smart"),

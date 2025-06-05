@@ -12,7 +12,7 @@ It takes a screenshot first and then allows selecting a region on it, which make
 - Integrated copying to clipboard (only in interactive modes)
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
-- Sending notifications, with actions to open the result file and view it in a file manager
+- Sending notifications, with actions to open the result file, edit it, and view it in a file manager
 
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
@@ -27,7 +27,6 @@ Planned:
     - There isn't a widely-supported protocol for this yet
     - ext-image-capture-source-v1 is ideal, but support is limited
     - May be implemented using hyprland-toplevel-export-v1 first
-- Edit action for notifications (to launch an external editor)
 
 ### Controls
 - Click and drag to select a region
@@ -47,7 +46,8 @@ Dependencies:
 
 If the `notifications` build option is enabled (it is on by default):
 - the Vala toolchain is required to build,
-- xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime.
+- xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime,
+- [satty](https://github.com/gabm/satty) is invoked by the edit button, though this is configurable
 
 Note that notifications depend on a D-Bus service, and the easiest way to make that available is via `meson install`. However, for testing, setting the environment variable `$SPACESHOT_NOTIFY_PATH` and running `./build/notify/spaceshot-notify -s` will also work.
 ```sh

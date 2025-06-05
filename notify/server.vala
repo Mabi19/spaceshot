@@ -81,7 +81,36 @@ public class NotifyServer: Object {
                         null
                     );
                 } catch (SpawnError e) {
-                    printerr("Couldn't spawn xdg-open: %s", e.message);
+                    printerr("Couldn't spawn xdg-open: %s\n", e.message);
+                }
+                break;
+            case "edit":
+                try {
+                    string[] argvp;
+                    Shell.parse_argv(conf.notify_edit_command, out argvp);
+                    bool has_found = false;
+                    for (int i = 0; i < argvp.length; i++) {
+                        if (argvp[i] == "{{path}}") {
+                            argvp[i] = path;
+                            has_found = true;
+                        }
+                    }
+                    if (!has_found) {
+                        warning("Edit command template has no {{path}} placeholders");
+                    }
+
+                    Process.spawn_async(
+                        null,
+                        argvp,
+                        null,
+                        SpawnFlags.SEARCH_PATH | SpawnFlags.DO_NOT_REAP_CHILD,
+                        null,
+                        null
+                    );
+                } catch (ShellError e) {
+                    printerr("Couldn't parse command line: %s\n", e.message);
+                } catch (SpawnError e) {
+                    printerr("Couldn't spawn edit tool: %s\n", e.message);
                 }
                 break;
             case "directory":
@@ -113,7 +142,7 @@ public class NotifyServer: Object {
     }
 
     public void notify_for_file(string path, bool did_copy) throws DBusError, IOError {
-        const string[] ACTIONS = {"default", "Open", "directory", "View in directory"};
+        const string[] ACTIONS = {"default", "Open", "edit", "Edit", "directory", "View in directory"};
         var hints = new HashTable<string, Variant>(str_hash, str_equal);
         hints.insert("image-path", new Variant("s", path));
 
