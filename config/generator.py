@@ -16,6 +16,13 @@ class DeclarationStruct:
     props: dict[str, str]
 
 @dataclass
+class DeclarationVariantStruct:
+    '''A struct containing a type attribute of enum type, and its other members wrapped in a union.'''
+    name: str
+    discriminator_type: str
+    props: dict[str, str]
+
+@dataclass
 class DeclarationEnum:
     name: str
     members: list[str]
@@ -38,7 +45,7 @@ class BaseType(ABC):
         return variant(self, other)
 
     @abstractmethod
-    def get_c_type(self, *, qualified_name: str) -> str:
+    def generate_c_type(self, ctx: DeclarationContext, qualified_name: str) -> str:
         ...
 
     @abstractmethod
@@ -54,7 +61,7 @@ class BaseType(ABC):
 {indent}    return;
 {indent}}}'''
 
-        return f"""{indent}{self.get_c_type()}x;
+        return f"""{indent}{self.generate_c_type()}x;
 {indent}if ({self.get_parse_expr()}) {{
 {generate_condition_check(self, indent + "    ") if self.condition else ""}
 {self.generate_insert_code(qualified_c_name, indent + "    ")}{f"\n{indent}    {run_on_success}" if run_on_success else ""}
@@ -62,7 +69,7 @@ class BaseType(ABC):
 {indent}}}"""
 
     def get_vala_type(self, *, qualified_c_name: str):
-        return self.get_c_type(qualified_name=qualified_c_name)
+        return self.generate_c_type(qualified_c_name)
 
     def generate_vala_decl(self, qualified_c_name: str, indent: str):
         vala_type = self.get_vala_type(qualified_c_name=qualified_c_name)
@@ -98,15 +105,21 @@ class variant(BaseType):
 
         return f"CONFIG_{constantify_identifier(qualified_name)}_{constantify_identifier(option.get_type_signature())}"
 
-    def get_c_type(self, *, qualified_name: str, indent: str):
+    def generate_c_type(self, ctx: DeclarationContext, qualified_name: str):
+        pascal_name = snake_case_to_pascal(qualified_name.replace("-", "_").replace(".", "_"))
+        option_enum = DeclarationEnum("Config" + pascal_name + "Options", [])
+        value_struct = DeclarationVariantStruct("Config" + pascal_name, option_enum.name, {})
+        ctx.add(option_enum)
+        ctx.add(value_struct)
+        return value_struct.name + " "
         enum_values = [
             self._get_option_enum(qualified_name, option) + ","
             for option in self.options
         ]
         union_values = [
-            f"{indent}        {option.get_c_type()}v_{option.get_type_signature()};"
+            f"{indent}        {option.generate_c_type()}v_{option.get_type_signature()};"
             for option in self.options
-            if option.get_c_type() is not None
+            if option.generate_c_type() is not None
         ]
 
         # If there are no union values, the enum and thus the struct can be omitted
@@ -138,7 +151,7 @@ class variant(BaseType):
 
     def generate_parse_code(self, qualified_c_name, indent):
         parts = []
-        no_union_members = all(option.get_c_type() is None for option in self.options)
+        no_union_members = all(option.generate_c_type() is None for option in self.options)
         for option in self.options:
             parts.append(f"""{indent}{{
 {option.generate_parse_code(
@@ -161,8 +174,8 @@ class enum(BaseType):
         super()
         self.name = name
 
-    def get_c_type(self, **kwargs):
-        return None
+    def generate_c_type(self, ctx, qualified_name):
+        raise TypeError("Enum types do not support generating a C type")
 
     def get_parse_expr(self):
         raise TypeError("Enum types do not support parse expressions")
@@ -185,7 +198,7 @@ class enum(BaseType):
 
 
 class string(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "char *"
 
     def get_vala_type(self, **kwargs):
@@ -199,21 +212,21 @@ class string(BaseType):
 {indent}conf->{c_key} = strdup(x);''';
 
 class bool(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "bool "
 
     def get_parse_expr(self):
         return "config_parse_bool(&x, value)"
 
 class int(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "int "
 
     def get_parse_expr(self):
         return "config_parse_int(&x, value)"
 
 class color(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "ConfigColor "
 
     def get_vala_type(self, **kwargs):
@@ -223,7 +236,7 @@ class color(BaseType):
         return "config_parse_color(&x, value)"
 
 class length(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "ConfigLength "
 
     def get_vala_type(self, **kwargs):
@@ -231,6 +244,9 @@ class length(BaseType):
 
     def get_parse_expr(self):
         return "config_parse_length(&x, value)"
+
+def snake_case_to_pascal(x: str):
+    return "".join(part.capitalize() for part in x.split("_"))
 
 def config(props: dict[str, BaseType | dict[str, BaseType]]):
     indent = "    "
@@ -363,7 +379,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     def handle_item(key: str, value: BaseType, section: str | None, indent: str):
         c_key = key.replace("-", "_")
         qualified_c_name = c_key if section is None else f"{section.replace("-", "_")}.{c_key}"
-        c_type = value.get_c_type(qualified_name=qualified_c_name, indent=indent)
+        c_type = value.generate_c_type(qualified_name=qualified_c_name, indent=indent)
 
         # this uses key and not qualified_c_name because names need to be unqualified in the struct definition
         declaration_parts.append(f"{indent}{c_type}{c_key};")
@@ -372,11 +388,20 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         if (vala_decl):
             vapi_parts.append(vala_decl)
 
-    def traverse_section(ctx: DeclarationContext, props: dict[str, BaseType | dict[str, BaseType]], name: str | None):
-        struct = DeclarationStruct("Config_" + name or "", {})
-        # TODO: Traverse the passed-in props and fill in struct.
+    def traverse_section(ctx: DeclarationContext, props: dict[str, BaseType | dict[str, BaseType]], name: str | None) -> DeclarationStruct:
+        struct = DeclarationStruct("Config" + snake_case_to_pascal(name or ""), {})
+
+        for key, type in props.items():
+            qualified_name = f"{name}.{key}" if name else key
+
+            if isinstance(type, dict):
+                assert name is None
+                struct.props[key] = traverse_section(ctx, type, key).name + " "
+            else:
+                struct.props[key] = type.generate_c_type(ctx, qualified_name)
+
         ctx.add(struct)
-        pass
+        return struct
 
     ctx = DeclarationContext()
     traverse_section(ctx, props, name=None)
@@ -392,7 +417,9 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 # }
 # ''')
 
-    config_h = str.join("\n", declaration_parts)
+    print(ctx.declarations)
+
+    config_h = "// TODO"
     config_c = str.join("\n", definition_parts)
     config_vapi = str.join("\n", vapi_parts)
 
