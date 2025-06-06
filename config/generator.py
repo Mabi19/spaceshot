@@ -392,7 +392,8 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
         struct = DeclarationStruct("Config" + snake_case_to_pascal(name or ""), {})
 
         for key, type in props.items():
-            qualified_name = f"{name}.{key}" if name else key
+            c_name = key.replace("-", "_")
+            qualified_name = f"{name}.{c_name}" if name else c_name
 
             if isinstance(type, dict):
                 assert name is None
