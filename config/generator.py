@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 # Is this overengineered? Yes.
 # Is this cursed? Very yes.
@@ -8,6 +9,30 @@ from abc import ABC, abstractmethod
 # - strings will not clean up properly when in variants (they aren't very useful in variants anyway)
 # - variants do not get bound to Vala
 # (this would require a C rework since Vala doesn't support anonymous structs/enums)
+
+@dataclass
+class DeclarationStruct:
+    name: str
+    props: dict[str, str]
+
+@dataclass
+class DeclarationVariantStruct:
+    '''A struct containing a type attribute of enum type, and its other members wrapped in a union.'''
+    name: str
+    discriminator_type: str
+    props: dict[str, str]
+
+@dataclass
+class DeclarationEnum:
+    name: str
+    members: list[str]
+
+class DeclarationContext:
+    def __init__(self):
+        self.declarations = []
+
+    def add(self, obj: DeclarationStruct | DeclarationEnum):
+        self.declarations.append(obj)
 
 class BaseType(ABC):
     condition: str | None
@@ -20,7 +45,7 @@ class BaseType(ABC):
         return variant(self, other)
 
     @abstractmethod
-    def get_c_type(self, *, qualified_name: str, indent: str) -> str:
+    def generate_c_type(self, ctx: DeclarationContext, qualified_name: str) -> str:
         ...
 
     @abstractmethod
@@ -36,18 +61,18 @@ class BaseType(ABC):
 {indent}    return;
 {indent}}}'''
 
-        return f"""{indent}{self.get_c_type()}x;
+        return f"""{indent}{self.generate_c_type()}x;
 {indent}if ({self.get_parse_expr()}) {{
 {generate_condition_check(self, indent + "    ") if self.condition else ""}
 {self.generate_insert_code(qualified_c_name, indent + "    ")}{f"\n{indent}    {run_on_success}" if run_on_success else ""}
 {indent}    return;
 {indent}}}"""
 
-    def get_vala_type(self, *, qualified_c_name: str, indent: str):
-        return self.get_c_type(qualified_name=qualified_c_name, indent=indent)
+    def get_vala_type(self, *, qualified_c_name: str):
+        return self.generate_c_type(qualified_c_name)
 
     def generate_vala_decl(self, qualified_c_name: str, indent: str):
-        vala_type = self.get_vala_type(qualified_c_name=qualified_c_name, indent=indent)
+        vala_type = self.get_vala_type(qualified_c_name=qualified_c_name)
         vala_name = qualified_c_name.replace(".", "_")
         return f'{indent}[CCode(cname = "{qualified_c_name}")]\n{indent}public {vala_type}{vala_name};'
 
@@ -80,15 +105,21 @@ class variant(BaseType):
 
         return f"CONFIG_{constantify_identifier(qualified_name)}_{constantify_identifier(option.get_type_signature())}"
 
-    def get_c_type(self, *, qualified_name: str, indent: str):
+    def generate_c_type(self, ctx: DeclarationContext, qualified_name: str):
+        pascal_name = snake_case_to_pascal(qualified_name.replace("-", "_").replace(".", "_"))
+        option_enum = DeclarationEnum("Config" + pascal_name + "Options", [])
+        value_struct = DeclarationVariantStruct("Config" + pascal_name, option_enum.name, {})
+        ctx.add(option_enum)
+        ctx.add(value_struct)
+        return value_struct.name + " "
         enum_values = [
             self._get_option_enum(qualified_name, option) + ","
             for option in self.options
         ]
         union_values = [
-            f"{indent}        {option.get_c_type()}v_{option.get_type_signature()};"
+            f"{indent}        {option.generate_c_type()}v_{option.get_type_signature()};"
             for option in self.options
-            if option.get_c_type() is not None
+            if option.generate_c_type() is not None
         ]
 
         # If there are no union values, the enum and thus the struct can be omitted
@@ -120,7 +151,7 @@ class variant(BaseType):
 
     def generate_parse_code(self, qualified_c_name, indent):
         parts = []
-        no_union_members = all(option.get_c_type() is None for option in self.options)
+        no_union_members = all(option.generate_c_type() is None for option in self.options)
         for option in self.options:
             parts.append(f"""{indent}{{
 {option.generate_parse_code(
@@ -143,8 +174,8 @@ class enum(BaseType):
         super()
         self.name = name
 
-    def get_c_type(self, **kwargs):
-        return None
+    def generate_c_type(self, ctx, qualified_name):
+        raise TypeError("Enum types do not support generating a C type")
 
     def get_parse_expr(self):
         raise TypeError("Enum types do not support parse expressions")
@@ -167,7 +198,7 @@ class enum(BaseType):
 
 
 class string(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "char *"
 
     def get_vala_type(self, **kwargs):
@@ -181,21 +212,21 @@ class string(BaseType):
 {indent}conf->{c_key} = strdup(x);''';
 
 class bool(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "bool "
 
     def get_parse_expr(self):
         return "config_parse_bool(&x, value)"
 
 class int(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "int "
 
     def get_parse_expr(self):
         return "config_parse_int(&x, value)"
 
 class color(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "ConfigColor "
 
     def get_vala_type(self, **kwargs):
@@ -205,7 +236,7 @@ class color(BaseType):
         return "config_parse_color(&x, value)"
 
 class length(BaseType):
-    def get_c_type(self, **kwargs):
+    def generate_c_type(self, ctx, qualified_name):
         return "ConfigLength "
 
     def get_vala_type(self, **kwargs):
@@ -214,30 +245,13 @@ class length(BaseType):
     def get_parse_expr(self):
         return "config_parse_length(&x, value)"
 
+def snake_case_to_pascal(x: str):
+    return "".join(part.capitalize() for part in x.split("_"))
+
 def config(props: dict[str, BaseType | dict[str, BaseType]]):
     indent = "    "
 
-    declaration_parts = [
-'''#pragma once
-// This file is automatically generated by the Python scripts in the config/ directory. Do not edit manually.
-// IWYU pragma: private; include <config/config.h>
-
-typedef enum {
-    CONFIG_LENGTH_UNIT_PX
-} ConfigLengthUnit;
-
-typedef struct {
-    double value;
-    ConfigLengthUnit unit;
-} ConfigLength;
-
-/** A 4-float color with straight alpha. */
-typedef struct {
-    float r, g, b, a;
-} ConfigColor;
-
-typedef struct {''',
-    ]
+    type_declarations = []
 
     vapi_parts = [
 '''
@@ -365,60 +379,72 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     def handle_item(key: str, value: BaseType, section: str | None, indent: str):
         c_key = key.replace("-", "_")
         qualified_c_name = c_key if section is None else f"{section.replace("-", "_")}.{c_key}"
-        c_type = value.get_c_type(qualified_name=qualified_c_name, indent=indent)
+        c_type = value.generate_c_type(qualified_name=qualified_c_name, indent=indent)
 
         # this uses key and not qualified_c_name because names need to be unqualified in the struct definition
         declaration_parts.append(f"{indent}{c_type}{c_key};")
-        definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
-{value.generate_parse_code(qualified_c_name, indent + "    ")}
-{indent}    config_warn("invalid value %s for key %s (needs to be {value.get_type_signature()})", value, key);
-{indent}    return;
-{indent}}}''')
+
         vala_decl = value.generate_vala_decl(qualified_c_name, indent)
         if (vala_decl):
             vapi_parts.append(vala_decl)
 
+    def traverse_section(ctx: DeclarationContext, props: dict[str, BaseType | dict[str, BaseType]], name: str | None) -> DeclarationStruct:
+        struct = DeclarationStruct("Config" + snake_case_to_pascal(name or ""), {})
 
-    sections: list[tuple[str, dict[str, BaseType]]] = []
-    definition_parts.append(f"{indent}if (section == NULL) {{")
-    for key, value in props.items():
-        if isinstance(value, dict):
-            sections.append((key, value))
-        else:
-            handle_item(key, value, None, indent + "    ")
-    definition_parts.append(f"{indent}}}")
+        for key, type in props.items():
+            qualified_name = f"{name}.{key}" if name else key
 
-    for sec_name, section in sections:
-        declaration_parts.append(f"{indent}struct {{")
-        definition_parts[-1] += f' else if (strcmp(section, "{sec_name}") == 0) {{'
+            if isinstance(type, dict):
+                assert name is None
+                struct.props[key] = traverse_section(ctx, type, key).name + " "
+            else:
+                struct.props[key] = type.generate_c_type(ctx, qualified_name)
 
-        for subkey, subvalue in section.items():
-            handle_item(subkey, subvalue, sec_name, indent + "    ")
+        ctx.add(struct)
+        return struct
 
-        declaration_parts.append(f"{indent}}} {sec_name.replace("-", "_")};")
-        definition_parts.append(f"{indent}}}")
+    ctx = DeclarationContext()
+    traverse_section(ctx, props, name=None)
 
-    declaration_parts.append("} Config;\n")
-    definition_parts.append(f'''
-{indent}if (section) {{
-{indent}    config_warn("unknown key [%s] %s", section, key);
-{indent}}} else {{
-{indent}    config_warn("unknown key %s", key);
-{indent}}}''')
-    definition_parts.append("}\n")
-    vapi_parts.append('''
-    }
+#     vapi_parts.append('''
+#     }
 
-    unowned Config get();
-    [CCode(array_length = false, array_null_terminated = true)]
-    unowned string[] get_locations();
-    void load_file(string path);
-    void load();
-}
-''')
+#     unowned Config get();
+#     [CCode(array_length = false, array_null_terminated = true)]
+#     unowned string[] get_locations();
+#     void load_file(string path);
+#     void load();
+# }
+# ''')
 
-    config_h = str.join("\n", declaration_parts)
+    print(ctx.declarations)
+
+    config_h = "// TODO"
     config_c = str.join("\n", definition_parts)
     config_vapi = str.join("\n", vapi_parts)
 
     return config_c, config_h, config_vapi
+
+
+# stuff used for definition generation:
+# definition_parts.append(f'''{indent}if (strcmp(key, "{key}") == 0) {{
+# {value.generate_parse_code(qualified_c_name, indent + "    ")}
+# {indent}    config_warn("invalid value %s for key %s (needs to be {value.get_type_signature()})", value, key);
+# {indent}    return;
+# {indent}}}''')
+
+# definition_parts.append(f"{indent}if (section == NULL) {{")
+
+# definition_parts.append(f"{indent}}}")
+
+# definition_parts[-1] += f' else if (strcmp(section, "{sec_name}") == 0) {{'
+
+# definition_parts.append(f"{indent}}}")
+
+# definition_parts.append(f'''
+# {indent}if (section) {{
+# {indent}    config_warn("unknown key [%s] %s", section, key);
+# {indent}}} else {{
+# {indent}    config_warn("unknown key %s", key);
+# {indent}}}''')
+# definition_parts.append("}\n")
