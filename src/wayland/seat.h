@@ -123,3 +123,5 @@ void seat_dispatcher_add_listener(
 void seat_dispatcher_remove_listener(
     SeatDispatcher *dispatcher, OverlaySurface *surface
 );
+
+void seat_dispatcher_destroy(SeatDispatcher *dispatcher);

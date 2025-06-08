@@ -490,3 +490,27 @@ void seat_dispatcher_remove_listener(
         }
     }
 }
+
+void seat_dispatcher_destroy(SeatDispatcher *dispatcher) {
+    wl_seat_release(dispatcher->seat);
+    if (dispatcher->pointer) {
+        wl_pointer_release(dispatcher->pointer);
+        wp_cursor_shape_device_v1_destroy(dispatcher->pointer_data.shape_device
+        );
+    }
+    if (dispatcher->keyboard) {
+        wl_keyboard_release(dispatcher->keyboard);
+    }
+
+    xkb_context_unref(dispatcher->keyboard_data.context);
+    xkb_keymap_unref(dispatcher->keyboard_data.keymap);
+    xkb_state_unref(dispatcher->keyboard_data.state);
+
+    if (dispatcher->data_device) {
+        wl_data_device_release(dispatcher->data_device);
+    }
+
+    wl_array_release(&dispatcher->listeners);
+
+    free(dispatcher);
+}

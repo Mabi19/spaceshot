@@ -307,10 +307,11 @@ void cleanup_wayland_globals() {
         free(output);
     }
 
+    seat_dispatcher_destroy(wayland_globals.seat_dispatcher);
+
     // A couple of the built-in singleton globals do not have destructors:
     // - wl_compositor
     // - wl_data_device_manager
-    // TODO: The SeatDispatcher should be cleaned up as well.
 
     wl_shm_release(wayland_globals.shm);
     wl_subcompositor_destroy(wayland_globals.subcompositor);
