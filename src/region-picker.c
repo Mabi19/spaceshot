@@ -119,7 +119,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         return false;
     }
 
-    BBox inner_clip_region, outer_clip_region;
+    BBox inner_clip_region = {0}, outer_clip_region = {0};
     calculate_clip_regions(
         picker, &selection_box, &outer_clip_region, &inner_clip_region
     );

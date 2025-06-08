@@ -77,6 +77,7 @@ static const char **get_config_locations() {
     }
     result[i] = config_dir_to_file(check_dirs);
     i++;
+    free(check_dirs);
 
     const char *config_home = getenv("XDG_CONFIG_HOME");
     if (config_home && config_home[0] != '\0') {
