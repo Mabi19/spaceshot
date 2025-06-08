@@ -199,8 +199,10 @@ OverlaySurface *overlay_surface_new(
 static void draw_immediate_and_request_frame(OverlaySurface *);
 
 static void overlay_surface_handle_frame(
-    void *data, struct wl_callback * /* callback */, uint32_t /* timestamp */
+    void *data, struct wl_callback *callback, uint32_t /* timestamp */
 ) {
+    wl_callback_destroy(callback);
+
     OverlaySurface *surface = data;
     if (surface->has_queued_render) {
         // request a frame callback again, if another render is queued
