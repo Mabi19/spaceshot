@@ -32,6 +32,8 @@ bool find_wayland_globals(
     struct wl_display *display, OutputCallback create_output_callback
 );
 
+void cleanup_wayland_globals();
+
 /**
     Returns whether the specified output still exists.
 */

@@ -515,8 +515,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    // TODO: clean up wayland_globals
-
+    cleanup_wayland_globals();
     wl_display_disconnect(display);
     return 0;
 }
