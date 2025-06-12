@@ -474,7 +474,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 # }
 # ''')
 
-    print(ctx.declarations)
+    # print(ctx.declarations)
 
     declaration_parts = [
 '''#pragma once
