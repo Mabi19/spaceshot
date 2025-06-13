@@ -33,7 +33,7 @@ def constantify_type_signature(ident: str):
 
 class DeclarationType(ABC):
     @abstractmethod
-    def generate_c(self, indent: str) -> str | None:
+    def generate_c(self) -> str | None:
         ...
 
     def get_dependent_types(self) -> list[DeclarationType]:
@@ -51,7 +51,7 @@ class DeclarationType(ABC):
 class DeclarationSimpleType(DeclarationType):
     c_name: str
     vala_name: str | None = None
-    def generate_c(self, indent: str):
+    def generate_c(self):
         return None
 
     def get_c_name(self):
@@ -66,15 +66,15 @@ class DeclarationEnum(DeclarationType):
     members: list[str]
     comment: str | None = None
 
-    def generate_c(self, indent: str):
+    def generate_c(self):
         parts = []
         if self.comment:
-            parts.append(f"{indent}/* {self.comment} */")
-        parts.append(f"{indent}typedef enum {{")
+            parts.append(f"/* {self.comment} */")
+        parts.append(f"typedef enum {{")
         for member in self.members:
             enum_value = (pascal_to_snake_case(self.name) + "_" + member).upper()
-            parts.append(f"{indent}    CONFIG_{enum_value};")
-        parts.append(f"{indent}}} Config{self.name};\n")
+            parts.append(f"    CONFIG_{enum_value};")
+        parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
     def get_c_name(self):
@@ -89,14 +89,14 @@ class DeclarationStruct(DeclarationType):
     props: dict[str, DeclarationType]
     comment: str | None = None
 
-    def generate_c(self, indent: str):
+    def generate_c(self):
         parts = []
         if self.comment:
-            parts.append(f"{indent}/* {self.comment} */")
-        parts.append(f"{indent}typedef struct {{")
+            parts.append(f"/* {self.comment} */")
+        parts.append(f"typedef struct {{")
         for key, type in self.props.items():
-            parts.append(f"{indent}    {type.get_c_name()}{key.replace("-", "_")};")
-        parts.append(f"{indent}}} Config{self.name};\n")
+            parts.append(f"    {type.get_c_name()}{key.replace("-", "_")};")
+        parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
     def get_dependent_types(self):
@@ -119,7 +119,7 @@ class DeclarationVariantStruct(DeclarationType):
         '''Whether this variant struct will be generated as a pure enum.'''
         return len(self.props) == 0
 
-    def generate_c(self, indent: str):
+    def generate_c(self):
         return "// TODO: generate " + self.name + "\n"
 
     def get_c_name(self):
@@ -489,7 +489,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 
             generated_names.add(c_name)
             generate_declarations(decl.get_dependent_types(), generated_names)
-            decl_c = decl.generate_c("")
+            decl_c = decl.generate_c()
             if decl_c:
                 declaration_parts.append(decl_c)
     generate_declarations(ctx.declarations, set())
