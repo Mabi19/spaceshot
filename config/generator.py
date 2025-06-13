@@ -9,6 +9,7 @@ import re
 
 # Quirks:
 # - strings will not clean up properly when in variants (they aren't very useful in variants anyway)
+# - Length and Color types have to be used or otherwise the .c won't compile, as they're included lazily.
 
 #* The Declaration* classes should be expanded a little.
 # The main struct is mapped to a Vala compact class, but sub-structs should be regular structs.
