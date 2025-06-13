@@ -15,12 +15,6 @@ import re
 # I think the best way to handle this would be a flag passed into generate_vala.
 # Also, in Vala, the Config prefix is implied by the context. It shouldn't be hard-coded in everywhere
 # but instead added during generation.
-# It might be worth it to add comment fields and DeclarationEnums, so that the predefined simple types
-# can be expressed in terms of them.
-
-# TODO: Get rid of the indent parameters on DeclarationType and related.
-# There is no nesting, so no need to track indents.
-# Keep in mind that Vala will be inside of a namespace, so it +4 spaces for everything.
 
 def snake_case_to_pascal(x: str):
     return "".join(part.capitalize() for part in x.split("_"))
@@ -113,14 +107,34 @@ class DeclarationVariantStruct(DeclarationType):
     '''A struct containing a type attribute of enum type, and its other members wrapped in a union.'''
     name: str
     options: list[str]
-    props: dict[str, str]
+    props: dict[str, DeclarationType]
 
-    def is_bare_struct(self):
+    def is_empty_struct(self):
         '''Whether this variant struct will be generated as a pure enum.'''
         return len(self.props) == 0
 
     def generate_c(self):
-        return "// TODO: generate " + self.name + "\n"
+        if self.is_empty_struct():
+            return DeclarationEnum(self.name, self.options).generate_c()
+
+        parts = []
+        parts.append(f"typedef enum {{")
+        for option in self.options:
+            enum_value = (pascal_to_snake_case(self.name) + "_" + option).upper()
+            parts.append(f"    CONFIG_{enum_value};")
+        parts.append(f"}} Config{self.name}Type;\n")
+
+        parts.append(f"typedef struct {{")
+        parts.append(f"    Config{self.name}Type type;")
+        parts.append(f"    union {{")
+        for key, type in self.props.items():
+            parts.append(f"        {type.get_c_name()}{key.replace("-", "_")};")
+        parts.append(f"    }};")
+        parts.append(f"}} Config{self.name};\n")
+        return "\n".join(parts)
+
+    def get_dependent_types(self):
+        return list(self.props.values())
 
     def get_c_name(self):
         return "Config" + self.name + " "
