@@ -1,3 +1,4 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import re
@@ -27,10 +28,16 @@ def snake_case_to_pascal(x: str):
 def pascal_to_snake_case(x: str):
     return re.sub(r'(?<!^)(?=[A-Z])', '_', x).lower()
 
+def constantify_type_signature(ident: str):
+    return ident.replace(".", "_").replace("'", "").upper()
+
 class DeclarationType(ABC):
     @abstractmethod
-    def generate_c(self, indent: str) -> str:
+    def generate_c(self, indent: str) -> str | None:
         ...
+
+    def get_dependent_types(self) -> list[DeclarationType]:
+        return []
 
     @abstractmethod
     def get_c_name(self) -> str:
@@ -45,7 +52,7 @@ class DeclarationSimpleType(DeclarationType):
     c_name: str
     vala_name: str | None = None
     def generate_c(self, indent: str):
-        raise TypeError("This type is simple, and doesn't need to be generated")
+        return None
 
     def get_c_name(self):
         return self.c_name
@@ -92,6 +99,9 @@ class DeclarationStruct(DeclarationType):
         parts.append(f"{indent}}} Config{self.name};\n")
         return "\n".join(parts)
 
+    def get_dependent_types(self):
+        return list(self.props.values())
+
     def get_c_name(self):
         return "Config" + self.name + " "
 
@@ -127,9 +137,6 @@ class DeclarationContext:
     def add(self, obj: DeclarationType):
         self.declarations.append(obj)
 
-def constantify_type_signature(ident: str):
-    return ident.replace(".", "_").replace("'", "").upper()
-
 class BaseType(ABC):
     condition: str | None
 
@@ -141,7 +148,7 @@ class BaseType(ABC):
         return variant(self, other)
 
     @abstractmethod
-    def get_declaration_type(self, ctx: DeclarationContext, qualified_name: str) -> DeclarationType:
+    def get_declaration_type(self, qualified_name: str) -> DeclarationType:
         ...
 
     @abstractmethod
@@ -195,17 +202,16 @@ class variant(BaseType):
     def _get_option_enum(self, qualified_name: str, option: BaseType):
         return f"CONFIG_{constantify_type_signature(qualified_name)}_{constantify_type_signature(option.get_type_signature())}"
 
-    def get_declaration_type(self, ctx: DeclarationContext, qualified_name: str):
+    def get_declaration_type(self, qualified_name: str):
         pascal_name = snake_case_to_pascal(qualified_name.replace("-", "_").replace(".", "_"))
         value_struct = DeclarationVariantStruct(pascal_name, [], {})
 
         for option in self.options:
             type_sig = option.get_type_signature()
             if not isinstance(option, enum):
-                value_struct.props[f"v_{type_sig}"] = option.get_declaration_type(ctx, pascal_name + type_sig.capitalize())
+                value_struct.props[f"v_{type_sig}"] = option.get_declaration_type(pascal_name + type_sig.capitalize())
             value_struct.options.append(constantify_type_signature(type_sig))
 
-        ctx.add(value_struct)
         return value_struct
 
     def get_parse_expr(self):
@@ -245,7 +251,7 @@ class enum(BaseType):
         super()
         self.name = name
 
-    def get_declaration_type(self, ctx, qualified_name):
+    def get_declaration_type(self, qualified_name):
         raise TypeError("Enum types do not support generating a C type")
 
     def get_parse_expr(self):
@@ -266,10 +272,8 @@ class enum(BaseType):
     def get_type_signature(self):
         return f"'{self.name}'"
 
-
-
 class string(BaseType):
-    def get_declaration_type(self, ctx, qualified_name):
+    def get_declaration_type(self, qualified_name):
         return DeclarationSimpleType("char *", "string ")
 
     def get_parse_expr(self):
@@ -280,31 +284,35 @@ class string(BaseType):
 {indent}conf->{c_key} = strdup(x);''';
 
 class bool(BaseType):
-    def get_declaration_type(self, ctx, qualified_name):
+    def get_declaration_type(self, qualified_name):
         return DeclarationSimpleType("bool ")
 
     def get_parse_expr(self):
         return "config_parse_bool(&x, value)"
 
 class int(BaseType):
-    def get_declaration_type(self, ctx, qualified_name):
+    def get_declaration_type(self, qualified_name):
         return DeclarationSimpleType("int ")
 
     def get_parse_expr(self):
         return "config_parse_int(&x, value)"
 
 class color(BaseType):
-    def get_declaration_type(self, ctx, qualified_name):
-        # TODO: make this generate the DeclarationStruct inline, like a variant
-        # this would need proper deduping inside DeclarationContext
-        return DeclarationSimpleType("ConfigColor ", "Color ")
+    def get_declaration_type(self, qualified_name):
+        return DeclarationStruct("Color", {
+            "r": DeclarationSimpleType("float "),
+            "g": DeclarationSimpleType("float "),
+            "b": DeclarationSimpleType("float "),
+            "a": DeclarationSimpleType("float "),
+        }, "A 4-float color with straight alpha.")
 
     def get_parse_expr(self):
         return "config_parse_color(&x, value)"
 
 class length(BaseType):
-    def get_declaration_type(self, ctx, qualified_name):
-        return DeclarationSimpleType("ConfigLength ", "Length ")
+    def get_declaration_type(self, qualified_name):
+        length_unit = DeclarationEnum("LengthUnit", ["PX"])
+        return DeclarationStruct("Length", { "value": DeclarationSimpleType("double "), "unit": length_unit })
 
     def get_parse_expr(self):
         return "config_parse_length(&x, value)"
@@ -446,21 +454,12 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
                 assert name is None
                 struct.props[key] = traverse_section(ctx, type, key)
             else:
-                struct.props[key] = type.get_declaration_type(ctx, qualified_name)
+                struct.props[key] = type.get_declaration_type(qualified_name)
 
         ctx.add(struct)
         return struct
 
     ctx = DeclarationContext()
-    length_unit = DeclarationEnum("LengthUnit", ["PX"])
-    ctx.add(length_unit)
-    ctx.add(DeclarationStruct("Length", { "value": DeclarationSimpleType("double "), "unit": length_unit }))
-    ctx.add(DeclarationStruct("Color", {
-        "r": DeclarationSimpleType("float "),
-        "g": DeclarationSimpleType("float "),
-        "b": DeclarationSimpleType("float "),
-        "a": DeclarationSimpleType("float "),
-    }, "A 4-float color with straight alpha."))
     traverse_section(ctx, props, name=None)
 
 #     vapi_parts.append('''
@@ -482,10 +481,18 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 // IWYU pragma: private; include <config/config.h>
 ''',
     ]
-    for decl in ctx.declarations:
-        decl_c = decl.generate_c("")
-        declaration_parts.append(decl_c)
+    def generate_declarations(decls: list[DeclarationType], generated_names: set[str]):
+        for decl in decls:
+            c_name = decl.get_c_name()
+            if c_name in generated_names:
+                continue
 
+            generated_names.add(c_name)
+            generate_declarations(decl.get_dependent_types(), generated_names)
+            decl_c = decl.generate_c("")
+            if decl_c:
+                declaration_parts.append(decl_c)
+    generate_declarations(ctx.declarations, set())
 
     config_h = str.join("\n", declaration_parts)
     print(config_h)
