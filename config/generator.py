@@ -11,12 +11,6 @@ import re
 # - strings will not clean up properly when in variants (they aren't very useful in variants anyway)
 # - Length and Color types have to be used or otherwise the .c won't compile, as they're included lazily.
 
-#* The Declaration* classes should be expanded a little.
-# The main struct is mapped to a Vala compact class, but sub-structs should be regular structs.
-# I think the best way to handle this would be a flag passed into generate_vala.
-# Also, in Vala, the Config prefix is implied by the context. It shouldn't be hard-coded in everywhere
-# but instead added during generation.
-
 def snake_case_to_pascal(x: str):
     return "".join(part.capitalize() for part in x.split("_"))
 
@@ -123,7 +117,7 @@ class DeclarationStruct(DeclarationType):
         else:
             parts.append(f"    public struct {self.name} {{")
         for key, type in self.props.items():
-            parts.append(f"        {type.get_vala_name()}{key.replace("-", "_")};")
+            parts.append(f"        {"public " if self.as_root else ""}{type.get_vala_name()}{key.replace("-", "_")};")
         parts.append(f"    }}\n")
         return "\n".join(parts)
 
