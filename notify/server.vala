@@ -87,7 +87,7 @@ public class NotifyServer: Object {
             case "edit":
                 try {
                     string[] argvp;
-                    Shell.parse_argv(conf.notify_edit_command, out argvp);
+                    Shell.parse_argv(conf.notify.edit_command, out argvp);
                     bool has_found = false;
                     for (int i = 0; i < argvp.length; i++) {
                         if (argvp[i] == "{{path}}") {
@@ -147,14 +147,14 @@ public class NotifyServer: Object {
         hints.insert("image-path", new Variant("s", path));
 
         // TODO: make this smarter: detect if server has markup
-        var body_template = did_copy ? conf.notify_body_copy : conf.notify_body_nocopy;
+        var body_template = did_copy ? conf.notify.body_copy : conf.notify.body_nocopy;
         var body = body_template.replace("{{path}}", path);
 
         uint id = this.notification_service.notify(
             "Spaceshot",
             0,
             "",
-            conf.notify_summary,
+            conf.notify.summary,
             body,
             ACTIONS,
             hints,
