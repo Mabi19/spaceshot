@@ -31,6 +31,10 @@ class DeclarationType(ABC):
     def generate_c(self) -> str | None:
         ...
 
+    @abstractmethod
+    def generate_vala(self) -> str | None:
+        ...
+
     def get_dependent_types(self) -> list[DeclarationType]:
         return []
 
@@ -47,6 +51,9 @@ class DeclarationSimpleType(DeclarationType):
     c_name: str
     vala_name: str | None = None
     def generate_c(self):
+        return None
+
+    def generate_vala(self):
         return None
 
     def get_c_name(self):
@@ -72,6 +79,16 @@ class DeclarationEnum(DeclarationType):
         parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
+    def generate_vala(self):
+        parts = []
+        if self.comment:
+            parts.append(f"    /* {self.comment} */")
+        parts.append(f"    public enum {self.name} {{")
+        for member in self.members:
+            parts.append(f"        {member.upper()},")
+        parts.append(f"    }}\n")
+        return "\n".join(parts)
+
     def get_c_name(self):
         return "Config" + self.name + " "
 
@@ -83,6 +100,7 @@ class DeclarationStruct(DeclarationType):
     name: str
     props: dict[str, DeclarationType]
     comment: str | None = None
+    as_root: bool = False
 
     def generate_c(self):
         parts = []
@@ -94,6 +112,21 @@ class DeclarationStruct(DeclarationType):
         parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
+    def generate_vala(self):
+        parts = []
+        if self.comment:
+            parts.append(f"    /* {self.comment} */")
+        if self.as_root:
+            parts.append(f'    [CCode(destroy_function = "", cname = "Config")]')
+            parts.append(f"    [Compact]")
+            parts.append(f"    public class Config {{")
+        else:
+            parts.append(f"    public struct {self.name} {{")
+        for key, type in self.props.items():
+            parts.append(f"        {type.get_vala_name()}{key.replace("-", "_")};")
+        parts.append(f"    }}\n")
+        return "\n".join(parts)
+
     def get_dependent_types(self):
         return list(self.props.values())
 
@@ -101,7 +134,10 @@ class DeclarationStruct(DeclarationType):
         return "Config" + self.name + " "
 
     def get_vala_name(self):
-        return self.name + " "
+        if self.as_root:
+            return "Config "
+        else:
+            return self.name + " "
 
 @dataclass
 class DeclarationVariantStruct(DeclarationType):
@@ -132,6 +168,23 @@ class DeclarationVariantStruct(DeclarationType):
             parts.append(f"        {type.get_c_name()}{key.replace("-", "_")};")
         parts.append(f"    }};")
         parts.append(f"}} Config{self.name};\n")
+        return "\n".join(parts)
+
+    def generate_vala(self):
+        if self.is_empty_struct():
+            return DeclarationEnum(self.name, self.options).generate_vala()
+        parts = []
+        parts.append(f"    public enum {self.name}Type {{")
+        for option in self.options:
+            parts.append(f"        {option.upper()},")
+        parts.append(f"    }}\n")
+
+        parts.append(f"    struct {self.name} {{")
+        parts.append(f"        {self.name}Type type;")
+        for key, type in self.props.items():
+            parts.append(f"        {type.get_vala_name()}{key.replace("-", "_")};")
+        parts.append(f"    }}\n")
+
         return "\n".join(parts)
 
     def get_dependent_types(self):
@@ -338,26 +391,7 @@ def config(props: dict[str, BaseType | dict[str, BaseType]]):
     vapi_parts = [
 '''
 [CCode(cheader_filename = "config.h", lower_case_cprefix = "config_", cprefix = "Config")]
-namespace SpaceshotConfig {
-    public enum LengthUnit {
-        PX
-    }
-
-    public struct Length {
-        double value;
-        LengthUnit unit;
-    }
-
-    public struct Color {
-        float r;
-        float g;
-        float b;
-        float a;
-    }
-
-    [CCode(destroy_function = "", cname = "Config")]
-    [Compact]
-    public class Config {'''
+namespace SpaceshotConfig {'''
     ]
 
     definition_parts = [
@@ -459,7 +493,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     ]
 
     def traverse_section(ctx: DeclarationContext, props: dict[str, BaseType | dict[str, BaseType]], name: str | None) -> DeclarationStruct:
-        struct = DeclarationStruct(snake_case_to_pascal(name or ""), {})
+        struct = DeclarationStruct(snake_case_to_pascal(name or ""), {}, None, as_root=name is None)
 
         for key, type in props.items():
             c_name = key.replace("-", "_")
@@ -476,17 +510,6 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 
     ctx = DeclarationContext()
     traverse_section(ctx, props, name=None)
-
-#     vapi_parts.append('''
-#     }
-
-#     unowned Config get();
-#     [CCode(array_length = false, array_null_terminated = true)]
-#     unowned string[] get_locations();
-#     void load_file(string path);
-#     void load();
-# }
-# ''')
 
     # print(ctx.declarations)
 
@@ -507,13 +530,26 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
             decl_c = decl.generate_c()
             if decl_c:
                 declaration_parts.append(decl_c)
+
+            decl_vala = decl.generate_vala()
+            if decl_vala:
+                vapi_parts.append(decl_vala)
+
     generate_declarations(ctx.declarations, set())
 
+    vapi_parts.append('''    unowned Config get();
+    [CCode(array_length = false, array_null_terminated = true)]
+    unowned string[] get_locations();
+    void load_file(string path);
+    void load();
+}
+''')
+
     config_h = str.join("\n", declaration_parts)
-    print(config_h)
+    config_vapi = str.join("\n", vapi_parts)
 
     config_c = str.join("\n", definition_parts)
-    config_vapi = str.join("\n", vapi_parts)
+    print(config_c)
 
     return config_c, config_h, config_vapi
 
