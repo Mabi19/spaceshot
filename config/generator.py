@@ -75,7 +75,7 @@ class DeclarationEnum(DeclarationType):
         parts.append(f"typedef enum {{")
         for member in self.members:
             enum_value = (pascal_to_snake_case(self.name) + "_" + member).upper()
-            parts.append(f"    CONFIG_{enum_value};")
+            parts.append(f"    CONFIG_{enum_value},")
         parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
@@ -158,7 +158,7 @@ class DeclarationVariantStruct(DeclarationType):
         parts.append(f"typedef enum {{")
         for option in self.options:
             enum_value = (pascal_to_snake_case(self.name) + "_" + option).upper()
-            parts.append(f"    CONFIG_{enum_value};")
+            parts.append(f"    CONFIG_{enum_value},")
         parts.append(f"}} Config{self.name}Type;\n")
 
         parts.append(f"typedef struct {{")
@@ -179,7 +179,7 @@ class DeclarationVariantStruct(DeclarationType):
             parts.append(f"        {option.upper()},")
         parts.append(f"    }}\n")
 
-        parts.append(f"    struct {self.name} {{")
+        parts.append(f"    public struct {self.name} {{")
         parts.append(f"        {self.name}Type type;")
         for key, type in self.props.items():
             parts.append(f"        {type.get_vala_name()}{key.replace("-", "_")};")
@@ -580,6 +580,5 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
     definition_parts.append("}\n")
 
     config_c = str.join("\n", definition_parts)
-    print(config_c)
 
     return config_c, config_h, config_vapi
