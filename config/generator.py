@@ -200,7 +200,7 @@ class DeclarationArrayStruct(DeclarationType):
         parts = []
         parts.append(f"typedef struct {{")
         parts.append(f"    size_t count;")
-        parts.append(f"    {self.member_type.get_c_name()}* items;")
+        parts.append(f"    {self.member_type.get_c_name()}*items;")
         parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
@@ -379,7 +379,14 @@ class array(BaseType):
         raise TypeError("Array types do not support conditions, add checks on their members instead")
 
     def generate_parse_code(self, qualified_c_name, indent):
-        parts = [f"{indent}// TODO: generate parse code for {qualified_c_name}"]
+        # TODO: remember to always clean up the array if not assigned!
+        array_struct_name = "Config" + snake_case_to_pascal(qualified_c_name.replace("-", "_").replace(".", "_"))
+        array_item_name = array_struct_name + "Item"
+
+        parts = []
+        parts.append(f"{indent}int item_count = count_commas(value) + 1;")
+        parts.append(f"{indent}{array_struct_name} array = {{.count = item_count, .items = malloc(sizeof({array_item_name}) * item_count)}};")
+        # TODO: convert commas into nulls and generate interior parsing
 
         return "\n".join(parts)
 
@@ -533,6 +540,17 @@ static bool config_parse_length(ConfigLength *x, char *value) {
     }
 
     return true;
+}
+
+static int count_commas(const char *str) {
+    int result = 0;
+    while (*str != '\\0') {
+        if (*str == ',') {
+            result++;
+        }
+        str++;
+    }
+    return result;
 }
 
 void config_parse_entry(void *data, const char *section, const char *key, char *value) {
