@@ -191,16 +191,19 @@ class DeclarationVariantStruct(DeclarationType):
         return self.name + " "
 
 @dataclass
-class DeclarationArrayStruct(DeclarationType):
-    '''A struct containing an array of things and its count'''
+class DeclarationTokenListStruct(DeclarationType):
+    '''A struct containing an array of enum members and its count'''
     name: str
-    member_type: DeclarationType
+    tokens: list[str]
+
+    def _get_enum(self):
+        return DeclarationEnum(self.name + "Item", self.tokens, None)
 
     def generate_c(self):
         parts = []
         parts.append(f"typedef struct {{")
         parts.append(f"    size_t count;")
-        parts.append(f"    {self.member_type.get_c_name()}*items;")
+        parts.append(f"    {self._get_enum().get_c_name()}*items;")
         parts.append(f"}} Config{self.name};\n")
         return "\n".join(parts)
 
@@ -208,12 +211,12 @@ class DeclarationArrayStruct(DeclarationType):
         parts = []
         parts.append(f"    public struct {self.name} {{")
         parts.append(f'        [CCode(array_length_cname = "count", array_length_type = "size_t")]')
-        parts.append(f"        {self.member_type.get_vala_name().strip()}[] items;")
+        parts.append(f"        {self._get_enum().get_vala_name().strip()}[] items;")
         parts.append(f"    }}\n")
         return "\n".join(parts)
 
     def get_dependent_types(self):
-        return [self.member_type]
+        return [self._get_enum()]
 
     def get_c_name(self):
         return "Config" + self.name + " "
@@ -258,8 +261,7 @@ class BaseType(ABC):
 {indent}}}'''
 
         return f"""{indent}{self.get_declaration_type(qualified_c_name).get_c_name()}x;
-{indent}if ({self.get_parse_expr()}) {{
-{generate_condition_check(self, indent + "    ") if self.condition else ""}
+{indent}if ({self.get_parse_expr()}) {{{"\n" + generate_condition_check(self, indent + "    ") if self.condition else ""}
 {self.generate_insert_code(qualified_c_name, indent + "    ")}{f"\n{indent}    {run_on_success}" if run_on_success else ""}
 {indent}    return;
 {indent}}}"""
@@ -311,7 +313,7 @@ class variant(BaseType):
     def require(self):
         raise TypeError("Variant types do not support conditions, add checks on their members instead")
 
-    def generate_parse_code(self, qualified_c_name, indent):
+    def generate_parse_code(self, qualified_c_name, indent, run_on_success=None):
         parts = []
         no_union_members = all(isinstance(option, enum) for option in self.options)
         for option in self.options:
@@ -357,16 +359,16 @@ class enum(BaseType):
     def get_type_signature(self):
         return f"'{self.name}'"
 
-class array(BaseType):
-    '''A comma-delimited list of a specified-type.'''
-    member_type: BaseType
-    def __init__(self, member_type: BaseType):
+class tokenlist(BaseType):
+    '''A comma-delimited list of predefined tokens.'''
+    tokens: list[str]
+    def __init__(self, *members: str):
         super()
-        self.member_type = member_type
+        self.tokens = list(members)
 
     def get_declaration_type(self, qualified_name: str):
         pascal_name = snake_case_to_pascal(qualified_name.replace("-", "_").replace(".", "_"))
-        struct = DeclarationArrayStruct(pascal_name, self.member_type.get_declaration_type(qualified_name + "_item"))
+        struct = DeclarationTokenListStruct(pascal_name, self.tokens)
         return struct
 
     def get_parse_expr(self):
@@ -378,23 +380,55 @@ class array(BaseType):
     def require(self):
         raise TypeError("Array types do not support conditions, add checks on their members instead")
 
-    def generate_parse_code(self, qualified_c_name, indent):
+    def generate_parse_code(self, qualified_c_name, indent, run_on_success=None):
         # TODO: remember to always clean up the array if not assigned!
         array_struct_name = "Config" + snake_case_to_pascal(qualified_c_name.replace("-", "_").replace(".", "_"))
         array_item_name = array_struct_name + "Item"
 
         parts = []
-        parts.append(f"{indent}int item_count = count_commas(value) + 1;")
+        parts.append(f"{indent}size_t item_count = count_commas(value) + 1;")
         parts.append(f"{indent}{array_struct_name} array = {{.count = item_count, .items = malloc(sizeof({array_item_name}) * item_count)}};")
-        # TODO: convert commas into nulls and generate interior parsing
+        parts.append(f"""{indent}char *part_start = value;
+{indent}bool success = true;
+{indent}for (size_t i = 0; i < item_count; i++) {{
+{indent}    char *part_end = part_start;
+{indent}    while (*part_end != '\\0' && *part_end != ',') part_end++;
+{indent}    char *part_stripped_end = part_end;
+{indent}    while (isspace(*(part_stripped_end - 1))) part_stripped_end--;
+{indent}    while (isspace(*part_start)) part_start++;
+{indent}    *part_stripped_end = '\\0';""")
 
+        if_chain = []
+        array_item_prefix = pascal_to_snake_case(array_item_name).upper()
+        for token in self.tokens:
+            token_enum_name = f"{array_item_prefix}_{token}".upper()
+            if_chain.append(f"""if (strcmp(part_start, "{token}") == 0) {{
+{indent}        array.items[i] = {token_enum_name};
+{indent}    }}""")
+
+        if_chain.append(f"""{{
+{indent}        config_warn("unexpected token '%s' (should be one of '{"', '".join(self.tokens)}')", part_start);
+{indent}        success = false;
+{indent}    }}""")
+
+        parts.append(indent + "    " + " else ".join(if_chain))
+
+        parts.append(f"{indent}    part_start = part_end + 1;")
+        parts.append(f"{indent}}}")
+
+        parts.append(f"""
+{indent}if (success) {{
+{indent}    free(conf->{qualified_c_name}.items);
+{indent}    conf->{qualified_c_name} = array;
+{indent}    return;
+{indent}}}""")
+
+        # if control flow gets here, the array was unused
+        parts.append(f"{indent}free(array.items);")
         return "\n".join(parts)
 
     def get_type_signature(self):
-        member_sig = self.member_type.get_type_signature()
-        if " " in member_sig:
-            member_sig = f"({member_sig})"
-        return f"{member_sig}[]"
+        return f"tokenlist<{" | ".join(self.tokens)}>"
 
 class string(BaseType):
     def get_declaration_type(self, qualified_name):
@@ -454,6 +488,7 @@ namespace SpaceshotConfig {'''
 '''#include <spaceshot-config-struct-decl.h>
 #include <ctype.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -542,8 +577,8 @@ static bool config_parse_length(ConfigLength *x, char *value) {
     return true;
 }
 
-static int count_commas(const char *str) {
-    int result = 0;
+static size_t count_commas(const char *str) {
+    size_t result = 0;
     while (*str != '\\0') {
         if (*str == ',') {
             result++;
