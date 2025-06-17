@@ -13,7 +13,7 @@ config_c, config_h, config_vapi = sc.config({
         "body-copy": sc.string(),
         "body-nocopy": sc.string(),
         "edit-command": sc.string(),
-        "actions": sc.array(sc.enum("open") | sc.enum("edit") | sc.enum("directory"))
+        "actions": sc.tokenlist("open", "edit", "directory")
     },
     "region": {
         "selection-border-color": sc.color() | sc.enum("smart"),
