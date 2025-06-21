@@ -1,3 +1,9 @@
+enum NotificationAction {
+    OPEN,
+    EDIT,
+    DIRECTORY,
+}
+
 [DBus(name = "land.mabi.SpaceshotNotify")]
 public class NotifyServer: Object {
     private NotificationService notification_service;
@@ -70,6 +76,32 @@ public class NotifyServer: Object {
 
         switch (key) {
             case "default":
+                // TODO: read this from config
+                exec_action(NotificationAction.OPEN, path);
+                break;
+            case "open":
+                exec_action(NotificationAction.OPEN, path);
+                break;
+            case "edit":
+                exec_action(NotificationAction.EDIT, path);
+                break;
+            case "directory":
+                exec_action(NotificationAction.DIRECTORY, path);
+                break;
+            default:
+                assert_not_reached();
+        }
+    }
+
+    private void handle_notification_closed(uint id, uint reason) {
+        if (this.active_notifications.remove(id)) {
+            stdout.printf("notification closed: %u (reason = %u)\n", id, reason);
+        }
+    }
+
+    private void exec_action(NotificationAction action, string path) {
+        switch (action) {
+            case NotificationAction.OPEN:
                 try {
                     // If the server is set up to ever exit, child processes will need to be cleaned up
                     Process.spawn_async(
@@ -84,7 +116,7 @@ public class NotifyServer: Object {
                     printerr("Couldn't spawn xdg-open: %s\n", e.message);
                 }
                 break;
-            case "edit":
+            case NotificationAction.EDIT:
                 try {
                     string[] argvp;
                     Shell.parse_argv(conf.notify.edit_command, out argvp);
@@ -113,7 +145,7 @@ public class NotifyServer: Object {
                     printerr("Couldn't spawn edit tool: %s\n", e.message);
                 }
                 break;
-            case "directory":
+            case NotificationAction.DIRECTORY:
                 Bus.get_proxy.begin<FileManager>(
                     BusType.SESSION,
                     "org.freedesktop.FileManager1",
@@ -130,19 +162,37 @@ public class NotifyServer: Object {
                     }
                 );
                 break;
-            default:
-                assert_not_reached();
-        }
-    }
-
-    private void handle_notification_closed(uint id, uint reason) {
-        if (this.active_notifications.remove(id)) {
-            stdout.printf("notification closed: %u (reason = %u)\n", id, reason);
         }
     }
 
     public void notify_for_file(string path, bool did_copy) throws DBusError, IOError {
-        const string[] ACTIONS = {"default", "Open", "edit", "Edit", "directory", "View in directory"};
+        var button_count = conf.notify.actions.items.length;
+
+        string[] actions = new string[2 + 2 * button_count];
+        int i = 0;
+        actions[i] = "default";
+        // TODO: set this according to config
+        actions[i + 1] = "Open";
+        i += 2;
+        foreach (var act in conf.notify.actions.items) {
+            switch (act) {
+                case SpaceshotConfig.NotifyActionsItem.OPEN:
+                    actions[i] = "open";
+                    actions[i + 1] = "Open";
+                    break;
+                case SpaceshotConfig.NotifyActionsItem.EDIT:
+                    actions[i] = "edit";
+                    actions[i + 1] = "Edit";
+                    break;
+                case SpaceshotConfig.NotifyActionsItem.DIRECTORY:
+                    actions[i] = "directory";
+                    actions[i + 1] = "View in directory";
+                    break;
+                default:
+                    assert_not_reached();
+            }
+            i += 2;
+        }
         var hints = new HashTable<string, Variant>(str_hash, str_equal);
         hints.insert("image-path", new Variant("s", path));
 
@@ -156,7 +206,7 @@ public class NotifyServer: Object {
             "",
             conf.notify.summary,
             body,
-            ACTIONS,
+            actions,
             hints,
             -1
         );
