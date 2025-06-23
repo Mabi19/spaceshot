@@ -1,4 +1,5 @@
 #include "output-picker.h"
+#include "log.h"
 #include "picker-common.h"
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
@@ -11,9 +12,9 @@
 
 static void output_picker_render(void *user_data) {
     OutputPicker *picker = user_data;
-    if (picker->state == picker->last_drawn_state) {
-        return;
-    }
+    // if (picker->state == picker->last_drawn_state) {
+    //     return;
+    // }
 
     if (picker->state == OUTPUT_PICKER_ACTIVE) {
         wl_surface_attach(
@@ -148,8 +149,14 @@ OutputPicker *output_picker_new(
 }
 
 void output_picker_destroy(OutputPicker *picker) {
+    log_debug("destroying output picker %p\n", (void *)picker);
+
+    seat_dispatcher_remove_listener(
+        wayland_globals.seat_dispatcher, picker->surface
+    );
+
     shared_buffer_destroy(picker->background_buf);
-    shared_buffer_destroy(picker->background_buf);
+    shared_buffer_destroy(picker->background_inactive_buf);
 
     overlay_surface_destroy(picker->surface);
     free(picker);
