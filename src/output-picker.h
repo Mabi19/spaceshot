@@ -9,9 +9,19 @@ typedef void (*OutputPickerFinishCallback)(
     struct OutputPicker *picker, PickerFinishReason reason
 );
 
+typedef enum {
+    OUTPUT_PICKER_INACTIVE,
+    OUTPUT_PICKER_ACTIVE,
+    OUTPUT_PICKER_UNINITIALIZED,
+} OutputPickerState;
+
 typedef struct OutputPicker {
     OverlaySurface *surface;
     LabelSurface *label;
+
+    OutputPickerState state;
+    OutputPickerState last_drawn_state;
+    OutputPickerFinishCallback finish_callback;
 
     Image *background;
     SharedBuffer *background_buf;
