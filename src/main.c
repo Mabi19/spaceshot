@@ -20,8 +20,14 @@
 #include <unistd.h>
 #include <wayland-client.h>
 
+typedef enum {
+    PICKER_ENTRY_REGION,
+    PICKER_ENTRY_OUTPUT,
+} PickerListEntryType;
+
 typedef struct {
     void *picker;
+    PickerListEntryType type;
     Image *image;
     struct wl_list link;
 } PickerListEntry;
@@ -238,7 +244,14 @@ static struct wl_data_source *picker_finish_setup_copy() {
 }
 
 static void picker_entry_destroy(PickerListEntry *entry) {
-    region_picker_destroy(entry->picker);
+    switch (entry->type) {
+    case PICKER_ENTRY_REGION:
+        region_picker_destroy(entry->picker);
+        break;
+    case PICKER_ENTRY_OUTPUT:
+        output_picker_destroy(entry->picker);
+        break;
+    }
     image_destroy(entry->image);
     wl_list_remove(&entry->link);
     free(entry);
@@ -366,6 +379,7 @@ static void create_region_picker_for_output(
     PickerListEntry *entry = make_picker_entry(output, image);
     if (entry) {
         entry->picker = region_picker_new(output, image, region_picker_finish);
+        entry->type = PICKER_ENTRY_REGION;
     }
 }
 
@@ -375,6 +389,7 @@ static void create_output_picker_for_output(
     PickerListEntry *entry = make_picker_entry(output, image);
     if (entry) {
         entry->picker = output_picker_new(output, image, output_picker_finish);
+        entry->type = PICKER_ENTRY_OUTPUT;
     }
 }
 
