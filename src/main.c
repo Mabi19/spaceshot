@@ -236,14 +236,15 @@ static void region_picker_finish(
 ) {
     RegionPickerListEntry *entry, *tmp;
     Image *to_save = NULL;
-    struct wl_data_source *data_source;
+    struct wl_data_source *data_source = NULL;
+    bool should_copy = config_get()->copy_to_clipboard;
     wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
         if (entry->picker != picker) {
             continue;
         }
 
         if (reason == REGION_PICKER_FINISH_REASON_SELECTED) {
-            if (config_get()->copy_to_clipboard) {
+            if (should_copy) {
                 // Set up the copy while the picker's still alive
                 data_source = wl_data_device_manager_create_data_source(
                     wayland_globals.data_device_manager
@@ -296,7 +297,6 @@ static void region_picker_finish(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        bool should_copy = config_get()->copy_to_clipboard;
         if (should_copy) {
             wl_data_source_add_listener(
                 data_source, &clipboard_source_listener, out_data
