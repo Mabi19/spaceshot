@@ -204,6 +204,7 @@ static void overlay_surface_handle_frame(
     wl_callback_destroy(callback);
 
     OverlaySurface *surface = data;
+    surface->frame_callback = NULL;
     if (surface->has_queued_render) {
         // request a frame callback again, if another render is queued
         draw_immediate_and_request_frame(surface);
@@ -221,8 +222,11 @@ static struct wl_callback_listener frame_callback_listener = {
 
 static void draw_immediate_and_request_frame(OverlaySurface *surface) {
     surface->has_requested_frame = true;
-    struct wl_callback *callback = wl_surface_frame(surface->wl_surface);
-    wl_callback_add_listener(callback, &frame_callback_listener, surface);
+    assert(surface->frame_callback == NULL);
+    surface->frame_callback = wl_surface_frame(surface->wl_surface);
+    wl_callback_add_listener(
+        surface->frame_callback, &frame_callback_listener, surface
+    );
     overlay_surface_draw_immediate(surface);
     wl_surface_commit(surface->wl_surface);
 }
@@ -258,6 +262,12 @@ void overlay_surface_destroy(OverlaySurface *surface) {
     wp_viewport_destroy(surface->viewport);
     zwlr_layer_surface_v1_destroy(surface->layer_surface);
     wl_surface_destroy(surface->wl_surface);
+
+    // If a frame is pending, cancel the callback so that it doesn't try to draw
+    // after the surface was destroyed
+    if (surface->frame_callback) {
+        wl_callback_destroy(surface->frame_callback);
+    }
 
     free(surface);
 }

@@ -57,6 +57,8 @@ typedef struct {
     // Consumed by the SeatDispatcher
     enum wp_cursor_shape_device_v1_shape cursor_shape;
     void *user_data;
+    // used to safeguard against drawing frames after the surface is destroyed
+    struct wl_callback *frame_callback;
     // used for frame pacing
     bool has_requested_frame;
     bool has_queued_render;
