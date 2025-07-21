@@ -4,7 +4,6 @@
 #include "wayland/globals.h"
 #include <assert.h>
 #include <linux/input-event-codes.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -495,7 +494,8 @@ void seat_dispatcher_destroy(SeatDispatcher *dispatcher) {
     wl_seat_release(dispatcher->seat);
     if (dispatcher->pointer) {
         wl_pointer_release(dispatcher->pointer);
-        wp_cursor_shape_device_v1_destroy(dispatcher->pointer_data.shape_device
+        wp_cursor_shape_device_v1_destroy(
+            dispatcher->pointer_data.shape_device
         );
     }
     if (dispatcher->keyboard) {
