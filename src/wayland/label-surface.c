@@ -9,6 +9,7 @@
 #include <pango/pangocairo.h>
 #include <stdlib.h>
 #include <viewporter-client.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
 /**
@@ -160,6 +161,12 @@ LabelSurface *label_surface_new(
         result->fractional_scale, &fractional_scale_listener, result
     );
 
+    // Prevent mouse movement from going to the label's surface.
+    struct wl_region *empty_region =
+        wl_compositor_create_region(wayland_globals.compositor);
+    wl_surface_set_input_region(result->wl_surface, empty_region);
+    wl_region_destroy(empty_region);
+
     result->text = strdup(text);
     result->style = style;
     result->font_description = pango_font_description_new();
@@ -186,6 +193,14 @@ void label_surface_set_text(LabelSurface *label, const char *text) {
 void label_surface_show(LabelSurface *label) {
     render_buffer_attach_to_surface(label->buffer, label->wl_surface);
     wl_surface_commit(label->wl_surface);
+}
+
+void label_surface_set_position(
+    LabelSurface *label, double x, double y, LabelSurfaceAnchor anchor
+) {
+    // TODO: actually use anchor
+    assert(anchor == LABEL_SURFACE_ANCHOR_TOP_LEFT);
+    wl_subsurface_set_position(label->wl_subsurface, x, y);
 }
 
 void label_surface_destroy(LabelSurface *label) {

@@ -3,9 +3,17 @@
 #include <pango/pangocairo.h>
 #include <wayland-client.h>
 
-// TODO: Remove the requirement to call update_layout() and draw() manually.
-// The label should be redrawn automatically when its properties change, or when
-// the surface scale changes.
+typedef enum {
+    LABEL_SURFACE_ANCHOR_TOP_LEFT,
+    LABEL_SURFACE_ANCHOR_TOP,
+    LABEL_SURFACE_ANCHOR_TOP_RIGHT,
+    LABEL_SURFACE_ANCHOR_RIGHT,
+    LABEL_SURFACE_ANCHOR_BOTTOM_RIGHT,
+    LABEL_SURFACE_ANCHOR_BOTTOM,
+    LABEL_SURFACE_ANCHOR_BOTTOM_LEFT,
+    LABEL_SURFACE_ANCHOR_LEFT,
+    LABEL_SURFACE_ANCHOR_CENTER
+} LabelSurfaceAnchor;
 
 typedef struct {
     const char *font_family;
@@ -26,7 +34,6 @@ typedef struct {
     double scale;
     RenderBuffer *buffer;
     char *text;
-    // Note that the LabelSurface does not own the PangoFontDescription within.
     LabelSurfaceStyle style;
     PangoLayout *layout;
     PangoFontDescription *font_description;
@@ -54,5 +61,13 @@ void label_surface_set_text(LabelSurface *label, const char *text);
  * This function calls wl_surface_commit.
  */
 void label_surface_show(LabelSurface *label);
+
+/**
+ * Moves the label surface. It will be positioned such that the specified
+ * position in the parent's coordinate space is at the specified anchor.
+ */
+void label_surface_set_position(
+    LabelSurface *label, double x, double y, LabelSurfaceAnchor anchor
+);
 
 void label_surface_destroy(LabelSurface *label);

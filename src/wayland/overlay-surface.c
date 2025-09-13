@@ -1,10 +1,10 @@
 #include "overlay-surface.h"
-#include "cursor-shape-client.h"
 #include "log.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
 #include <assert.h>
 #include <cairo.h>
+#include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <memory.h>
 #include <stdio.h>

@@ -1,7 +1,9 @@
 #include "output-picker.h"
+#include "config/config.h"
 #include "log.h"
 #include "picker-common.h"
 #include "wayland/globals.h"
+#include "wayland/label-surface.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/render.h"
 #include "wayland/seat.h"
@@ -51,6 +53,8 @@ static void output_picker_handle_mouse(void *data, MouseEvent event) {
         event.buttons_released & POINTER_BUTTON_LEFT) {
         picker->finish_callback(picker, PICKER_FINISH_REASON_SELECTED);
     }
+
+    // TODO: move label out of the way if cursor is intersecting it
 }
 
 static void output_picker_handle_keyboard(void *data, KeyboardEvent event) {
@@ -86,6 +90,24 @@ OutputPicker *output_picker_new(
         },
         result
     );
+
+    result->label = label_surface_new(
+        result->surface->wl_surface,
+        output->name,
+        (LabelSurfaceStyle){
+            .font_family = "Sans",
+            .font_size = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 16},
+            .text_color = {.r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0},
+            .background_color = {.r = 0.0, .g = 0.0, .b = 0.0, .a = 0.75},
+            .padding_x = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 6.0},
+            .padding_y = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 4.0},
+            .corner_radius = 4.0
+        }
+    );
+    // label_surface_set_position(
+    //     result->label, 96.0, 32.0, LABEL_SURFACE_ANCHOR_TOP_LEFT
+    // );
+    label_surface_show(result->label);
 
     result->background = background;
     result->background_buf = shared_buffer_new(
@@ -158,6 +180,7 @@ void output_picker_destroy(OutputPicker *picker) {
     shared_buffer_destroy(picker->background_buf);
     shared_buffer_destroy(picker->background_inactive_buf);
 
+    label_surface_destroy(picker->label);
     overlay_surface_destroy(picker->surface);
     free(picker);
 }
