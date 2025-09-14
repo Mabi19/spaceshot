@@ -10,21 +10,28 @@
 #include "wayland/shared-memory.h"
 #include <cairo.h>
 #include <cursor-shape-client.h>
+#include <stdlib.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
+
+static const double LABEL_Y_OFFSET = 12;
 
 static void output_picker_render(void *user_data) {
     OutputPicker *picker = user_data;
-    if (picker->state == picker->last_drawn_state) {
-        return;
-    }
 
     label_surface_set_position(
         picker->label,
         picker->surface->logical_width / 2,
-        12,
-        LABEL_SURFACE_ANCHOR_TOP
+        picker->move_label_down
+            ? picker->surface->logical_height - LABEL_Y_OFFSET
+            : LABEL_Y_OFFSET,
+        picker->move_label_down ? LABEL_SURFACE_ANCHOR_BOTTOM
+                                : LABEL_SURFACE_ANCHOR_TOP
     );
     label_surface_show(picker->label);
+
+    if (picker->state == picker->last_drawn_state) {
+        return;
+    }
 
     if (picker->state == OUTPUT_PICKER_ACTIVE) {
         wl_surface_attach(
@@ -62,7 +69,20 @@ static void output_picker_handle_mouse(void *data, MouseEvent event) {
         picker->finish_callback(picker, PICKER_FINISH_REASON_SELECTED);
     }
 
-    // TODO: move label out of the way if cursor is intersecting it
+    int32_t label_width =
+        picker->label->device_width * picker->label->scale / 120.0;
+    int32_t label_height =
+        picker->label->device_height * picker->label->scale / 120.0;
+    int32_t center_x = picker->surface->logical_width / 2;
+
+    // intentionally a bit bigger than the label
+    bool new_move = fabs(center_x - event.surface_x) < label_width / 2.0 + 24 &&
+                    event.surface_y < label_height + LABEL_Y_OFFSET + 24;
+
+    if (picker->move_label_down != new_move) {
+        picker->move_label_down = new_move;
+        overlay_surface_queue_draw(picker->surface);
+    }
 }
 
 static void output_picker_handle_keyboard(void *data, KeyboardEvent event) {

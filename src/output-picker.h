@@ -22,6 +22,7 @@ typedef struct OutputPicker {
     OutputPickerState state;
     OutputPickerState last_drawn_state;
     OutputPickerFinishCallback finish_callback;
+    bool move_label_down;
 
     Image *background;
     SharedBuffer *background_buf;
