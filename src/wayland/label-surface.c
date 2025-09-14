@@ -117,6 +117,11 @@ static void label_surface_update(LabelSurface *label) {
 
     cairo_surface_flush(label->buffer->cairo_surface);
     TIMING_END(label_render);
+
+    if (label->visible) {
+        render_buffer_attach_to_surface(label->buffer, label->wl_surface);
+        wl_surface_commit(label->wl_surface);
+    }
 }
 
 static void preferred_scale_changed(
@@ -191,7 +196,21 @@ void label_surface_set_text(LabelSurface *label, const char *text) {
 }
 
 void label_surface_show(LabelSurface *label) {
+    if (label->visible) {
+        return;
+    }
+    label->visible = true;
+
     render_buffer_attach_to_surface(label->buffer, label->wl_surface);
+    wl_surface_commit(label->wl_surface);
+}
+
+void label_surface_hide(LabelSurface *label) {
+    if (!label->visible) {
+        return;
+    }
+    label->visible = false;
+    wl_surface_attach(label->wl_surface, NULL, 0, 0);
     wl_surface_commit(label->wl_surface);
 }
 

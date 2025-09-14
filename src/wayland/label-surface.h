@@ -37,6 +37,7 @@ typedef struct {
     LabelSurfaceStyle style;
     PangoLayout *layout;
     PangoFontDescription *font_description;
+    bool visible;
 
     uint32_t logical_width;
     uint32_t logical_height;
@@ -61,7 +62,11 @@ void label_surface_set_text(LabelSurface *label, const char *text);
  * This function calls wl_surface_commit.
  */
 void label_surface_show(LabelSurface *label);
-
+/**
+ * Hide the label surface (by attaching a null buffer to the surface).
+ * This function calls wl_surface_commit.
+ */
+void label_surface_hide(LabelSurface *label);
 /**
  * Moves the label surface. It will be positioned such that the specified
  * position in the parent's coordinate space is at the specified anchor.
