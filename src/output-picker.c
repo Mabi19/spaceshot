@@ -56,17 +56,13 @@ static void output_picker_handle_surface_close(void *user_data) {
 
 static void output_picker_handle_mouse(void *data, MouseEvent event) {
     OutputPicker *picker = data;
+    bool should_redraw = false;
     OutputPickerState new_state = event.focus == picker->surface->wl_surface
                                       ? OUTPUT_PICKER_ACTIVE
                                       : OUTPUT_PICKER_INACTIVE;
     if (new_state != picker->state) {
         picker->state = new_state;
-        overlay_surface_queue_draw(picker->surface);
-    }
-
-    if (picker->state == OUTPUT_PICKER_ACTIVE &&
-        event.buttons_released & POINTER_BUTTON_LEFT) {
-        picker->finish_callback(picker, PICKER_FINISH_REASON_SELECTED);
+        should_redraw = true;
     }
 
     int32_t label_width =
@@ -81,7 +77,16 @@ static void output_picker_handle_mouse(void *data, MouseEvent event) {
 
     if (picker->move_label_down != new_move) {
         picker->move_label_down = new_move;
+        should_redraw = true;
+    }
+
+    if (should_redraw) {
         overlay_surface_queue_draw(picker->surface);
+    }
+
+    if (picker->state == OUTPUT_PICKER_ACTIVE &&
+        event.buttons_released & POINTER_BUTTON_LEFT) {
+        picker->finish_callback(picker, PICKER_FINISH_REASON_SELECTED);
     }
 }
 
