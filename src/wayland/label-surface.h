@@ -4,15 +4,19 @@
 #include <wayland-client.h>
 
 typedef enum {
-    LABEL_SURFACE_ANCHOR_TOP_LEFT,
-    LABEL_SURFACE_ANCHOR_TOP,
-    LABEL_SURFACE_ANCHOR_TOP_RIGHT,
-    LABEL_SURFACE_ANCHOR_RIGHT,
-    LABEL_SURFACE_ANCHOR_BOTTOM_RIGHT,
-    LABEL_SURFACE_ANCHOR_BOTTOM,
-    LABEL_SURFACE_ANCHOR_BOTTOM_LEFT,
-    LABEL_SURFACE_ANCHOR_LEFT,
-    LABEL_SURFACE_ANCHOR_CENTER
+    LABEL_SURFACE_ANCHOR_CENTER = 0,
+    LABEL_SURFACE_ANCHOR_TOP = 1,
+    LABEL_SURFACE_ANCHOR_BOTTOM = 2,
+    LABEL_SURFACE_ANCHOR_LEFT = 4,
+    LABEL_SURFACE_ANCHOR_RIGHT = 8,
+    LABEL_SURFACE_ANCHOR_TOP_LEFT =
+        LABEL_SURFACE_ANCHOR_TOP | LABEL_SURFACE_ANCHOR_LEFT,
+    LABEL_SURFACE_ANCHOR_TOP_RIGHT =
+        LABEL_SURFACE_ANCHOR_TOP | LABEL_SURFACE_ANCHOR_RIGHT,
+    LABEL_SURFACE_ANCHOR_BOTTOM_LEFT =
+        LABEL_SURFACE_ANCHOR_BOTTOM | LABEL_SURFACE_ANCHOR_LEFT,
+    LABEL_SURFACE_ANCHOR_BOTTOM_RIGHT =
+        LABEL_SURFACE_ANCHOR_BOTTOM | LABEL_SURFACE_ANCHOR_RIGHT,
 } LabelSurfaceAnchor;
 
 typedef struct {
@@ -39,8 +43,9 @@ typedef struct {
     PangoFontDescription *font_description;
     bool visible;
 
-    uint32_t logical_width;
-    uint32_t logical_height;
+    // This pair of coordinates is for the top-left corner.
+    int32_t x;
+    int32_t y;
     uint32_t device_width;
     uint32_t device_height;
 } LabelSurface;
@@ -72,7 +77,7 @@ void label_surface_hide(LabelSurface *label);
  * position in the parent's coordinate space is at the specified anchor.
  */
 void label_surface_set_position(
-    LabelSurface *label, double x, double y, LabelSurfaceAnchor anchor
+    LabelSurface *label, int32_t x, int32_t y, LabelSurfaceAnchor anchor
 );
 
 void label_surface_destroy(LabelSurface *label);

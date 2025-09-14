@@ -14,9 +14,17 @@
 
 static void output_picker_render(void *user_data) {
     OutputPicker *picker = user_data;
-    // if (picker->state == picker->last_drawn_state) {
-    //     return;
-    // }
+    if (picker->state == picker->last_drawn_state) {
+        return;
+    }
+
+    label_surface_set_position(
+        picker->label,
+        picker->surface->logical_width / 2,
+        12,
+        LABEL_SURFACE_ANCHOR_TOP
+    );
+    label_surface_show(picker->label);
 
     if (picker->state == OUTPUT_PICKER_ACTIVE) {
         wl_surface_attach(
@@ -104,10 +112,6 @@ OutputPicker *output_picker_new(
             .corner_radius = 4.0
         }
     );
-    // label_surface_set_position(
-    //     result->label, 96.0, 32.0, LABEL_SURFACE_ANCHOR_TOP_LEFT
-    // );
-    label_surface_show(result->label);
 
     result->background = background;
     result->background_buf = shared_buffer_new(

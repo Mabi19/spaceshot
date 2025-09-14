@@ -215,11 +215,37 @@ void label_surface_hide(LabelSurface *label) {
 }
 
 void label_surface_set_position(
-    LabelSurface *label, double x, double y, LabelSurfaceAnchor anchor
+    LabelSurface *label, int32_t x, int32_t y, LabelSurfaceAnchor anchor
 ) {
-    // TODO: actually use anchor
-    assert(anchor == LABEL_SURFACE_ANCHOR_TOP_LEFT);
-    wl_subsurface_set_position(label->wl_subsurface, x, y);
+    int32_t width = label->device_width * label->scale / 120.0;
+    int32_t height = label->device_width * label->scale / 120.0;
+
+    int32_t tl_x, tl_y;
+
+    if (anchor & LABEL_SURFACE_ANCHOR_LEFT) {
+        tl_x = x;
+    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+        tl_x = x - width;
+    } else {
+        tl_x = x - width / 2;
+    }
+
+    if (anchor & LABEL_SURFACE_ANCHOR_TOP) {
+        tl_y = y;
+    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+        tl_y = y - height;
+    } else {
+        tl_y = y - height / 2;
+    }
+
+    if (label->x == tl_x && label->y == tl_y) {
+        return;
+    }
+
+    label->x = tl_x;
+    label->y = tl_y;
+
+    wl_subsurface_set_position(label->wl_subsurface, tl_x, tl_y);
 }
 
 void label_surface_destroy(LabelSurface *label) {
