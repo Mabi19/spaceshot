@@ -113,6 +113,9 @@ void seat_dispatcher_set_cursor_for_surface(
  * Note that events will not be filtered depending on pointer/keyboard focus;
  * this is so that selections can work nicer when moving the mouse outside the
  * output.
+ *
+ * @note Any subsurfaces must have an empty input region to not capture mouse
+ * movement.
  */
 void seat_dispatcher_add_listener(
     SeatDispatcher *dispatcher,
@@ -120,6 +123,11 @@ void seat_dispatcher_add_listener(
     SeatListener *listener,
     void *user_data
 );
+/**
+ * Removes the listener that belongs to the specified OverlaySurface.
+ */
 void seat_dispatcher_remove_listener(
     SeatDispatcher *dispatcher, OverlaySurface *surface
 );
+
+void seat_dispatcher_destroy(SeatDispatcher *dispatcher);

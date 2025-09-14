@@ -9,6 +9,7 @@
 #include <pango/pangocairo.h>
 #include <stdlib.h>
 #include <viewporter-client.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
 /**
@@ -45,7 +46,7 @@ static void label_surface_update(LabelSurface *label) {
     double padding_x =
         config_length_to_pixels(label->style.padding_x, label->scale);
     double padding_y =
-        config_length_to_pixels(label->style.padding_x, label->scale);
+        config_length_to_pixels(label->style.padding_y, label->scale);
 
     uint32_t new_device_width = text_width + 2 * padding_x;
     uint32_t new_device_height = text_height + 2 * padding_y;
@@ -116,6 +117,11 @@ static void label_surface_update(LabelSurface *label) {
 
     cairo_surface_flush(label->buffer->cairo_surface);
     TIMING_END(label_render);
+
+    if (label->visible) {
+        render_buffer_attach_to_surface(label->buffer, label->wl_surface);
+        wl_surface_commit(label->wl_surface);
+    }
 }
 
 static void preferred_scale_changed(
@@ -160,6 +166,12 @@ LabelSurface *label_surface_new(
         result->fractional_scale, &fractional_scale_listener, result
     );
 
+    // Prevent mouse movement from going to the label's surface.
+    struct wl_region *empty_region =
+        wl_compositor_create_region(wayland_globals.compositor);
+    wl_surface_set_input_region(result->wl_surface, empty_region);
+    wl_region_destroy(empty_region);
+
     result->text = strdup(text);
     result->style = style;
     result->font_description = pango_font_description_new();
@@ -184,8 +196,56 @@ void label_surface_set_text(LabelSurface *label, const char *text) {
 }
 
 void label_surface_show(LabelSurface *label) {
+    if (label->visible) {
+        return;
+    }
+    label->visible = true;
+
     render_buffer_attach_to_surface(label->buffer, label->wl_surface);
     wl_surface_commit(label->wl_surface);
+}
+
+void label_surface_hide(LabelSurface *label) {
+    if (!label->visible) {
+        return;
+    }
+    label->visible = false;
+    wl_surface_attach(label->wl_surface, NULL, 0, 0);
+    wl_surface_commit(label->wl_surface);
+}
+
+void label_surface_set_position(
+    LabelSurface *label, int32_t x, int32_t y, LabelSurfaceAnchor anchor
+) {
+    int32_t width = label->device_width * label->scale / 120.0;
+    int32_t height = label->device_width * label->scale / 120.0;
+
+    int32_t tl_x, tl_y;
+
+    if (anchor & LABEL_SURFACE_ANCHOR_LEFT) {
+        tl_x = x;
+    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+        tl_x = x - width;
+    } else {
+        tl_x = x - width / 2;
+    }
+
+    if (anchor & LABEL_SURFACE_ANCHOR_TOP) {
+        tl_y = y;
+    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+        tl_y = y - height;
+    } else {
+        tl_y = y - height / 2;
+    }
+
+    if (label->x == tl_x && label->y == tl_y) {
+        return;
+    }
+
+    label->x = tl_x;
+    label->y = tl_y;
+
+    wl_subsurface_set_position(label->wl_subsurface, tl_x, tl_y);
 }
 
 void label_surface_destroy(LabelSurface *label) {

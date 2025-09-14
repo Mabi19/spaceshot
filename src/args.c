@@ -283,12 +283,6 @@ Arguments *parse_argv(int argc, char **argv) {
         goto error;
     }
 
-    // capture output mode requires an output name
-    if (result->mode == CAPTURE_OUTPUT && result->captured_mode_params < 2) {
-        report_error("an output name is required");
-        goto error;
-    }
-
     return result;
 error:
     free(result);

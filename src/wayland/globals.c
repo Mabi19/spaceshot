@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <viewporter-client.h>
+#include <wayland-client-core.h>
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 #include <xdg-output-client.h>
@@ -294,6 +295,34 @@ bool find_wayland_globals(
     }
 
     return true;
+}
+
+void cleanup_wayland_globals() {
+    WrappedOutput *output, *tmp;
+    wl_list_for_each_safe(output, tmp, &wayland_globals.outputs, link) {
+        free(output->name);
+        zxdg_output_v1_destroy(output->xdg_output);
+        wl_output_release(output->wl_output);
+        wl_list_remove(&output->link);
+        free(output);
+    }
+
+    seat_dispatcher_destroy(wayland_globals.seat_dispatcher);
+
+    // A couple of the built-in singleton globals do not have destructors:
+    // - wl_compositor
+    // - wl_data_device_manager
+
+    wl_shm_release(wayland_globals.shm);
+    wl_subcompositor_destroy(wayland_globals.subcompositor);
+    wp_cursor_shape_manager_v1_destroy(wayland_globals.cursor_shape_manager);
+    wp_fractional_scale_manager_v1_destroy(
+        wayland_globals.fractional_scale_manager
+    );
+    wp_viewporter_destroy(wayland_globals.viewporter);
+    zwlr_layer_shell_v1_destroy(wayland_globals.layer_shell);
+    zwlr_screencopy_manager_v1_destroy(wayland_globals.screencopy_manager);
+    zxdg_output_manager_v1_destroy(wayland_globals.output_manager);
 }
 
 bool is_output_valid(WrappedOutput *test_output) {

@@ -48,6 +48,8 @@ Image *image_new_from_wayland(
 );
 void image_destroy(Image *image);
 
+Image *image_copy(const Image *src);
+
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
 );
