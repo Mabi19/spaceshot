@@ -8,7 +8,7 @@ It takes a screenshot first and then allows selecting a region on it, which make
 
 ## Features
 - Proper (fractional) scaling support: snaps to device pixels and not logical pixels, which makes selections more precise
-- 10-bit image format support (saved as 16-bit PNGs)
+- 10-bit image format support (saved as 16-bit PNGs) (note that this may require compositor configuration)
 - Integrated copying to clipboard (only in interactive modes)
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
@@ -17,8 +17,6 @@ It takes a screenshot first and then allows selecting a region on it, which make
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
 Planned:
-- An output picker
-    - As a workaround, use `spaceshot output $(slurp -o -f "%o")`
 - Snapping to predefined aspect ratios (Shift?)
 - Hold a key (Ctrl?) when releasing mouse button to edit selection afterwards
 - A better selection border that will be visible on both light and dark backgrounds
@@ -38,6 +36,7 @@ You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15
 Dependencies:
 - cairo
 - libpng
+- pango
 - xkbcommon
 - wayland (incl. wlr-protocols and wayland-protocols)
 
@@ -73,7 +72,8 @@ spaceshot region
 # note that the coordinates can be fractional, unlike slurp
 spaceshot region '150,150 300x200'
 # screenshot an output
-# note that there is no output picker yet
+spaceshot output
+# screenshot a predefined output
 spaceshot output DP-1
 ```
 
