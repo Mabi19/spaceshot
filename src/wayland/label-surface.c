@@ -46,7 +46,7 @@ static void label_surface_update(LabelSurface *label) {
     double padding_x =
         config_length_to_pixels(label->style.padding_x, label->scale);
     double padding_y =
-        config_length_to_pixels(label->style.padding_x, label->scale);
+        config_length_to_pixels(label->style.padding_y, label->scale);
 
     uint32_t new_device_width = text_width + 2 * padding_x;
     uint32_t new_device_height = text_height + 2 * padding_y;
