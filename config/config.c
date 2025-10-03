@@ -94,7 +94,7 @@ const char **config_get_locations() {
     return result;
 }
 
-static char DEFAULT_CONFIG[] = {
+static const char DEFAULT_CONFIG[] = {
 #embed "defaults.ini"
     , '\0'
 };
@@ -121,7 +121,11 @@ bool config_load_file(const char *path) {
 }
 
 void config_load() {
-    config_parse_string(DEFAULT_CONFIG, config_parse_entry, &config);
+    // config_parse_string modifies its argument, so make a fresh copy for it
+    size_t default_len = sizeof(DEFAULT_CONFIG);
+    char default_config_copy[default_len];
+    memcpy(default_config_copy, DEFAULT_CONFIG, default_len);
+    config_parse_string(default_config_copy, config_parse_entry, &config);
 
     const char **config_dirs = config_get_locations();
     for (int i = 0; config_dirs[i] != NULL; i++) {
