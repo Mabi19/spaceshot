@@ -76,17 +76,30 @@ public class NotifyServer: Object {
 
         switch (key) {
             case "default":
-                // TODO: read this from config
-                exec_action(NotificationAction.OPEN, path);
+                NotificationAction act;
+                switch (conf.notify.default_action) {
+                    case OPEN:
+                        act = OPEN;
+                        break;
+                    case EDIT:
+                        act = EDIT;
+                        break;
+                    case DIRECTORY:
+                        act = DIRECTORY;
+                        break;
+                    default:
+                        assert_not_reached();
+                }
+                exec_action(act, path);
                 break;
             case "open":
-                exec_action(NotificationAction.OPEN, path);
+                exec_action(OPEN, path);
                 break;
             case "edit":
-                exec_action(NotificationAction.EDIT, path);
+                exec_action(EDIT, path);
                 break;
             case "directory":
-                exec_action(NotificationAction.DIRECTORY, path);
+                exec_action(DIRECTORY, path);
                 break;
             default:
                 assert_not_reached();
@@ -171,20 +184,31 @@ public class NotifyServer: Object {
         string[] actions = new string[2 + 2 * button_count];
         int i = 0;
         actions[i] = "default";
-        // TODO: set this according to config
-        actions[i + 1] = "Open";
+        switch (conf.notify.default_action) {
+            case OPEN:
+                actions[i + 1] = "Open";
+                break;
+            case EDIT:
+                actions[i + 1] = "Edit";
+                break;
+            case DIRECTORY:
+                actions[i + 1] = "View in directory";
+                break;
+            default:
+                assert_not_reached();
+        }
         i += 2;
         foreach (var act in conf.notify.actions.items) {
             switch (act) {
-                case SpaceshotConfig.NotifyActionsItem.OPEN:
+                case OPEN:
                     actions[i] = "open";
                     actions[i + 1] = "Open";
                     break;
-                case SpaceshotConfig.NotifyActionsItem.EDIT:
+                case EDIT:
                     actions[i] = "edit";
                     actions[i + 1] = "Edit";
                     break;
-                case SpaceshotConfig.NotifyActionsItem.DIRECTORY:
+                case DIRECTORY:
                     actions[i] = "directory";
                     actions[i + 1] = "View in directory";
                     break;
