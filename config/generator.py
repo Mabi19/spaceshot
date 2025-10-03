@@ -299,7 +299,7 @@ class variant(BaseType):
         for option in self.options:
             type_sig = option.get_type_signature()
             if not isinstance(option, enum):
-                value_struct.props[f"v_{type_sig}"] = option.get_declaration_type(pascal_name + type_sig.capitalize())
+                value_struct.props[f"v_{type_sig}"] = option.get_declaration_type(qualified_name + "." + type_sig.capitalize())
             value_struct.options.append(constantify_type_signature(type_sig))
 
         return value_struct
@@ -386,6 +386,13 @@ class tokenlist(BaseType):
         array_item_name = array_struct_name + "Item"
 
         parts = []
+        parts.append(f"""{indent}if (strlen(value) == 0 || strcmp(value, "none") == 0) {{
+{indent}    free(conf->{qualified_c_name}.items);
+{indent}    conf->{qualified_c_name} = ({array_struct_name}){{.count = 0, .items = NULL}};
+{indent}    return;
+{indent}}}
+""")
+
         parts.append(f"{indent}size_t item_count = count_commas(value) + 1;")
         parts.append(f"{indent}{array_struct_name} array = {{.count = item_count, .items = malloc(sizeof({array_item_name}) * item_count)}};")
         parts.append(f"""{indent}char *part_start = value;
