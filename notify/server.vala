@@ -76,21 +76,22 @@ public class NotifyServer: Object {
 
         switch (key) {
             case "default":
-                NotificationAction act;
                 switch (conf.notify.default_action) {
                     case OPEN:
-                        act = OPEN;
+                        exec_action(OPEN, path);
                         break;
                     case EDIT:
-                        act = EDIT;
+                        exec_action(EDIT, path);
                         break;
                     case DIRECTORY:
-                        act = DIRECTORY;
+                        exec_action(DIRECTORY, path);
+                        break;
+                    case NONE:
+                        // if an old notification invokes this, don't explode
                         break;
                     default:
                         assert_not_reached();
                 }
-                exec_action(act, path);
                 break;
             case "open":
                 exec_action(OPEN, path);
@@ -180,22 +181,25 @@ public class NotifyServer: Object {
 
     public void notify_for_file(string path, bool did_copy) throws DBusError, IOError {
         var button_count = conf.notify.actions.items.length;
+        var action_count = button_count + (conf.notify.default_action != NONE ? 1 : 0);
 
-        string[] actions = new string[2 + 2 * button_count];
+        string[] actions = new string[2 * action_count];
         int i = 0;
-        actions[i] = "default";
-        switch (conf.notify.default_action) {
-            case OPEN:
-                actions[i + 1] = "Open";
-                break;
-            case EDIT:
-                actions[i + 1] = "Edit";
-                break;
-            case DIRECTORY:
-                actions[i + 1] = "View in directory";
-                break;
-            default:
-                assert_not_reached();
+        if (conf.notify.default_action != NONE) {
+            actions[i] = "default";
+            switch (conf.notify.default_action) {
+                case OPEN:
+                    actions[i + 1] = "Open";
+                    break;
+                case EDIT:
+                    actions[i + 1] = "Edit";
+                    break;
+                case DIRECTORY:
+                    actions[i + 1] = "View in directory";
+                    break;
+                default:
+                    assert_not_reached();
+            }
         }
         i += 2;
         foreach (var act in conf.notify.actions.items) {
