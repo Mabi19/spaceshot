@@ -100,6 +100,7 @@ static void overlay_surface_handle_configure(
     );
 
     zwlr_layer_surface_v1_ack_configure(surface->layer_surface, serial);
+    surface->has_configured = true;
 
     surface->logical_width = width;
     surface->logical_height = height;
@@ -136,10 +137,11 @@ static void preferred_scale_changed(
         scale
     );
     surface->scale = scale;
-    recompute_device_size(surface);
-
-    overlay_surface_draw_immediate(surface);
-    wl_surface_commit(surface->wl_surface);
+    if (surface->has_configured) {
+        recompute_device_size(surface);
+        overlay_surface_draw_immediate(surface);
+        wl_surface_commit(surface->wl_surface);
+    }
 }
 
 static const struct wp_fractional_scale_v1_listener fractional_scale_listener =

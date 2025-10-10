@@ -1,6 +1,5 @@
 #include "label-surface.h"
 #include "log.h"
-#include "pango/pango-layout.h"
 #include "wayland/globals.h"
 #include "wayland/render.h"
 #include <assert.h>
@@ -56,6 +55,14 @@ static void label_surface_update(LabelSurface *label) {
         if (label->buffer) {
             render_buffer_destroy(label->buffer);
         }
+        log_debug(
+            "creating label buffer of size %d, %d at scale %f, fd size %d\n",
+            new_device_width,
+            new_device_height,
+            label->scale,
+            pango_font_description_get_size(label->font_description) /
+                PANGO_SCALE
+        );
         label->buffer = render_buffer_new(
             new_device_width, new_device_height, IMAGE_FORMAT_ARGB8888
         );
@@ -130,6 +137,7 @@ static void preferred_scale_changed(
     uint32_t new_scale
 ) {
     LabelSurface *label = data;
+    log_debug("label fractional scale %u\n", new_scale);
     if (label->scale != new_scale) {
         label->scale = new_scale;
         pango_font_description_set_absolute_size(

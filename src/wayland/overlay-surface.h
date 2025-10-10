@@ -62,6 +62,8 @@ typedef struct {
     // used for frame pacing
     bool has_requested_frame;
     bool has_queued_render;
+    // used to prevent drawing before configure
+    bool has_configured;
 } OverlaySurface;
 
 OverlaySurface *overlay_surface_new(
