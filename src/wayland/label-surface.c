@@ -8,7 +8,6 @@
 #include <pango/pangocairo.h>
 #include <stdlib.h>
 #include <viewporter-client.h>
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
 /**

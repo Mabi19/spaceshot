@@ -1,4 +1,5 @@
 #include "output-picker.h"
+#include "bbox.h"
 #include "config/config.h"
 #include "log.h"
 #include "picker-common.h"
@@ -45,6 +46,10 @@ static void output_picker_render(void *user_data) {
             0
         );
     }
+    overlay_surface_damage(
+        picker->surface,
+        (BBox){.x = 0, .y = 0, .width = 0xffff, .height = 0xffff}
+    );
 
     picker->last_drawn_state = picker->state;
 }
