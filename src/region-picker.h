@@ -3,6 +3,7 @@
 #include "picker-common.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
+#include <threads.h>
 #include <wayland-client.h>
 
 typedef enum { REGION_PICKER_EMPTY, REGION_PICKER_DRAGGING } RegionPickerState;
@@ -21,6 +22,9 @@ typedef struct RegionPicker {
     RegionPickerState state;
     cairo_surface_t *background;
     cairo_pattern_t *background_pattern;
+    Image *smart_border_image;
+    cairo_surface_t *smart_border_surface;
+    cairo_pattern_t *smart_border_pattern;
 
     RegionPickerFinishCallback finish_callback;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.

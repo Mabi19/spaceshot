@@ -6,10 +6,8 @@
 #include <config/config.h>
 #include <png.h>
 #include <setjmp.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <wayland-client.h>
 
 // image format conversions
@@ -60,8 +58,21 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         return 4;
+    case IMAGE_FORMAT_GRAY8:
+        return 1;
     default:
         REPORT_UNHANDLED("image format", "%x", format);
+    }
+}
+
+static int image_format_default_stride(ImageFormat format, int width) {
+    switch (format) {
+    case IMAGE_FORMAT_GRAY8:
+        return width;
+    default:
+        return cairo_format_stride_for_width(
+            image_format_to_cairo(format), width
+        );
     }
 }
 
@@ -74,8 +85,7 @@ Image *image_new(uint32_t width, uint32_t height, ImageFormat format) {
     result->format = format;
     result->width = width;
     result->height = height;
-    result->stride =
-        cairo_format_stride_for_width(image_format_to_cairo(format), width);
+    result->stride = image_format_default_stride(format, width);
     result->data = malloc(result->stride * height);
     return result;
 }
@@ -132,6 +142,133 @@ Image *image_crop(
             src->data + (y + crop_y) * src->stride + x * bytes_per_pixel;
         uint8_t *result_row = result->data + crop_y * result->stride;
         memcpy(result_row, source_row, width * bytes_per_pixel);
+    }
+    return result;
+}
+
+static inline void image_get_pixel(
+    const Image *src,
+    uint32_t x,
+    uint32_t y,
+    double *r,
+    double *g,
+    double *b,
+    double *a
+) {
+    uint32_t bytes_per_pixel = image_format_bytes_per_pixel(src->format);
+    const void *raw_pixel_ptr =
+        src->data + y * src->stride + x * bytes_per_pixel;
+    if (bytes_per_pixel == 1) {
+        const uint8_t *pixel_ptr = (const uint8_t *)raw_pixel_ptr;
+        switch (src->format) {
+        case IMAGE_FORMAT_GRAY8: {
+            double val = *pixel_ptr / 255.0;
+            *r = *g = *b = val;
+            *a = 1.0;
+            break;
+        }
+        default:
+            REPORT_UNHANDLED("image format", "%d", src->format);
+        }
+
+    } else if (bytes_per_pixel == 4) {
+        const uint32_t *pixel_ptr = (const uint32_t *)raw_pixel_ptr;
+        *a = 1.0;
+        switch (src->format) {
+        case IMAGE_FORMAT_ARGB8888:
+            *a = (*pixel_ptr >> 24) / 255.0;
+            [[fallthrough]];
+        case IMAGE_FORMAT_XRGB8888:
+            *r = (*pixel_ptr >> 16 & 0xff) / 255.0;
+            *g = (*pixel_ptr >> 8 & 0xff) / 255.0;
+            *b = (*pixel_ptr & 0xff) / 255.0;
+            break;
+        case IMAGE_FORMAT_XRGB2101010:
+            *r = (*pixel_ptr >> 20 & 0x3ff) / 1023.0;
+            *g = (*pixel_ptr >> 10 & 0x3ff) / 1023.0;
+            *b = (*pixel_ptr & 0x3ff) / 1023.0;
+            break;
+        case IMAGE_FORMAT_XBGR2101010:
+            *b = (*pixel_ptr >> 20 & 0x3ff) / 1023.0;
+            *g = (*pixel_ptr >> 10 & 0x3ff) / 1023.0;
+            *r = (*pixel_ptr & 0x3ff) / 1023.0;
+            break;
+        default:
+            REPORT_UNHANDLED("image format", "%d", src->format);
+        }
+    }
+}
+
+static inline void image_put_pixel(
+    Image *target,
+    uint32_t x,
+    uint32_t y,
+    double r,
+    double g,
+    double b,
+    double a
+) {
+    uint32_t bytes_per_pixel = image_format_bytes_per_pixel(target->format);
+    void *raw_pixel_ptr =
+        target->data + y * target->stride + x * bytes_per_pixel;
+    if (bytes_per_pixel == 1) {
+        uint8_t *pixel_ptr = (uint8_t *)raw_pixel_ptr;
+        switch (target->format) {
+        case IMAGE_FORMAT_GRAY8: {
+            // TODO: gamma correction?
+            double grayscale_val = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            *pixel_ptr = grayscale_val * 255.0;
+            break;
+        }
+        default:
+            REPORT_UNHANDLED("image format", "%d", target->format);
+        }
+    } else if (bytes_per_pixel == 4) {
+        uint32_t *pixel_ptr = (uint32_t *)raw_pixel_ptr;
+        switch (target->format) {
+        case IMAGE_FORMAT_ARGB8888: {
+            uint8_t chan_a = a * 255.0;
+            uint8_t chan_r = r * 255.0;
+            uint8_t chan_g = g * 255.0;
+            uint8_t chan_b = b * 255.0;
+            *pixel_ptr = chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
+            break;
+        }
+        case IMAGE_FORMAT_XRGB8888: {
+            uint8_t chan_r = r * 255.0;
+            uint8_t chan_g = g * 255.0;
+            uint8_t chan_b = b * 255.0;
+            *pixel_ptr = chan_r << 16 | chan_g << 8 | chan_b;
+            break;
+        }
+        case IMAGE_FORMAT_XRGB2101010: {
+            uint16_t chan_r = (uint16_t)(r * 1023.0) & 0x3ff;
+            uint16_t chan_g = (uint16_t)(g * 1023.0) & 0x3ff;
+            uint16_t chan_b = (uint16_t)(b * 1023.0) & 0x3ff;
+            *pixel_ptr = chan_r << 20 | chan_g << 10 | chan_b;
+            break;
+        }
+        case IMAGE_FORMAT_XBGR2101010: {
+            uint16_t chan_r = (uint16_t)(r * 1023.0) & 0x3ff;
+            uint16_t chan_g = (uint16_t)(g * 1023.0) & 0x3ff;
+            uint16_t chan_b = (uint16_t)(b * 1023.0) & 0x3ff;
+            *pixel_ptr = chan_b << 20 | chan_g << 10 | chan_r;
+            break;
+        }
+        default:
+            REPORT_UNHANDLED("image format", "%d", target->format);
+        }
+    }
+}
+
+Image *image_convert_format(const Image *src, ImageFormat target) {
+    Image *result = image_new(src->width, src->height, target);
+    double r, g, b, a;
+    for (uint32_t y = 0; y < src->height; y++) {
+        for (uint32_t x = 0; x < src->width; x++) {
+            image_get_pixel(src, x, y, &r, &g, &b, &a);
+            image_put_pixel(result, x, y, r, g, b, a);
+        }
     }
     return result;
 }

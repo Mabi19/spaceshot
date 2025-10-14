@@ -172,7 +172,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
     cairo_set_source_config_color(
-        cr, config_get()->region.background, picker->surface->pixel_format
+        cr, config_get()->region.background, surface->pixel_format
     );
     cairo_rectangle(
         cr, 0.0, 0.0, surface->device_width, surface->device_height
@@ -194,8 +194,21 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         );
         double border_offset = border_width_pixels / 2;
         cairo_set_line_width(cr, border_width_pixels);
-        // no need for eventual flip because R = B
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        if (config_get()->region.selection_border_color.type ==
+            CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
+            if (picker->smart_border_pattern) {
+                cairo_set_source(cr, picker->smart_border_pattern);
+            } else {
+                // fallback
+                cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+            }
+        } else {
+            cairo_set_source_config_color(
+                cr,
+                config_get()->region.selection_border_color.v_color,
+                surface->pixel_format
+            );
+        }
         cairo_rectangle(
             cr,
             selection_box.x - border_offset,
@@ -335,6 +348,87 @@ static void region_picker_handle_surface_close(void *data) {
     picker->finish_callback(picker, PICKER_FINISH_REASON_DESTROYED, (BBox){});
 }
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define IMAGE_ROW(img, y) (img->data + (y) * img->stride)
+
+static Image *create_smart_border_image(Image *background) {
+    // this might need to be done asynchronously in a thread
+    // depends on how well this can be optimized
+    TIMING_START(smart_border);
+
+    int width = background->width;
+    int height = background->height;
+    Image *result = image_convert_format(background, IMAGE_FORMAT_GRAY8);
+
+    // box blur
+    Image *work_buf = image_new(width, height, IMAGE_FORMAT_GRAY8);
+    // this is how many pixels to do from the center
+    // TODO: consider a 2-pass algorithm or something like that
+    // TODO: multiply this by scale? scale necessitates delaying computing this
+    const int BOX_BLUR_SIZE = 12;
+    for (int y = 0; y < height; y++) {
+        const uint8_t *src_row = IMAGE_ROW(result, y);
+        uint8_t *dest_row = IMAGE_ROW(work_buf, y);
+        // for a size 2 blur, initial filter state:
+        // (p = pixel)
+        // vvOvv
+        //    pppppp...
+        // extend first pixel out
+        uint32_t sum = (BOX_BLUR_SIZE + 2) * src_row[0];
+        for (int x = 1; x < BOX_BLUR_SIZE; x++) {
+            sum += src_row[x];
+        }
+
+        for (int x = 0; x < width; x++) {
+            sum += src_row[MIN(x + BOX_BLUR_SIZE, width - 1)];
+            sum -= src_row[MAX(x - BOX_BLUR_SIZE, 0)];
+            dest_row[x] = sum / (2 * BOX_BLUR_SIZE + 1);
+        }
+    }
+
+    // reuse buffer: Y pass saves in result
+    for (int x = 0; x < width; x++) {
+        // for a size 2 blur, initial filter state:
+        // (p = pixel)
+        // >
+        // >
+        // O
+        // > p
+        // > p
+        //   ...
+        // extend first pixel out
+        uint32_t sum = (BOX_BLUR_SIZE + 2) * IMAGE_ROW(work_buf, 0)[x];
+        for (int y = 1; y < BOX_BLUR_SIZE; y++) {
+            sum += IMAGE_ROW(work_buf, y)[x];
+        }
+
+        for (int y = 0; y < height; y++) {
+            sum += IMAGE_ROW(work_buf, MIN(y + BOX_BLUR_SIZE, height - 1))[x];
+            sum -= IMAGE_ROW(work_buf, MAX(y - BOX_BLUR_SIZE, 0))[x];
+            IMAGE_ROW(result, y)[x] = sum / (2 * BOX_BLUR_SIZE + 1);
+        }
+    }
+
+    // quantize
+    // this can be done in-place
+    for (int y = 0; y < height; y++) {
+        uint8_t *row = result->data + y * result->stride;
+        for (int x = 0; x < width; x++) {
+            // TODO: tweak threshold
+            row[x] = row[x] < 0x5f ? 0xff : 0x00;
+        }
+    }
+
+    image_destroy(work_buf);
+
+    TIMING_END(smart_border);
+    return result;
+}
+
+#undef MIN
+#undef MAX
+
 RegionPicker *region_picker_new(
     WrappedOutput *output,
     Image *background,
@@ -355,6 +449,19 @@ RegionPicker *region_picker_new(
     result->background = image_make_cairo_surface(background);
     result->background_pattern =
         cairo_pattern_create_for_surface(result->background);
+
+    if (config_get()->region.selection_border_color.type ==
+        CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
+        Image *grayscale = create_smart_border_image(background);
+        // TODO: box blur, quantize to black & white
+        result->smart_border_image =
+            image_convert_format(grayscale, background->format);
+        image_destroy(grayscale);
+        result->smart_border_surface =
+            image_make_cairo_surface(result->smart_border_image);
+        result->smart_border_pattern =
+            cairo_pattern_create_for_surface(result->smart_border_surface);
+    }
 
     seat_dispatcher_add_listener(
         wayland_globals.seat_dispatcher,
@@ -380,6 +487,12 @@ void region_picker_destroy(RegionPicker *picker) {
     seat_dispatcher_remove_listener(
         wayland_globals.seat_dispatcher, picker->surface
     );
+
+    if (picker->smart_border_image) {
+        cairo_pattern_destroy(picker->smart_border_pattern);
+        cairo_surface_destroy(picker->smart_border_surface);
+        image_destroy(picker->smart_border_image);
+    }
 
     cairo_pattern_destroy(picker->background_pattern);
     cairo_surface_destroy(picker->background);

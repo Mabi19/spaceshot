@@ -16,7 +16,8 @@ typedef enum {
     IMAGE_FORMAT_ARGB8888 = 2,
     IMAGE_FORMAT_XRGB2101010 = 3,
     IMAGE_FORMAT_XBGR2101010 =
-        IMAGE_FORMAT_XRGB2101010 | IMAGE_FORMAT_FLIPPED_ORDER
+        IMAGE_FORMAT_XRGB2101010 | IMAGE_FORMAT_FLIPPED_ORDER,
+    IMAGE_FORMAT_GRAY8 = 4,
 } ImageFormat;
 
 ImageFormat image_format_from_wl(enum wl_shm_format format);
@@ -53,6 +54,8 @@ Image *image_copy(const Image *src);
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
 );
+
+Image *image_convert_format(const Image *src, ImageFormat target);
 
 /**
  * Create a Cairo surface for an image. Note that the data isn't copied, so the
