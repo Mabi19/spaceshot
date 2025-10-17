@@ -127,6 +127,7 @@ sources = files(
     'output-picker.c',
     'paths.c',
     'region-picker.c',
+    'smart-border.c',
 )
 
 executable(

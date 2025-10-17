@@ -1,6 +1,7 @@
 #pragma once
 #include "image.h"
 #include "picker-common.h"
+#include "smart-border.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include <threads.h>
@@ -22,9 +23,7 @@ typedef struct RegionPicker {
     RegionPickerState state;
     cairo_surface_t *background;
     cairo_pattern_t *background_pattern;
-    Image *smart_border_image;
-    cairo_surface_t *smart_border_surface;
-    cairo_pattern_t *smart_border_pattern;
+    SmartBorderContext *smart_border;
 
     RegionPickerFinishCallback finish_callback;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.
