@@ -125,6 +125,7 @@ OutputPicker *output_picker_new(
             .draw = NULL,
             .manual_render = output_picker_render,
             .close = output_picker_handle_surface_close,
+            .scale = NULL,
         },
         result
     );

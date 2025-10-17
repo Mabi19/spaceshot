@@ -137,8 +137,11 @@ static void preferred_scale_changed(
         scale
     );
     surface->scale = scale;
+    recompute_device_size(surface);
+    if (surface->handlers.scale) {
+        surface->handlers.scale(surface->user_data, scale);
+    }
     if (surface->has_configured) {
-        recompute_device_size(surface);
         overlay_surface_draw_immediate(surface);
         wl_surface_commit(surface->wl_surface);
     }

@@ -367,6 +367,7 @@ RegionPicker *region_picker_new(
             .draw = region_picker_draw,
             .manual_render = NULL,
             .close = region_picker_handle_surface_close,
+            .scale = NULL,
         },
         result
     );

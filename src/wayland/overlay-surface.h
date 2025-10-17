@@ -26,11 +26,17 @@ typedef void (*OverlaySurfaceManualRenderCallback)(void *user_data);
  */
 typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
 
+/**
+ * Called when the surface's scale updates.
+ */
+typedef void (*OverlaySurfaceScaleCallback)(void *user_data, uint32_t scale);
+
 typedef struct {
     // Only one of {draw, manual_render} can be defined at once.
     OverlaySurfaceDrawCallback draw;
     OverlaySurfaceManualRenderCallback manual_render;
     OverlaySurfaceCloseCallback close;
+    OverlaySurfaceScaleCallback scale;
 } OverlaySurfaceHandlers;
 
 typedef struct {
