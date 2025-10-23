@@ -155,10 +155,12 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     cairo_set_source(cr, picker->background_pattern);
     cairo_paint(cr);
 
-    double x_scale = (double)surface->device_width /
-                     (double)cairo_image_surface_get_width(picker->background);
-    double y_scale = (double)surface->device_height /
-                     (double)cairo_image_surface_get_height(picker->background);
+    double x_scale =
+        (double)surface->device_width /
+        (double)cairo_image_surface_get_width(picker->background_surface);
+    double y_scale =
+        (double)surface->device_height /
+        (double)cairo_image_surface_get_height(picker->background_surface);
 
     cairo_save(cr);
     if (x_scale != 1.0 || y_scale != 1.0) {
@@ -354,6 +356,16 @@ static void region_picker_handle_surface_close(void *data) {
     picker->finish_callback(picker, PICKER_FINISH_REASON_DESTROYED, (BBox){});
 }
 
+static void region_picker_handle_scale(void *data, uint32_t scale) {
+    RegionPicker *picker = data;
+    if (!picker->smart_border &&
+        config_get()->region.selection_border_color.type ==
+            CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
+        picker->smart_border =
+            smart_border_context_start(picker->background_image, scale);
+    }
+}
+
 RegionPicker *region_picker_new(
     WrappedOutput *output,
     Image *background,
@@ -367,21 +379,15 @@ RegionPicker *region_picker_new(
             .draw = region_picker_draw,
             .manual_render = NULL,
             .close = region_picker_handle_surface_close,
-            .scale = NULL,
+            .scale = region_picker_handle_scale,
         },
         result
     );
     result->state = REGION_PICKER_EMPTY;
-    result->background = image_make_cairo_surface(background);
+    result->background_image = background;
+    result->background_surface = image_make_cairo_surface(background);
     result->background_pattern =
-        cairo_pattern_create_for_surface(result->background);
-
-    if (config_get()->region.selection_border_color.type ==
-        CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-        // TODO: start this when scale is received
-        // this will need an additional overlay surface hook.
-        result->smart_border = smart_border_context_start(background);
-    }
+        cairo_pattern_create_for_surface(result->background_surface);
 
     seat_dispatcher_add_listener(
         wayland_globals.seat_dispatcher,
@@ -413,7 +419,7 @@ void region_picker_destroy(RegionPicker *picker) {
     }
 
     cairo_pattern_destroy(picker->background_pattern);
-    cairo_surface_destroy(picker->background);
+    cairo_surface_destroy(picker->background_surface);
     overlay_surface_destroy(picker->surface);
 
     free(picker);

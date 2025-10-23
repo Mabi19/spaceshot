@@ -19,8 +19,8 @@ static int smart_border_context_thread_func(void *data) {
     Image *work_buf_2 = image_new(width, height, IMAGE_FORMAT_GRAY8);
     // this is how many pixels to do from the center
     // TODO: consider a 2-pass algorithm or something like that
-    // TODO: multiply this by scale? scale necessitates delaying computing this
-    const int BOX_BLUR_SIZE = 12;
+    const int BOX_BLUR_SIZE = 8 * ctx->scale / 120;
+    log_debug("smart border box blur size %d\n", BOX_BLUR_SIZE);
     for (int y = 0; y < height; y++) {
         const uint8_t *src_row = IMAGE_ROW(work_buf_1, y);
         uint8_t *dest_row = IMAGE_ROW(work_buf_2, y);
@@ -87,9 +87,11 @@ static int smart_border_context_thread_func(void *data) {
     return 0;
 }
 
-SmartBorderContext *smart_border_context_start(Image *base) {
+SmartBorderContext *
+smart_border_context_start(const Image *base, uint32_t scale) {
     SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
     ctx->base = base;
+    ctx->scale = scale;
     ctx->ref_count = 2;
     thrd_t thread;
     if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==

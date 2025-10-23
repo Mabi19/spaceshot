@@ -21,7 +21,8 @@ typedef void (*RegionPickerFinishCallback)(
 typedef struct RegionPicker {
     OverlaySurface *surface;
     RegionPickerState state;
-    cairo_surface_t *background;
+    const Image *background_image;
+    cairo_surface_t *background_surface;
     cairo_pattern_t *background_pattern;
     SmartBorderContext *smart_border;
 

@@ -5,6 +5,7 @@
 
 typedef struct {
     const Image *base;
+    uint32_t scale;
     Image *result_image;
     cairo_surface_t *surface;
     cairo_pattern_t *pattern;
@@ -12,5 +13,6 @@ typedef struct {
     atomic_int ref_count;
 } SmartBorderContext;
 
-SmartBorderContext *smart_border_context_start(Image *base);
+SmartBorderContext *
+smart_border_context_start(const Image *base, uint32_t scale);
 void smart_border_context_unref(SmartBorderContext *ctx);
