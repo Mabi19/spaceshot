@@ -381,7 +381,6 @@ class tokenlist(BaseType):
         raise TypeError("Array types do not support conditions, add checks on their members instead")
 
     def generate_parse_code(self, qualified_c_name, indent, run_on_success=None):
-        # TODO: remember to always clean up the array if not assigned!
         array_struct_name = "Config" + snake_case_to_pascal(qualified_c_name.replace("-", "_").replace(".", "_"))
         array_item_name = array_struct_name + "Item"
 

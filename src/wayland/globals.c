@@ -3,7 +3,6 @@
 #include "wayland/seat.h"
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <viewporter-client.h>
@@ -216,8 +215,10 @@ static void registry_handle_global(
 
     if (strcmp(interface, wl_seat_interface.name) == 0) {
         if (globals->seat_dispatcher) {
-            report_warning("Multiple seats present. Handling this is "
-                           "unimplemented, only one will work");
+            report_warning(
+                "Multiple seats present. Handling this is "
+                "unimplemented, only one will work"
+            );
         } else {
             struct wl_seat *seat =
                 wl_registry_bind(registry, object_id, &wl_seat_interface, 9);

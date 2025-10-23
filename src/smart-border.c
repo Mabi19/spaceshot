@@ -1,4 +1,5 @@
 #include "smart-border.h"
+#include "cairo.h"
 #include "log.h"
 #include <stdatomic.h>
 
@@ -103,6 +104,8 @@ smart_border_context_start(const Image *base, uint32_t scale) {
 
 void smart_border_context_unref(SmartBorderContext *ctx) {
     if (atomic_fetch_sub(&ctx->ref_count, 1) == 1) {
-        // TODO: free
+        cairo_pattern_destroy(ctx->pattern);
+        cairo_surface_destroy(ctx->surface);
+        image_destroy(ctx->result_image);
     }
 }
