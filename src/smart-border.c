@@ -69,8 +69,8 @@ static int smart_border_context_thread_func(void *data) {
     for (int y = 0; y < height; y++) {
         uint8_t *row = work_buf_1->data + y * work_buf_1->stride;
         for (int x = 0; x < width; x++) {
-            // TODO: tweak threshold
-            row[x] = row[x] < 0x5f ? 0xff : 0x00;
+            // From some experimentation it seems 0x6f is the best threshold
+            row[x] = row[x] < 0x6f ? 0xff : 0x00;
         }
     }
 
