@@ -19,7 +19,6 @@ Note that spaceshot will not allow selecting a region which overlaps multiple mo
 Planned:
 - Snapping to predefined aspect ratios (Shift?)
 - Hold a key (Ctrl?) when releasing mouse button to edit selection afterwards
-- A better selection border that will be visible on both light and dark backgrounds
 - More configuration options (mostly concerning appearance)
 - Screenshotting individual windows
     - There isn't a widely-supported protocol for this yet
