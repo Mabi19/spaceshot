@@ -18,8 +18,7 @@ typedef struct LinkBuffer {
 LinkBuffer *link_buffer_new();
 void link_buffer_append(LinkBuffer **block, void *data, size_t length);
 /**
- * Write the link buffer to a FILE*.
- * This could mean additional buffering, but I don't care.
+ * Write the contents of the link buffer to a file descriptor.
  */
 void link_buffer_write(LinkBuffer *buffer, FILE *out);
 

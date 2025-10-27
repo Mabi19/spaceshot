@@ -1,5 +1,6 @@
 #include "link-buffer.h"
 #include "log.h"
+#include <errno.h>
 #include <string.h>
 
 LinkBuffer *link_buffer_new() {
@@ -28,7 +29,13 @@ void link_buffer_append(LinkBuffer **block, void *data, size_t length) {
 
 void link_buffer_write(LinkBuffer *buffer, FILE *out) {
     while (buffer != NULL) {
-        fwrite(buffer->data, buffer->used_size, 1, out);
+        size_t items_written = fwrite(buffer->data, buffer->used_size, 1, out);
+        if (items_written != 1) {
+            if (errno && errno != EPIPE) {
+                perror("clipboard transfer failed");
+            }
+            return;
+        }
         buffer = buffer->next;
     }
 }

@@ -38,6 +38,8 @@ typedef struct {
 static bool should_active_wait = true;
 static bool should_clipboard_wait = false;
 static bool correct_output_found = false;
+// This flag causes an unsuccessful exit code to be returned from main.
+static bool was_cancelled = false;
 static Arguments *args;
 static struct wl_list active_pickers;
 static struct wl_display *display;
@@ -291,6 +293,7 @@ static void picker_finish_generic(
             // should_active_wait is unset later
         } else if (reason == PICKER_FINISH_REASON_CANCELLED) {
             printf("selection cancelled\n");
+            was_cancelled = true;
             should_active_wait = false;
         }
 
@@ -504,6 +507,7 @@ int main(int argc, char **argv) {
     }
 
     if (should_clipboard_wait) {
+        signal(SIGPIPE, SIG_IGN);
         if (config_get()->move_to_background) {
             // double-fork
             // I'm not quite sure why this works, but according to daemon(7)
@@ -515,11 +519,11 @@ int main(int argc, char **argv) {
                 pid_t pid = fork();
                 if (pid != 0) {
                     // parent
-                    return 0;
+                    _exit(0);
                 }
             } else {
                 // parent
-                return 0;
+                _exit(0);
             }
 
             int dev_null = open("/dev/null", O_RDWR);
@@ -545,5 +549,6 @@ int main(int argc, char **argv) {
 
     cleanup_wayland_globals();
     wl_display_disconnect(display);
-    return 0;
+    int exit_code = was_cancelled ? 1 : 0;
+    return exit_code;
 }
