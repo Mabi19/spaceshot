@@ -47,8 +47,10 @@ char *get_output_filename() {
     if (tilde_count > 0 &&
         // if a path is all ~s, it won't match the null terminator
         template[tilde_count] != '/') {
-        report_error_fatal("invalid filename template, ~ characters at the "
-                           "beginning must be followed by a /");
+        report_error_fatal(
+            "invalid filename template, ~ characters at the "
+            "beginning must be followed by a /"
+        );
     }
 
     char *expanded_template;
@@ -141,15 +143,14 @@ char *get_output_filename() {
 static char *
 xdg_user_dir_lookup_with_fallback(const char *type, const char *fallback) {
     FILE *file;
-    char *home_dir, *config_home, *config_file;
+    char *config_home, *config_file;
     char buffer[512];
     char *user_dir;
     char *p, *d;
     int len;
     int relative;
 
-    home_dir = getenv("HOME");
-
+    const char *home_dir = get_home_directory();
     if (home_dir == NULL)
         goto error;
 
