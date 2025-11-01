@@ -293,8 +293,8 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     if (event.buttons_released & POINTER_BUTTON_LEFT &&
         picker->surface->wl_surface == event.focus &&
         picker->state == REGION_PICKER_DRAGGING) {
-        double selected_region_area =
-            fabs((picker->x2 - picker->x1) * (picker->y2 - picker->y1));
+        BBox result_box = get_bbox_containing_selection(picker);
+        double selected_region_area = result_box.width * result_box.height;
         log_debug(
             "area: %f; %f %f %f %f\n",
             selected_region_area,
@@ -306,7 +306,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
                                         ? PICKER_FINISH_REASON_SELECTED
                                         : PICKER_FINISH_REASON_CANCELLED;
-        BBox result_box = get_bbox_containing_selection(picker);
+
         picker->finish_callback(picker, reason, result_box);
         return;
     }
