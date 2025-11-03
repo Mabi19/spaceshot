@@ -445,12 +445,14 @@ void seat_dispatcher_set_cursor_for_surface(
     OverlaySurface *surface,
     enum wp_cursor_shape_device_v1_shape shape
 ) {
-    surface->cursor_shape = shape;
-    if (dispatcher->pointer_data.focus == surface->wl_surface) {
-        send_cursor_shape(dispatcher, surface->wl_surface);
+    if (surface->cursor_shape != shape) {
+        surface->cursor_shape = shape;
+        if (dispatcher->pointer_data.focus == surface->wl_surface) {
+            send_cursor_shape(dispatcher, surface->wl_surface);
+        }
+        // If not focused right now, cursor shape will be set later when that
+        // happens.
     }
-    // If not focused right now, cursor shape will be set later when that
-    // happens.
 }
 
 void seat_dispatcher_add_listener(

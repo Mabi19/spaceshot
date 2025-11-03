@@ -262,6 +262,12 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     double surface_y =
         fmax(0.0, fmin(event.surface_y, picker->surface->logical_height));
 
+    // TODO: rethink a lot of this, to be more mindful of what the current state
+    // is.
+    // Also, the edit state needs to keep track of hovers as well.
+    // So I think an outer branch that switches based on state makes the most
+    // sense here.
+
     if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
         if (picker->surface->wl_surface == event.focus) {
             picker->state = REGION_PICKER_DRAGGING;
@@ -293,22 +299,26 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     if (event.buttons_released & POINTER_BUTTON_LEFT &&
         picker->surface->wl_surface == event.focus &&
         picker->state == REGION_PICKER_DRAGGING) {
-        BBox result_box = get_bbox_containing_selection(picker);
-        double selected_region_area = result_box.width * result_box.height;
-        log_debug(
-            "area: %f; %f %f %f %f\n",
-            selected_region_area,
-            picker->x1,
-            picker->y1,
-            picker->x2,
-            picker->y2
-        );
-        PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
-                                        ? PICKER_FINISH_REASON_SELECTED
-                                        : PICKER_FINISH_REASON_CANCELLED;
+        if (picker->edit_flag) {
+            picker->state = REGION_PICKER_EDITING;
+        } else {
+            BBox result_box = get_bbox_containing_selection(picker);
+            double selected_region_area = result_box.width * result_box.height;
+            log_debug(
+                "area: %f; %f %f %f %f\n",
+                selected_region_area,
+                picker->x1,
+                picker->y1,
+                picker->x2,
+                picker->y2
+            );
+            PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
+                                            ? PICKER_FINISH_REASON_SELECTED
+                                            : PICKER_FINISH_REASON_CANCELLED;
 
-        picker->finish_callback(picker, reason, result_box);
-        return;
+            picker->finish_callback(picker, reason, result_box);
+            return;
+        }
     }
 
     overlay_surface_queue_draw(picker->surface);
@@ -341,9 +351,12 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
             );
         }
         break;
+    case XKB_KEY_Control_L:
+        // keep track of ctrl key state
+        // so that it can be used when released
+        picker->edit_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
     }
     // TODO: Hold Shift to lock aspect ratio
-    // TODO: Hold Ctrl when releasing mouse button to edit afterwards
 }
 
 static SeatListener region_picker_seat_listener = {

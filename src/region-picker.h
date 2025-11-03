@@ -7,7 +7,11 @@
 #include <threads.h>
 #include <wayland-client.h>
 
-typedef enum { REGION_PICKER_EMPTY, REGION_PICKER_DRAGGING } RegionPickerState;
+typedef enum {
+    REGION_PICKER_EMPTY,
+    REGION_PICKER_DRAGGING,
+    REGION_PICKER_EDITING
+} RegionPickerState;
 
 struct RegionPicker;
 /**
@@ -33,6 +37,9 @@ typedef struct RegionPicker {
     double x2, y2;
     // holding Space or Alt moves the region instead of resizing it
     bool move_flag;
+    // holding Ctrl when releasing changes the picker into edit mode instead of
+    // finishing
+    bool edit_flag;
     // These are kept for optimization purposes
     bool has_last_drawn_box;
     // This flag needs to be unset every time the selection is cleared.
