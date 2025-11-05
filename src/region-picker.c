@@ -100,6 +100,24 @@ static void calculate_clip_regions(
     outer->height += 2 * border_width_pixels;
 }
 
+/**
+ * Adjust the first corner's coordinates so that the selection stays the same
+ * size, but doesn't change size upon sub-pixel moving.
+ */
+static void adjust_opposite_corner_for_movement(RegionPicker *picker) {
+    double scale = picker->surface->scale / 120.0;
+    double x1 = picker->x1 * scale;
+    double y1 = picker->y1 * scale;
+    double x2 = picker->x2 * scale;
+    double y2 = picker->y2 * scale;
+    double x_offset = x2 - floor(x2);
+    double y_offset = y2 - floor(y2);
+    x1 = floor(x1) + x_offset;
+    y1 = floor(y1) + y_offset;
+    picker->x1 = x1 / scale;
+    picker->y1 = y1 / scale;
+}
+
 // Like cairo_rectangle(), but in the reverse winding order.
 static void cairo_bbox_reverse(cairo_t *cr, BBox rect) {
     cairo_move_to(cr, rect.x, rect.y);
@@ -342,6 +360,11 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         if (picker->state == REGION_PICKER_DRAGGING) {
             picker->move_flag =
                 event.type == KEYBOARD_EVENT_PRESS ? true : false;
+
+            if (event.type == KEYBOARD_EVENT_PRESS) {
+                adjust_opposite_corner_for_movement(picker);
+            }
+
             seat_dispatcher_set_cursor_for_surface(
                 wayland_globals.seat_dispatcher,
                 picker->surface,
