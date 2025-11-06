@@ -222,7 +222,7 @@ void label_surface_hide(LabelSurface *label) {
 }
 
 void label_surface_set_position(
-    LabelSurface *label, int32_t x, int32_t y, LabelSurfaceAnchor anchor
+    LabelSurface *label, int32_t x, int32_t y, Anchor anchor
 ) {
     int32_t width = label->device_width * label->scale / 120.0;
     int32_t height = label->device_width * label->scale / 120.0;
