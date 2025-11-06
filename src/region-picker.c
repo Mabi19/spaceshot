@@ -271,6 +271,41 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     return true;
 }
 
+static void update_cursor_shape(RegionPicker *picker) {
+    enum wp_cursor_shape_device_v1_shape shape;
+    switch (picker->state) {
+    case REGION_PICKER_EMPTY:
+        shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
+        break;
+    case REGION_PICKER_DRAGGING:
+        shape = picker->move_flag ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
+                                  : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
+        break;
+    case REGION_PICKER_EDITING:
+        shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+        break;
+    }
+    seat_dispatcher_set_cursor_for_surface(
+        wayland_globals.seat_dispatcher, picker->surface, shape
+    );
+}
+
+static void change_state(RegionPicker *picker, RegionPickerState new_state) {
+    switch (new_state) {
+    case REGION_PICKER_EMPTY:
+        picker->has_last_drawn_box = false;
+        break;
+    case REGION_PICKER_DRAGGING:
+        picker->move_flag = false;
+        break;
+    case REGION_PICKER_EDITING:
+        // TODO: ?
+        break;
+    }
+    picker->state = new_state;
+    update_cursor_shape(picker);
+}
+
 static void region_picker_handle_mouse(void *data, MouseEvent event) {
     RegionPicker *picker = data;
 
@@ -280,63 +315,64 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     double surface_y =
         fmax(0.0, fmin(event.surface_y, picker->surface->logical_height));
 
-    // TODO: rethink a lot of this, to be more mindful of what the current state
-    // is.
-    // Also, the edit state needs to keep track of hovers as well.
-    // So I think an outer branch that switches based on state makes the most
-    // sense here.
-
-    if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
-        if (picker->surface->wl_surface == event.focus) {
-            picker->state = REGION_PICKER_DRAGGING;
+    switch (picker->state) {
+    case REGION_PICKER_EMPTY: {
+        if (event.buttons_pressed & POINTER_BUTTON_LEFT &&
+            picker->surface->wl_surface == event.focus) {
             picker->x1 = surface_x;
             picker->y1 = surface_y;
             picker->x2 = surface_x;
             picker->y2 = surface_y;
-        } else {
-            // only one selection is allowed at a time
-            picker->state = REGION_PICKER_EMPTY;
-            picker->has_last_drawn_box = false;
+            change_state(picker, REGION_PICKER_DRAGGING);
         }
-    } else if (event.buttons_held & POINTER_BUTTON_LEFT) {
-        if (picker->surface->wl_surface == event.focus) {
-            if (picker->move_flag) {
-                double dx = surface_x - picker->x2;
-                double dy = surface_y - picker->y2;
-                picker->x1 += dx;
-                picker->y1 += dy;
-                picker->x2 += dx;
-                picker->y2 += dy;
+        break;
+    }
+    case REGION_PICKER_DRAGGING: {
+        if (event.buttons_released & POINTER_BUTTON_LEFT) {
+            if (picker->edit_flag) {
+                change_state(picker, REGION_PICKER_EDITING);
             } else {
-                picker->x2 = surface_x;
-                picker->y2 = surface_y;
+                BBox result_box = get_bbox_containing_selection(picker);
+                double selected_region_area =
+                    result_box.width * result_box.height;
+                log_debug(
+                    "area: %f; %f %f %f %f\n",
+                    selected_region_area,
+                    picker->x1,
+                    picker->y1,
+                    picker->x2,
+                    picker->y2
+                );
+                PickerFinishReason reason =
+                    selected_region_area > CANCEL_THRESHOLD
+                        ? PICKER_FINISH_REASON_SELECTED
+                        : PICKER_FINISH_REASON_CANCELLED;
+
+                picker->finish_callback(picker, reason, result_box);
+                return;
+            }
+        } else if (event.buttons_held & POINTER_BUTTON_LEFT) {
+            if (picker->surface->wl_surface == event.focus) {
+                if (picker->move_flag) {
+                    double dx = surface_x - picker->x2;
+                    double dy = surface_y - picker->y2;
+                    picker->x1 += dx;
+                    picker->y1 += dy;
+                    picker->x2 += dx;
+                    picker->y2 += dy;
+                } else {
+                    picker->x2 = surface_x;
+                    picker->y2 = surface_y;
+                }
             }
         }
+        break;
     }
-
-    if (event.buttons_released & POINTER_BUTTON_LEFT &&
-        picker->surface->wl_surface == event.focus &&
-        picker->state == REGION_PICKER_DRAGGING) {
-        if (picker->edit_flag) {
-            picker->state = REGION_PICKER_EDITING;
-        } else {
-            BBox result_box = get_bbox_containing_selection(picker);
-            double selected_region_area = result_box.width * result_box.height;
-            log_debug(
-                "area: %f; %f %f %f %f\n",
-                selected_region_area,
-                picker->x1,
-                picker->y1,
-                picker->x2,
-                picker->y2
-            );
-            PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
-                                            ? PICKER_FINISH_REASON_SELECTED
-                                            : PICKER_FINISH_REASON_CANCELLED;
-
-            picker->finish_callback(picker, reason, result_box);
-            return;
-        }
+    case REGION_PICKER_EDITING: {
+        break;
+    }
+    default:
+        REPORT_UNHANDLED("region picker state", "%d", picker->state);
     }
 
     overlay_surface_queue_draw(picker->surface);
@@ -357,21 +393,15 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
         // moving the selection only makes sense if a selection exists
-        if (picker->state == REGION_PICKER_DRAGGING) {
+        if (picker->state != REGION_PICKER_EMPTY) {
             picker->move_flag =
                 event.type == KEYBOARD_EVENT_PRESS ? true : false;
-
+        }
+        if (picker->state == REGION_PICKER_DRAGGING) {
             if (event.type == KEYBOARD_EVENT_PRESS) {
                 adjust_opposite_corner_for_movement(picker);
             }
-
-            seat_dispatcher_set_cursor_for_surface(
-                wayland_globals.seat_dispatcher,
-                picker->surface,
-                event.type == KEYBOARD_EVENT_PRESS
-                    ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
-                    : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
-            );
+            update_cursor_shape(picker);
         }
         break;
     case XKB_KEY_Control_L:
@@ -431,12 +461,7 @@ RegionPicker *region_picker_new(
         &region_picker_seat_listener,
         result
     );
-
-    seat_dispatcher_set_cursor_for_surface(
-        wayland_globals.seat_dispatcher,
-        result->surface,
-        WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
-    );
+    update_cursor_shape(result);
 
     result->finish_callback = finish_callback;
 
