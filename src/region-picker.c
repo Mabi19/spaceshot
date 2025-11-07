@@ -1,4 +1,5 @@
 #include "region-picker.h"
+#include "anchor.h"
 #include "bbox.h"
 #include "config/config.h"
 #include "cursor-shape-client.h"
@@ -13,6 +14,7 @@
 #include <cairo.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 // The maximum area below which a click will cancel the selection.
@@ -116,6 +118,81 @@ static void adjust_opposite_corner_for_movement(RegionPicker *picker) {
     y1 = floor(y1) + y_offset;
     picker->x1 = x1 / scale;
     picker->y1 = y1 / scale;
+}
+
+static bool
+hit_test_at_position(RegionPicker *picker, double x, double y, Anchor *anchor) {
+    // TODO: consider adjusting this depending on total selection area?
+    const double NEAR_THRESHOLD = 12;
+
+    double left = fmax(fmin(picker->x1, picker->x2), 0);
+    double right =
+        fmin(fmax(picker->x1, picker->x2), picker->surface->logical_width);
+    double top = fmax(fmin(picker->y1, picker->y2), 0);
+    double bottom =
+        fmin(fmax(picker->y1, picker->y2), picker->surface->logical_height);
+
+    double dist_left = fabs(left - x);
+    double dist_right = fabs(right - x);
+    double dist_top = fabs(top - y);
+    double dist_bottom = fabs(bottom - y);
+
+    if (x < left - NEAR_THRESHOLD || x > right + NEAR_THRESHOLD ||
+        y < top - NEAR_THRESHOLD || y > bottom + NEAR_THRESHOLD) {
+        return false;
+    }
+
+    Anchor result = ANCHOR_CENTER;
+    if (dist_left < dist_right) {
+        if (dist_left < NEAR_THRESHOLD) {
+            result |= ANCHOR_LEFT;
+        }
+    } else {
+        if (dist_right < NEAR_THRESHOLD) {
+            result |= ANCHOR_RIGHT;
+        }
+    }
+
+    if (dist_top < dist_bottom) {
+        if (dist_top < NEAR_THRESHOLD) {
+            result |= ANCHOR_TOP;
+        }
+    } else {
+        if (dist_bottom < NEAR_THRESHOLD) {
+            result |= ANCHOR_BOTTOM;
+        }
+    }
+
+    *anchor = result;
+    return true;
+}
+
+static enum wp_cursor_shape_device_v1_shape
+get_cursor_for_anchor(Anchor anchor) {
+    switch (anchor) {
+    case ANCHOR_CENTER:
+        // TODO: change this to grab when moving is implemented
+        // all-resize would be best here, but not everyone will support it
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+    case ANCHOR_TOP:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE;
+    case ANCHOR_BOTTOM:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_S_RESIZE;
+    case ANCHOR_LEFT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_W_RESIZE;
+    case ANCHOR_RIGHT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_E_RESIZE;
+    case ANCHOR_TOP_LEFT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NW_RESIZE;
+    case ANCHOR_TOP_RIGHT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NE_RESIZE;
+    case ANCHOR_BOTTOM_LEFT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SW_RESIZE;
+    case ANCHOR_BOTTOM_RIGHT:
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_SE_RESIZE;
+    default:
+        REPORT_UNHANDLED("anchor", "%d", anchor);
+    }
 }
 
 // Like cairo_rectangle(), but in the reverse winding order.
@@ -282,7 +359,22 @@ static void update_cursor_shape(RegionPicker *picker) {
                                   : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
         break;
     case REGION_PICKER_EDITING:
-        shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+        if (wayland_globals.seat_dispatcher->pointer_data.focus ==
+            picker->surface->wl_surface) {
+            Anchor anchor;
+            if (hit_test_at_position(
+                    picker,
+                    wayland_globals.seat_dispatcher->pointer_data.surface_x,
+                    wayland_globals.seat_dispatcher->pointer_data.surface_y,
+                    &anchor
+                )) {
+                shape = get_cursor_for_anchor(anchor);
+            } else {
+                shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+            }
+        } else {
+            shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+        }
         break;
     }
     seat_dispatcher_set_cursor_for_surface(
@@ -299,7 +391,7 @@ static void change_state(RegionPicker *picker, RegionPickerState new_state) {
         picker->move_flag = false;
         break;
     case REGION_PICKER_EDITING:
-        // TODO: ?
+        memset(&picker->edit_data, 0, sizeof(picker->edit_data));
         break;
     }
     picker->state = new_state;
@@ -314,6 +406,10 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         fmax(0.0, fmin(event.surface_x, picker->surface->logical_width));
     double surface_y =
         fmax(0.0, fmin(event.surface_y, picker->surface->logical_height));
+
+    // TODO: test all this with multiple monitors
+    // (stuff will definitely be broken I didn't think of multiple monitors when
+    // writing it)
 
     switch (picker->state) {
     case REGION_PICKER_EMPTY: {
@@ -369,6 +465,54 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         break;
     }
     case REGION_PICKER_EDITING: {
+        if (picker->edit_data.modify_x) {
+            *picker->edit_data.modify_x =
+                surface_x - picker->edit_data.grab_offset_x;
+        }
+        if (picker->edit_data.modify_y) {
+            *picker->edit_data.modify_y =
+                surface_y - picker->edit_data.grab_offset_y;
+        }
+
+        if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
+            Anchor anchor;
+            if (hit_test_at_position(picker, surface_x, surface_y, &anchor)) {
+                double *left =
+                    picker->x1 < picker->x2 ? &picker->x1 : &picker->x2;
+                double *right =
+                    picker->x1 < picker->x2 ? &picker->x2 : &picker->x1;
+                double *top =
+                    picker->y1 < picker->y2 ? &picker->y1 : &picker->y2;
+                double *bottom =
+                    picker->y1 < picker->y2 ? &picker->y2 : &picker->y1;
+
+                // TODO: handle ANCHOR_CENTER (i.e. drags)
+
+                if (anchor & ANCHOR_LEFT) {
+                    picker->edit_data.modify_x = left;
+                    picker->edit_data.grab_offset_x = surface_x - *left;
+                } else if (anchor & ANCHOR_RIGHT) {
+                    picker->edit_data.modify_x = right;
+                    picker->edit_data.grab_offset_x = surface_x - *right;
+                }
+
+                if (anchor & ANCHOR_TOP) {
+                    picker->edit_data.modify_y = top;
+                    picker->edit_data.grab_offset_y = surface_y - *top;
+                } else if (anchor & ANCHOR_BOTTOM) {
+                    picker->edit_data.modify_y = bottom;
+                    picker->edit_data.grab_offset_y = surface_y - *bottom;
+                }
+            } else {
+                // click outside
+                // TODO: change mode into dragging
+            }
+        } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
+            picker->edit_data.modify_x = NULL;
+            picker->edit_data.modify_y = NULL;
+        }
+
+        update_cursor_shape(picker);
         break;
     }
     default:

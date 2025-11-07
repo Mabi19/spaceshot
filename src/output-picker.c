@@ -25,8 +25,7 @@ static void output_picker_render(void *user_data) {
         picker->move_label_down
             ? picker->surface->logical_height - LABEL_Y_OFFSET
             : LABEL_Y_OFFSET,
-        picker->move_label_down ? LABEL_SURFACE_ANCHOR_BOTTOM
-                                : LABEL_SURFACE_ANCHOR_TOP
+        picker->move_label_down ? ANCHOR_BOTTOM : ANCHOR_TOP
     );
     label_surface_show(picker->label);
 

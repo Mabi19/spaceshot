@@ -37,9 +37,14 @@ typedef struct RegionPicker {
     double x2, y2;
     // holding Space or Alt moves the region instead of resizing it
     bool move_flag;
-    // holding Ctrl when releasing changes the picker into edit mode instead of
-    // finishing
+    // holding Ctrl when releasing changes into edit mode instead of finishing
     bool edit_flag;
+    struct {
+        double *modify_x;
+        double *modify_y;
+        double grab_offset_x;
+        double grab_offset_y;
+    } edit_data;
     // These are kept for optimization purposes
     bool has_last_drawn_box;
     // This flag needs to be unset every time the selection is cleared.

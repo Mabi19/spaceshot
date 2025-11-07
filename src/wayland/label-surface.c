@@ -229,17 +229,17 @@ void label_surface_set_position(
 
     int32_t tl_x, tl_y;
 
-    if (anchor & LABEL_SURFACE_ANCHOR_LEFT) {
+    if (anchor & ANCHOR_LEFT) {
         tl_x = x;
-    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+    } else if (anchor & ANCHOR_RIGHT) {
         tl_x = x - width;
     } else {
         tl_x = x - width / 2;
     }
 
-    if (anchor & LABEL_SURFACE_ANCHOR_TOP) {
+    if (anchor & ANCHOR_TOP) {
         tl_y = y;
-    } else if (anchor & LABEL_SURFACE_ANCHOR_RIGHT) {
+    } else if (anchor & ANCHOR_RIGHT) {
         tl_y = y - height;
     } else {
         tl_y = y - height / 2;
