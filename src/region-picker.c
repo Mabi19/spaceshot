@@ -520,10 +520,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     double surface_y =
         fmax(0.0, fmin(event.surface_y, picker->surface->logical_height));
 
-    // TODO: test all this with multiple monitors
-    // (stuff will definitely be broken I didn't think of multiple monitors when
-    // writing it)
-
     switch (picker->state) {
     case REGION_PICKER_EMPTY: {
         if (event.buttons_pressed & POINTER_BUTTON_LEFT &&

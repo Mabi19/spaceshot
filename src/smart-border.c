@@ -19,7 +19,6 @@ static int smart_border_context_thread_func(void *data) {
     // box blur
     Image *work_buf_2 = image_new(width, height, IMAGE_FORMAT_GRAY8);
     // this is how many pixels to do from the center
-    // TODO: consider a 2-pass algorithm or something like that
     const int BOX_BLUR_SIZE = 8 * ctx->scale / 120;
     log_debug("smart border box blur size %d\n", BOX_BLUR_SIZE);
     for (int y = 0; y < height; y++) {
