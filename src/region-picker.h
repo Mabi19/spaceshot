@@ -53,7 +53,7 @@ typedef struct RegionPicker {
     // These are kept for optimization purposes
     bool dirty_after_state_change;
     // This flag needs to be unset every time the selection is cleared.
-    bool has_last_drawn_box;
+    bool can_compare_boxes;
     BBox last_drawn_box;
     uint32_t last_device_width;
     uint32_t last_device_height;

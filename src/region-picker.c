@@ -63,7 +63,8 @@ static void calculate_clip_regions(
         return;
     }
 
-    if (picker->state == REGION_PICKER_EMPTY) {
+    if (picker->state == REGION_PICKER_EMPTY &&
+        !picker->dirty_after_state_change) {
         // selection can't have changed
         outer->width = 0;
         outer->height = 0;
@@ -71,8 +72,11 @@ static void calculate_clip_regions(
     }
 
     BBox *last_sel = &picker->last_drawn_box;
-    if (!picker->has_last_drawn_box) {
-        // no previous box = entire selection needs to be damaged
+    if (!picker->can_compare_boxes) {
+        // only one box (either nothing -> something or something -> nothing)
+        // entire selection needs to be damaged
+        // note that in the something -> nothing case this uses the fact that
+        // the selection isn't deleted when changing to the EMPTY state
         *outer = *curr_sel;
         inner->width = 0;
         inner->height = 0;
@@ -261,7 +265,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     if (picker->state != REGION_PICKER_EMPTY) {
         picker->last_drawn_box = selection_box;
-        picker->has_last_drawn_box = true;
+        picker->can_compare_boxes = true;
     }
     picker->last_device_width = surface->device_width;
     picker->last_device_height = surface->device_height;
@@ -493,7 +497,7 @@ static void update_cursor_shape(RegionPicker *picker) {
 static void change_state(RegionPicker *picker, RegionPickerState new_state) {
     switch (new_state) {
     case REGION_PICKER_EMPTY:
-        picker->has_last_drawn_box = false;
+        picker->can_compare_boxes = false;
         break;
     case REGION_PICKER_DRAGGING:
         picker->move_flag = false;
@@ -575,6 +579,8 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     }
     case REGION_PICKER_EDITING: {
         if (picker->edit_data.is_move) {
+            // TODO: constrain so that the box never goes outside the screen
+
             double new_x1 = surface_x - picker->edit_data.grab_offset_x;
             double new_y1 = surface_y - picker->edit_data.grab_offset_y;
             picker->x2 += new_x1 - picker->x1;
@@ -593,50 +599,61 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         }
 
         if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
-            Anchor anchor;
-            if (hit_test_at_position(picker, surface_x, surface_y, &anchor)) {
-                double *left =
-                    picker->x1 < picker->x2 ? &picker->x1 : &picker->x2;
-                double *right =
-                    picker->x1 < picker->x2 ? &picker->x2 : &picker->x1;
-                double *top =
-                    picker->y1 < picker->y2 ? &picker->y1 : &picker->y2;
-                double *bottom =
-                    picker->y1 < picker->y2 ? &picker->y2 : &picker->y1;
-
-                if (anchor == ANCHOR_CENTER) {
-                    // we're not forced into fixing any specific corner in place
-                    // here, so this function also works
-                    adjust_opposite_corner_for_movement(picker);
-
-                    picker->edit_data.is_move = true;
-                    picker->edit_data.grab_offset_x = surface_x - picker->x1;
-                    picker->edit_data.grab_offset_y = surface_y - picker->y1;
-                } else {
-                    picker->edit_data.is_move = false;
-                    if (anchor & ANCHOR_LEFT) {
-                        picker->edit_data.modify_x = left;
-                        picker->edit_data.grab_offset_x = surface_x - *left;
-                    } else if (anchor & ANCHOR_RIGHT) {
-                        picker->edit_data.modify_x = right;
-                        picker->edit_data.grab_offset_x = surface_x - *right;
-                    }
-
-                    if (anchor & ANCHOR_TOP) {
-                        picker->edit_data.modify_y = top;
-                        picker->edit_data.grab_offset_y = surface_y - *top;
-                    } else if (anchor & ANCHOR_BOTTOM) {
-                        picker->edit_data.modify_y = bottom;
-                        picker->edit_data.grab_offset_y = surface_y - *bottom;
-                    }
-                }
+            if (event.focus != picker->surface->wl_surface) {
+                // This switch unfortunately doesn't work.
+                change_state(picker, REGION_PICKER_EMPTY);
             } else {
-                // click outside
-                picker->x1 = surface_x;
-                picker->y1 = surface_y;
-                picker->x2 = surface_x;
-                picker->y2 = surface_y;
-                change_state(picker, REGION_PICKER_DRAGGING);
+                Anchor anchor;
+                if (hit_test_at_position(
+                        picker, surface_x, surface_y, &anchor
+                    )) {
+                    double *left =
+                        picker->x1 < picker->x2 ? &picker->x1 : &picker->x2;
+                    double *right =
+                        picker->x1 < picker->x2 ? &picker->x2 : &picker->x1;
+                    double *top =
+                        picker->y1 < picker->y2 ? &picker->y1 : &picker->y2;
+                    double *bottom =
+                        picker->y1 < picker->y2 ? &picker->y2 : &picker->y1;
+
+                    if (anchor == ANCHOR_CENTER) {
+                        // we're not forced into fixing any specific corner in
+                        // place here, so this function also works
+                        adjust_opposite_corner_for_movement(picker);
+
+                        picker->edit_data.is_move = true;
+                        picker->edit_data.grab_offset_x =
+                            surface_x - picker->x1;
+                        picker->edit_data.grab_offset_y =
+                            surface_y - picker->y1;
+                    } else {
+                        picker->edit_data.is_move = false;
+                        if (anchor & ANCHOR_LEFT) {
+                            picker->edit_data.modify_x = left;
+                            picker->edit_data.grab_offset_x = surface_x - *left;
+                        } else if (anchor & ANCHOR_RIGHT) {
+                            picker->edit_data.modify_x = right;
+                            picker->edit_data.grab_offset_x =
+                                surface_x - *right;
+                        }
+
+                        if (anchor & ANCHOR_TOP) {
+                            picker->edit_data.modify_y = top;
+                            picker->edit_data.grab_offset_y = surface_y - *top;
+                        } else if (anchor & ANCHOR_BOTTOM) {
+                            picker->edit_data.modify_y = bottom;
+                            picker->edit_data.grab_offset_y =
+                                surface_y - *bottom;
+                        }
+                    }
+                } else {
+                    // click outside
+                    picker->x1 = surface_x;
+                    picker->y1 = surface_y;
+                    picker->x2 = surface_x;
+                    picker->y2 = surface_y;
+                    change_state(picker, REGION_PICKER_DRAGGING);
+                }
             }
         } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
             picker->edit_data.is_move = false;
