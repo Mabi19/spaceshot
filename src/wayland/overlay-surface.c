@@ -237,6 +237,10 @@ static void draw_immediate_and_request_frame(OverlaySurface *surface) {
 }
 
 void overlay_surface_queue_draw(OverlaySurface *surface) {
+    if (!surface->has_configured) {
+        return;
+    }
+
     // if we're not waiting on anything, draw right now
     if (!surface->has_requested_frame) {
         draw_immediate_and_request_frame(surface);
