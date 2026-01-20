@@ -579,10 +579,33 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     }
     case REGION_PICKER_EDITING: {
         if (picker->edit_data.is_move) {
-            // TODO: constrain so that the box never goes outside the screen
-
+            // This constrains it so that the box is always fully on the screen.
             double new_x1 = surface_x - picker->edit_data.grab_offset_x;
             double new_y1 = surface_y - picker->edit_data.grab_offset_y;
+            if (picker->x1 < picker->x2) {
+                new_x1 = fmin(
+                    fmax(new_x1, 0),
+                    picker->surface->device_width - (picker->x2 - picker->x1)
+                );
+            } else {
+                new_x1 = fmax(
+                    fmin(new_x1, picker->surface->device_width),
+                    picker->x1 - picker->x2
+                );
+            }
+
+            if (picker->y1 < picker->y2) {
+                new_y1 = fmin(
+                    fmax(new_y1, 0),
+                    picker->surface->device_height - (picker->y2 - picker->y1)
+                );
+            } else {
+                new_y1 = fmax(
+                    fmin(new_y1, picker->surface->device_height),
+                    picker->y1 - picker->y2
+                );
+            }
+
             picker->x2 += new_x1 - picker->x1;
             picker->y2 += new_y1 - picker->y1;
             picker->x1 = new_x1;
