@@ -49,8 +49,6 @@ static void calculate_clip_regions(
 ) {
     uint32_t device_width = picker->surface->device_width;
     uint32_t device_height = picker->surface->device_height;
-    //* This will need to be adjusted if the picker gains an edit mode
-    // (which will draw further outside the bounds)
     double border_width_pixels = config_length_to_pixels(
         config_get()->region.selection_border_width, picker->surface->scale
     );
@@ -89,17 +87,38 @@ static void calculate_clip_regions(
         outer->width = fmax(last_right, curr_right) - outer->x;
         outer->height = fmax(last_bottom, curr_bottom) - outer->y;
 
-        inner->x = fmax(last_sel->x, curr_sel->x);
-        inner->y = fmax(last_sel->y, curr_sel->y);
-        inner->width = fmin(last_right, curr_right) - inner->x;
-        inner->height = fmin(last_bottom, curr_bottom) - inner->y;
+        if (!picker->dirty_after_state_change) {
+            // The boxes are only directly comparable when the state is the
+            // same.
+            inner->x = fmax(last_sel->x, curr_sel->x);
+            inner->y = fmax(last_sel->y, curr_sel->y);
+            inner->width = fmin(last_right, curr_right) - inner->x;
+            inner->height = fmin(last_bottom, curr_bottom) - inner->y;
+        } else {
+            inner->width = 0;
+            inner->height = 0;
+        }
+    }
+
+    // When switching, the new mode's expansion may be smaller than the
+    // previous, causing stale pixels. So, if the state changed, always
+    // maximally expand
+    if (picker->state == REGION_PICKER_EDITING ||
+        picker->dirty_after_state_change) {
+        double outer_expand = 4.0 * picker->surface->scale / 120.0;
+        border_width_pixels += outer_expand;
+        double inner_contract = 4.0 * picker->surface->scale / 120.0;
+        inner->x += inner_contract;
+        inner->y += inner_contract;
+        inner->width -= 2.0 * inner_contract;
+        inner->height -= 2.0 * inner_contract;
     }
 
     // adjust for borders
     outer->x -= border_width_pixels;
     outer->y -= border_width_pixels;
-    outer->width += 2 * border_width_pixels;
-    outer->height += 2 * border_width_pixels;
+    outer->width += 2.0 * border_width_pixels;
+    outer->height += 2.0 * border_width_pixels;
 }
 
 /**
@@ -122,7 +141,6 @@ static void adjust_opposite_corner_for_movement(RegionPicker *picker) {
 
 static bool
 hit_test_at_position(RegionPicker *picker, double x, double y, Anchor *anchor) {
-    // TODO: consider adjusting this depending on total selection area?
     const double NEAR_THRESHOLD = 12;
 
     double left = fmax(fmin(picker->x1, picker->x2), 0);
@@ -171,9 +189,7 @@ static enum wp_cursor_shape_device_v1_shape
 get_cursor_for_anchor(Anchor anchor) {
     switch (anchor) {
     case ANCHOR_CENTER:
-        // TODO: change this to grab when moving is implemented
-        // all-resize would be best here, but not everyone will support it
-        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+        return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRAB;
     case ANCHOR_TOP:
         return WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_N_RESIZE;
     case ANCHOR_BOTTOM:
@@ -210,7 +226,8 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     BBox selection_box = get_bbox_containing_selection(picker);
     if (surface->device_width == picker->last_device_width &&
         surface->device_height == picker->last_device_height &&
-        bbox_equal(selection_box, picker->last_drawn_box)) {
+        bbox_equal(selection_box, picker->last_drawn_box) &&
+        !picker->dirty_after_state_change) {
         log_debug("skipping draw\n");
         return false;
     }
@@ -219,6 +236,8 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     calculate_clip_regions(
         picker, &selection_box, &outer_clip_region, &inner_clip_region
     );
+
+    picker->dirty_after_state_change = false;
 
 #ifndef SPACESHOT_DEBUG_CLIPPING
     cairo_reset_clip(cr);
@@ -240,8 +259,10 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     }
 #endif
 
-    picker->last_drawn_box = selection_box;
-    picker->has_last_drawn_box = true;
+    if (picker->state != REGION_PICKER_EMPTY) {
+        picker->last_drawn_box = selection_box;
+        picker->has_last_drawn_box = true;
+    }
     picker->last_device_width = surface->device_width;
     picker->last_device_height = surface->device_height;
 
@@ -276,10 +297,18 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         cr, 0.0, 0.0, surface->device_width, surface->device_height
     );
 
+    double border_width_pixels = config_length_to_pixels(
+        config_get()->region.selection_border_width, surface->scale
+    );
     if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
         selection_box.height != 0) {
         // poke a hole in it
-        cairo_bbox_reverse(cr, selection_box);
+        BBox border_box = selection_box;
+        border_box.x -= border_width_pixels;
+        border_box.y -= border_width_pixels;
+        border_box.width += 2.0 * border_width_pixels;
+        border_box.height += 2.0 * border_width_pixels;
+        cairo_bbox_reverse(cr, border_box);
     }
     cairo_fill(cr);
 
@@ -287,11 +316,9 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         !(picker->x1 == picker->x2 && picker->y1 == picker->y2)) {
         // border
         // the offset is so that it doesn't occlude the visible area
-        double border_width_pixels = config_length_to_pixels(
-            config_get()->region.selection_border_width, surface->scale
-        );
         double border_offset = border_width_pixels / 2;
         cairo_set_line_width(cr, border_width_pixels);
+
         if (config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
             if (picker->smart_border &&
@@ -301,9 +328,7 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
                 cairo_set_source(cr, picker->smart_border->pattern);
             } else {
                 // fallback
-                // TODO: what should the fallback be?
-                // probably pure white
-                cairo_set_source_rgb(cr, 1.0, 0.0, 0.0);
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             }
         } else {
             cairo_set_source_config_color(
@@ -320,6 +345,79 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
             selection_box.height + 2 * border_offset
         );
         cairo_stroke(cr);
+
+        if (picker->state == REGION_PICKER_EDITING) {
+            double x_positions[] = {
+                selection_box.x - border_offset,
+                selection_box.x + selection_box.width / 2.0,
+                selection_box.x + selection_box.width + border_offset,
+                selection_box.x + selection_box.width + border_offset,
+                selection_box.x + selection_box.width + border_offset,
+                selection_box.x + selection_box.width / 2.0,
+                selection_box.x - border_offset,
+                selection_box.x - border_offset,
+            };
+            double y_positions[] = {
+                selection_box.y - border_offset,
+                selection_box.y - border_offset,
+                selection_box.y - border_offset,
+                selection_box.y + selection_box.height / 2.0,
+                selection_box.y + selection_box.height + border_offset,
+                selection_box.y + selection_box.height + border_offset,
+                selection_box.y + selection_box.height + border_offset,
+                selection_box.y + selection_box.height / 2.0,
+            };
+
+            double inner_half_size =
+                border_width_pixels / 2.0 + 2.0 * surface->scale / 120.0;
+            double outer_half_size =
+                inner_half_size + 2.0 * surface->scale / 120.0;
+
+            bool is_smart = config_get()->region.selection_border_color.type ==
+                            CONFIG_REGION_SELECTION_BORDER_COLOR_SMART;
+            if (is_smart) {
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            } else {
+                // carry over from border draw
+            }
+            for (int i = 0; i < 8; i++) {
+                double x = x_positions[i];
+                double y = y_positions[i];
+                cairo_rectangle(
+                    cr,
+                    x - outer_half_size,
+                    y - outer_half_size,
+                    2.0 * outer_half_size,
+                    2.0 * outer_half_size
+                );
+                cairo_fill(cr);
+            }
+
+            if (is_smart) {
+                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+            } else {
+                ConfigColor border =
+                    config_get()->region.selection_border_color.v_color;
+                float gray_level = (border.r + border.g + border.b) / 3.0;
+                if (gray_level < 0.4375) {
+                    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                } else {
+                    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                }
+            }
+            for (int i = 0; i < 8; i++) {
+                double x = x_positions[i];
+                double y = y_positions[i];
+                cairo_rectangle(
+                    cr,
+                    x - inner_half_size,
+                    y - inner_half_size,
+                    2.0 * inner_half_size,
+                    2.0 * inner_half_size
+                );
+                cairo_fill(cr);
+            }
+        }
     }
 
     TIMING_END(frame);
@@ -344,7 +442,13 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
     }
 #endif
 
+#ifndef SPACESHOT_DEBUG_CLIPPING
     overlay_surface_damage(surface, outer_clip_region);
+#else
+    overlay_surface_damage(
+        surface, (BBox){0, 0, surface->device_width, surface->device_height}
+    );
+#endif
     return true;
 }
 
@@ -361,16 +465,20 @@ static void update_cursor_shape(RegionPicker *picker) {
     case REGION_PICKER_EDITING:
         if (wayland_globals.seat_dispatcher->pointer_data.focus ==
             picker->surface->wl_surface) {
-            Anchor anchor;
-            if (hit_test_at_position(
-                    picker,
-                    wayland_globals.seat_dispatcher->pointer_data.surface_x,
-                    wayland_globals.seat_dispatcher->pointer_data.surface_y,
-                    &anchor
-                )) {
-                shape = get_cursor_for_anchor(anchor);
+            if (picker->edit_data.is_move) {
+                shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING;
             } else {
-                shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+                Anchor anchor;
+                if (hit_test_at_position(
+                        picker,
+                        wayland_globals.seat_dispatcher->pointer_data.surface_x,
+                        wayland_globals.seat_dispatcher->pointer_data.surface_y,
+                        &anchor
+                    )) {
+                    shape = get_cursor_for_anchor(anchor);
+                } else {
+                    shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+                }
             }
         } else {
             shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
@@ -394,6 +502,7 @@ static void change_state(RegionPicker *picker, RegionPickerState new_state) {
         memset(&picker->edit_data, 0, sizeof(picker->edit_data));
         break;
     }
+    picker->dirty_after_state_change = true;
     picker->state = new_state;
     update_cursor_shape(picker);
 }
@@ -465,13 +574,22 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         break;
     }
     case REGION_PICKER_EDITING: {
-        if (picker->edit_data.modify_x) {
-            *picker->edit_data.modify_x =
-                surface_x - picker->edit_data.grab_offset_x;
-        }
-        if (picker->edit_data.modify_y) {
-            *picker->edit_data.modify_y =
-                surface_y - picker->edit_data.grab_offset_y;
+        if (picker->edit_data.is_move) {
+            double new_x1 = surface_x - picker->edit_data.grab_offset_x;
+            double new_y1 = surface_y - picker->edit_data.grab_offset_y;
+            picker->x2 += new_x1 - picker->x1;
+            picker->y2 += new_y1 - picker->y1;
+            picker->x1 = new_x1;
+            picker->y1 = new_y1;
+        } else {
+            if (picker->edit_data.modify_x) {
+                *picker->edit_data.modify_x =
+                    surface_x - picker->edit_data.grab_offset_x;
+            }
+            if (picker->edit_data.modify_y) {
+                *picker->edit_data.modify_y =
+                    surface_y - picker->edit_data.grab_offset_y;
+            }
         }
 
         if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
@@ -486,28 +604,42 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                 double *bottom =
                     picker->y1 < picker->y2 ? &picker->y2 : &picker->y1;
 
-                // TODO: handle ANCHOR_CENTER (i.e. drags)
+                if (anchor == ANCHOR_CENTER) {
+                    // we're not forced into fixing any specific corner in place
+                    // here, so this function also works
+                    adjust_opposite_corner_for_movement(picker);
 
-                if (anchor & ANCHOR_LEFT) {
-                    picker->edit_data.modify_x = left;
-                    picker->edit_data.grab_offset_x = surface_x - *left;
-                } else if (anchor & ANCHOR_RIGHT) {
-                    picker->edit_data.modify_x = right;
-                    picker->edit_data.grab_offset_x = surface_x - *right;
-                }
+                    picker->edit_data.is_move = true;
+                    picker->edit_data.grab_offset_x = surface_x - picker->x1;
+                    picker->edit_data.grab_offset_y = surface_y - picker->y1;
+                } else {
+                    picker->edit_data.is_move = false;
+                    if (anchor & ANCHOR_LEFT) {
+                        picker->edit_data.modify_x = left;
+                        picker->edit_data.grab_offset_x = surface_x - *left;
+                    } else if (anchor & ANCHOR_RIGHT) {
+                        picker->edit_data.modify_x = right;
+                        picker->edit_data.grab_offset_x = surface_x - *right;
+                    }
 
-                if (anchor & ANCHOR_TOP) {
-                    picker->edit_data.modify_y = top;
-                    picker->edit_data.grab_offset_y = surface_y - *top;
-                } else if (anchor & ANCHOR_BOTTOM) {
-                    picker->edit_data.modify_y = bottom;
-                    picker->edit_data.grab_offset_y = surface_y - *bottom;
+                    if (anchor & ANCHOR_TOP) {
+                        picker->edit_data.modify_y = top;
+                        picker->edit_data.grab_offset_y = surface_y - *top;
+                    } else if (anchor & ANCHOR_BOTTOM) {
+                        picker->edit_data.modify_y = bottom;
+                        picker->edit_data.grab_offset_y = surface_y - *bottom;
+                    }
                 }
             } else {
                 // click outside
-                // TODO: change mode into dragging
+                picker->x1 = surface_x;
+                picker->y1 = surface_y;
+                picker->x2 = surface_x;
+                picker->y2 = surface_y;
+                change_state(picker, REGION_PICKER_DRAGGING);
             }
         } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
+            picker->edit_data.is_move = false;
             picker->edit_data.modify_x = NULL;
             picker->edit_data.modify_y = NULL;
         }

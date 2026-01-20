@@ -40,14 +40,20 @@ typedef struct RegionPicker {
     // holding Ctrl when releasing changes into edit mode instead of finishing
     bool edit_flag;
     struct {
+        bool is_move;
+        // These are the corners to modify when is_move is false.
         double *modify_x;
         double *modify_y;
+        // If is_move is false, these are the offset from the grabbed
+        // corner/edge, and if is_move is true, these are the offset between the
+        // grab point and (x1, y1)
         double grab_offset_x;
         double grab_offset_y;
     } edit_data;
     // These are kept for optimization purposes
-    bool has_last_drawn_box;
+    bool dirty_after_state_change;
     // This flag needs to be unset every time the selection is cleared.
+    bool has_last_drawn_box;
     BBox last_drawn_box;
     uint32_t last_device_width;
     uint32_t last_device_height;
