@@ -29,6 +29,8 @@ Planned:
 - Click and drag to select a region
 - Press Esc or click in place to cancel
 - Hold Alt or Space to move the selection instead of resizing it
+- Hold Ctrl while releasing the mouse button to edit the selection by dragging its edges or corners
+    - In edit mode, press Enter to confirm
 
 ## Building
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
