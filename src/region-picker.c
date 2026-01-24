@@ -511,6 +511,24 @@ static void change_state(RegionPicker *picker, RegionPickerState new_state) {
     update_cursor_shape(picker);
 }
 
+static void confirm_selection(RegionPicker *picker) {
+    BBox result_box = get_bbox_containing_selection(picker);
+    double selected_region_area = result_box.width * result_box.height;
+    log_debug(
+        "area: %f; %f %f %f %f\n",
+        selected_region_area,
+        picker->x1,
+        picker->y1,
+        picker->x2,
+        picker->y2
+    );
+    PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
+                                    ? PICKER_FINISH_REASON_SELECTED
+                                    : PICKER_FINISH_REASON_CANCELLED;
+
+    picker->finish_callback(picker, reason, result_box);
+}
+
 static void region_picker_handle_mouse(void *data, MouseEvent event) {
     RegionPicker *picker = data;
 
@@ -537,23 +555,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             if (picker->edit_flag) {
                 change_state(picker, REGION_PICKER_EDITING);
             } else {
-                BBox result_box = get_bbox_containing_selection(picker);
-                double selected_region_area =
-                    result_box.width * result_box.height;
-                log_debug(
-                    "area: %f; %f %f %f %f\n",
-                    selected_region_area,
-                    picker->x1,
-                    picker->y1,
-                    picker->x2,
-                    picker->y2
-                );
-                PickerFinishReason reason =
-                    selected_region_area > CANCEL_THRESHOLD
-                        ? PICKER_FINISH_REASON_SELECTED
-                        : PICKER_FINISH_REASON_CANCELLED;
-
-                picker->finish_callback(picker, reason, result_box);
+                confirm_selection(picker);
                 return;
             }
         } else if (event.buttons_held & POINTER_BUTTON_LEFT) {
@@ -581,11 +583,11 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             if (picker->x1 < picker->x2) {
                 new_x1 = fmin(
                     fmax(new_x1, 0),
-                    picker->surface->device_width - (picker->x2 - picker->x1)
+                    picker->surface->logical_width - (picker->x2 - picker->x1)
                 );
             } else {
                 new_x1 = fmax(
-                    fmin(new_x1, picker->surface->device_width),
+                    fmin(new_x1, picker->surface->logical_width),
                     picker->x1 - picker->x2
                 );
             }
@@ -593,11 +595,11 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             if (picker->y1 < picker->y2) {
                 new_y1 = fmin(
                     fmax(new_y1, 0),
-                    picker->surface->device_height - (picker->y2 - picker->y1)
+                    picker->surface->logical_height - (picker->y2 - picker->y1)
                 );
             } else {
                 new_y1 = fmax(
-                    fmin(new_y1, picker->surface->device_height),
+                    fmin(new_y1, picker->surface->logical_height),
                     picker->y1 - picker->y2
                 );
             }
@@ -720,6 +722,15 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         // keep track of ctrl key state
         // so that it can be used when released
         picker->edit_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
+        break;
+    case XKB_KEY_Return:
+        // In edit mode, an explicit confirmation is necessary
+        if (event.type == KEYBOARD_EVENT_RELEASE &&
+            picker->state == REGION_PICKER_EDITING &&
+            picker->surface->wl_surface == event.focus) {
+            confirm_selection(picker);
+        }
+        break;
     }
     // TODO: Hold Shift to lock aspect ratio
 }
