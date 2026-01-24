@@ -1,7 +1,7 @@
 project(
     'spaceshot',
     'c',
-    version: '0.3',
+    version: '0.4',
     default_options: ['c_std=c23', 'warning_level=3'],
     meson_version: '>=1.1',
 )
