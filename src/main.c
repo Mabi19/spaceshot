@@ -49,7 +49,12 @@ static struct wl_display *display;
  */
 static void
 save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
-    FILE *out_file = fopen(output_filename, "wb");
+    FILE *out_file;
+    if (strcmp(output_filename, "-") == 0) {
+        out_file = fdopen(dup(STDOUT_FILENO), "wb");
+    } else {
+        out_file = fopen(output_filename, "wb");
+    }
     assert(out_file);
     link_buffer_write(encoded_image, out_file);
     fclose(out_file);

@@ -128,7 +128,7 @@ Arguments *parse_argv(int argc, char **argv) {
                                 result, option->short_name, equals_sign + 1
                             );
                         } else {
-                            if (j + 1 >= argc) {
+                            if (i + 1 >= argc) {
                                 report_error(
                                     "option --%s requires an argument",
                                     option_contents
@@ -139,7 +139,7 @@ Arguments *parse_argv(int argc, char **argv) {
                                 result, option->short_name, argv[i + 1]
                             );
                             // the next argument is consumed
-                            j++;
+                            i++;
                         }
                     } else {
                         interpret_option(result, option->short_name, NULL);
@@ -157,7 +157,7 @@ Arguments *parse_argv(int argc, char **argv) {
 
             finish_option:
             } else {
-                // short option, map to equiv. short option
+                // short option
                 for (int j = 1; arg[j] != '\0'; j++) {
                     switch (arg[j]) {
                     // no-argument options
