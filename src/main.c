@@ -19,10 +19,18 @@
 #include <threads.h>
 #include <unistd.h>
 #include <wayland-client.h>
+#include <wayland-util.h>
 
 typedef enum {
+    /* Hasn't yet received its image. */
+    PICKER_ENTRY_EMPTY = 0,
+    /* Has a region picker active. */
     PICKER_ENTRY_REGION,
+    /* Has an output picker active. */
     PICKER_ENTRY_OUTPUT,
+    /* Has an image saved, and will eventually be transformed into one of the
+       other types. */
+    PICKER_ENTRY_DEFER,
 } PickerListEntryType;
 
 typedef struct {
@@ -40,7 +48,7 @@ static bool should_clipboard_wait = false;
 static bool correct_output_found = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
-static Arguments *args;
+static Arguments args;
 static struct wl_list active_pickers;
 static struct wl_display *display;
 
@@ -93,7 +101,7 @@ static void send_notification(char *output_filename, bool did_copy) {
             // exec() failed
             exit(104);
         } else if (pid == -1) {
-            report_error("Couldn't spawn spaceshot-notify");
+            report_error("couldn't spawn spaceshot-notify");
         } else {
             // parent
             // wait for the child to exit; usually this doesn't take too long
@@ -175,7 +183,7 @@ static void finish_predefined_output_screenshot(
     WrappedOutput * /* output */, Image *image, void * /* data */
 ) {
     if (!image) {
-        report_error("Capturing output failed");
+        report_error("capturing output failed");
 
         goto defer;
     }
@@ -199,11 +207,11 @@ static void finish_predefined_region_screenshot(
     WrappedOutput *output, Image *image, void *data
 ) {
     if (!is_output_valid(output)) {
-        report_error("Output disappeared while screenshotting");
+        report_error("output disappeared while screenshotting");
         goto defer;
     }
     if (!image) {
-        report_error("Capturing output failed");
+        report_error("capturing output failed");
         goto defer;
     }
 
@@ -247,13 +255,17 @@ defer:
 }
 
 static void picker_entry_destroy(PickerListEntry *entry) {
-    switch (entry->type) {
-    case PICKER_ENTRY_REGION:
-        region_picker_destroy(entry->picker);
-        break;
-    case PICKER_ENTRY_OUTPUT:
-        output_picker_destroy(entry->picker);
-        break;
+    if (entry->picker) {
+        switch (entry->type) {
+        case PICKER_ENTRY_REGION:
+            region_picker_destroy(entry->picker);
+            break;
+        case PICKER_ENTRY_OUTPUT:
+            output_picker_destroy(entry->picker);
+            break;
+        default:
+            REPORT_UNHANDLED("picker entry type", "%d", entry->type);
+        }
     }
     image_destroy(entry->image);
     wl_list_remove(&entry->link);
@@ -369,46 +381,40 @@ output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
     picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
 }
 
-static PickerListEntry *make_picker_entry(WrappedOutput *output, Image *image) {
+static PickerListEntry *make_picker_entry(WrappedOutput *output) {
     if (!is_output_valid(output)) {
         // Theoretically, if all the outputs disappear (and no new ones appear),
         // there will be no region pickers, so should_active_wait will never be
         // unset, so the process will remain forever. But I don't think that
         // should ever happen.
-        report_error("Output disappeared while screenshotting");
-        return NULL;
-    }
-
-    if (!image) {
-        // Similarly, I don't really have a good way of handling all the
-        // screenshots failing.
-        report_error("Output capture failed");
+        report_error("output disappeared while screenshotting");
         return NULL;
     }
     PickerListEntry *entry = calloc(1, sizeof(PickerListEntry));
-    entry->image = image;
     wl_list_insert(&active_pickers, &entry->link);
 
     return entry;
 }
 
-static void create_region_picker_for_output(
-    WrappedOutput *output, Image *image, void * /* data */
-) {
-    PickerListEntry *entry = make_picker_entry(output, image);
-    if (entry) {
-        entry->picker = region_picker_new(output, image, region_picker_finish);
-        entry->type = PICKER_ENTRY_REGION;
-    }
-}
+static void
+create_picker_for_list_entry(WrappedOutput *output, Image *image, void *data) {
+    PickerListEntry *entry = data;
 
-static void create_output_picker_for_output(
-    WrappedOutput *output, Image *image, void * /* data */
-) {
-    PickerListEntry *entry = make_picker_entry(output, image);
-    if (entry) {
+    if (!is_output_valid(output)) {
+        report_error("output disappeared while screenshotting");
+        picker_entry_destroy(entry);
+        return;
+    }
+
+    entry->image = image;
+    if (args.mode == CAPTURE_OUTPUT) {
         entry->picker = output_picker_new(output, image, output_picker_finish);
         entry->type = PICKER_ENTRY_OUTPUT;
+    } else if (args.mode == CAPTURE_REGION) {
+        entry->picker = region_picker_new(output, image, region_picker_finish);
+        entry->type = PICKER_ENTRY_REGION;
+    } else if (args.mode == CAPTURE_DEFER) {
+        entry->type = PICKER_ENTRY_DEFER;
     }
 }
 
@@ -424,10 +430,15 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    if (args->mode == CAPTURE_OUTPUT) {
-        if (args->output_params.output_name) {
+    // TODO: Some of the following logic is required again later.
+    // TODO: Also remove the duplication in here.
+    // So, make this function just create a PickerListEntry (which should
+    // maybe be renamed), and make everything work with those.
+
+    if (args.mode == CAPTURE_OUTPUT) {
+        if (args.output_params.output_name) {
             // output specified in command line
-            if (strcmp(output->name, args->output_params.output_name) == 0) {
+            if (strcmp(output->name, args.output_params.output_name) == 0) {
                 log_debug("...which is correct\n");
                 correct_output_found = true;
                 capture_output(
@@ -443,19 +454,22 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            capture_output(output, create_output_picker_for_output, NULL);
+            PickerListEntry *entry = make_picker_entry(output);
+            if (entry) {
+                capture_output(output, create_picker_for_list_entry, entry);
+            }
         }
-    } else if (args->mode == CAPTURE_REGION) {
-        if (args->region_params.has_region) {
+    } else if (args.mode == CAPTURE_REGION) {
+        if (args.region_params.has_region) {
             if (bbox_contains(
-                    output->logical_bounds, args->region_params.region
+                    output->logical_bounds, args.region_params.region
                 )) {
                 log_debug("... which is correct\n");
                 correct_output_found = true;
                 capture_output(
                     output,
                     finish_predefined_region_screenshot,
-                    &args->region_params.region
+                    &args.region_params.region
                 );
             }
         } else {
@@ -467,10 +481,20 @@ static void add_new_output(WrappedOutput *output) {
             }
             correct_output_found = true;
 
-            capture_output(output, create_region_picker_for_output, NULL);
+            PickerListEntry *entry = make_picker_entry(output);
+            if (entry) {
+                capture_output(output, create_picker_for_list_entry, entry);
+            }
+        }
+    } else if (args.mode == CAPTURE_DEFER) {
+        correct_output_found = true;
+
+        PickerListEntry *entry = make_picker_entry(output);
+        if (entry) {
+            capture_output(output, create_picker_for_list_entry, entry);
         }
     } else {
-        REPORT_UNHANDLED("mode", "%x", args->mode);
+        REPORT_UNHANDLED("mode", "%x", args.mode);
     }
 }
 
@@ -481,7 +505,8 @@ int main(int argc, char **argv) {
     config_load();
     TIMING_END(config_load);
     set_program_name(argv[0]);
-    args = parse_argv(argc, argv);
+    args.executable_name = argv[0];
+    parse_argv(&args, argc - 1, argv + 1);
 
     display = wl_display_connect(NULL);
     if (!display) {
@@ -499,10 +524,59 @@ int main(int argc, char **argv) {
 
     wl_display_roundtrip(display);
     if (!correct_output_found) {
-        const char *output_name = args->mode == CAPTURE_OUTPUT
-                                      ? args->output_params.output_name
+        const char *output_name = args.mode == CAPTURE_OUTPUT
+                                      ? args.output_params.output_name
                                       : "[unspecified]";
         report_error_fatal("couldn't find output %s", output_name);
+    }
+
+    if (args.mode == CAPTURE_DEFER) {
+        // Wait for all the captured outputs to be ready.
+        while (true) {
+            PickerListEntry *entry;
+            bool is_waiting = false;
+            wl_list_for_each(entry, &active_pickers, link) {
+                if (entry->type == PICKER_ENTRY_EMPTY) {
+                    log_debug("waiting for picker entry %p\n", (void *)entry);
+                    is_waiting = true;
+                    break;
+                }
+            }
+            if (is_waiting) {
+                wl_display_dispatch(display);
+            } else {
+                break;
+            }
+        }
+
+        printf("ready\n");
+        // Read stdin until EOF and use that as the actual arguments.
+        char **new_argv = NULL;
+        int new_argc = 0;
+        int capacity = 16;
+        new_argv = malloc(capacity * sizeof(char *));
+
+        char *line = NULL;
+        size_t line_len = 0;
+        ssize_t nread;
+        while ((nread = getdelim(&line, &line_len, '\0', stdin)) != -1) {
+            if (new_argc >= capacity) {
+                capacity *= 2;
+                char **new_ptr = realloc(new_argv, capacity * sizeof(char *));
+                new_argv = new_ptr;
+            }
+            new_argv[new_argc++] = line;
+            line = NULL;
+            line_len = 0;
+        }
+        if (ferror(stdin)) {
+            report_error_fatal("couldn't read deferred arguments");
+        }
+        free(line);
+        args.captured_mode_params = 0;
+        parse_argv(&args, new_argc, new_argv);
+
+        // TODO: Transform PickerListEntries into the newly selected mode.
     }
 
     while (wl_display_dispatch(display) != -1) {

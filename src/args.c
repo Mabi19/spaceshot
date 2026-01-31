@@ -18,6 +18,10 @@ static void print_help(const char *program_name) {
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
+        "  - defer: prepare a screenshot for later\n"
+        "    prints 'ready' when everything is captured; "
+        "afterwards, write mode and additional arguments to stdin, separated "
+        "by null bytes, to continue as normal\n"
         "Options:\n"
         "  -h, --help        display this help and exit\n"
         "  -v, --version     output version information and exit\n"
@@ -97,11 +101,8 @@ static const LongOption LONG_OPTIONS[] = {
 };
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
-Arguments *parse_argv(int argc, char **argv) {
-    Arguments *result = calloc(1, sizeof(Arguments));
-    result->executable_name = argv[0];
-
-    for (int i = 1; i < argc; i++) {
+void parse_argv(Arguments *result, int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
         char *arg = argv[i];
         // do not include flags where the first character is a digit,
         // because that can be part of a region specifier
@@ -212,7 +213,7 @@ Arguments *parse_argv(int argc, char **argv) {
                 // this is the mode
                 char *mode = argv[i];
                 if (strcmp(mode, "help") == 0) {
-                    print_help(argv[0]);
+                    print_help(result->executable_name);
                     exit(EXIT_SUCCESS);
                 }
 
@@ -230,11 +231,14 @@ Arguments *parse_argv(int argc, char **argv) {
                     result->region_params.region =
                         (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
                     result->region_params.has_region = false;
+                } else if (strcmp(mode, "defer") == 0) {
+                    result->mode = CAPTURE_DEFER;
                 } else {
                     report_error(
                         "invalid mode %s\n"
-                        "valid modes are 'output <output-name>' "
-                        "and 'region [region]'",
+                        "valid modes are 'output <output-name>', "
+                        "'region [region]', "
+                        "and 'defer'\n",
                         mode
                     );
                     goto error;
@@ -266,6 +270,11 @@ Arguments *parse_argv(int argc, char **argv) {
                         );
                         goto error;
                     }
+                } else if (result->mode == CAPTURE_DEFER) {
+                    report_error(
+                        "too many parameters for mode 'defer' (max 0)"
+                    );
+                    goto error;
                 } else {
                     REPORT_UNHANDLED("mode", "%d", result->mode);
                     goto error;
@@ -283,8 +292,7 @@ Arguments *parse_argv(int argc, char **argv) {
         goto error;
     }
 
-    return result;
+    return;
 error:
-    free(result);
     exit(EXIT_FAILURE);
 }

@@ -5,6 +5,7 @@
 typedef enum {
     CAPTURE_OUTPUT,
     CAPTURE_REGION,
+    CAPTURE_DEFER,
 } CaptureMode;
 
 typedef struct {
@@ -24,8 +25,7 @@ typedef struct {
         RegionCaptureParams region_params;
     };
     int captured_mode_params;
-    const char *output_filename;
     const char *executable_name;
 } Arguments;
 
-Arguments *parse_argv(int argc, char **argv);
+void parse_argv(Arguments *out, int argc, char **argv);
