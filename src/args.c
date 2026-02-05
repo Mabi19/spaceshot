@@ -67,7 +67,8 @@ static void interpret_option(Arguments *args, char opt, char *value) {
         config_get()->notify.enabled = false;
         break;
     case 'o':
-        config_get()->output_file = value;
+        free(config_get()->output_file);
+        config_get()->output_file = strdup(value);
         break;
     case '#':
         // only as --verbose
@@ -152,7 +153,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                 report_error(
                     "invalid option %s\ntry %s --help for more information",
                     arg,
-                    argv[0]
+                    result->executable_name
                 );
                 goto error;
 
@@ -202,7 +203,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                             "invalid option -%c\ntry %s --help for more "
                             "information",
                             arg[j],
-                            argv[0]
+                            result->executable_name
                         );
                         goto error;
                     }
@@ -247,7 +248,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                 // this is a mode parameter
                 if (result->mode == CAPTURE_OUTPUT) {
                     if (result->captured_mode_params == 1) {
-                        result->output_params.output_name = arg;
+                        result->output_params.output_name = strdup(arg);
                     } else {
                         report_error(
                             "too many parameters for mode 'output' (max 1)"
@@ -287,7 +288,8 @@ void parse_argv(Arguments *result, int argc, char **argv) {
 
     if (result->captured_mode_params == 0) {
         report_error(
-            "a mode is required\ntry %s --help for more information", argv[0]
+            "a mode is required\ntry %s --help for more information",
+            result->executable_name
         );
         goto error;
     }

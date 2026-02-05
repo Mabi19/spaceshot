@@ -7,6 +7,7 @@
 #include "paths.h"
 #include "region-picker.h"
 #include "wayland/globals.h"
+#include "wayland/output.h"
 #include "wayland/screenshot.h"
 #include "wayland/seat.h"
 #include <assert.h>
@@ -23,22 +24,23 @@
 
 typedef enum {
     /* Hasn't yet received its image. */
-    PICKER_ENTRY_EMPTY = 0,
+    CAPTURE_ENTRY_EMPTY = 0,
     /* Has a region picker active. */
-    PICKER_ENTRY_REGION,
+    CAPTURE_ENTRY_REGION_PICKER,
     /* Has an output picker active. */
-    PICKER_ENTRY_OUTPUT,
+    CAPTURE_ENTRY_OUTPUT_PICKER,
     /* Has an image saved, and will eventually be transformed into one of the
        other types. */
-    PICKER_ENTRY_DEFER,
-} PickerListEntryType;
+    CAPTURE_ENTRY_DEFER,
+} CaptureEntryType;
 
 typedef struct {
     void *picker;
-    PickerListEntryType type;
+    CaptureEntryType type;
+    WrappedOutput *output;
     Image *image;
     struct wl_list link;
-} PickerListEntry;
+} CaptureEntry;
 
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
@@ -49,7 +51,7 @@ static bool correct_output_found = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
 static Arguments args;
-static struct wl_list active_pickers;
+static struct wl_list active_captures;
 static struct wl_display *display;
 
 /**
@@ -179,12 +181,9 @@ static struct wl_data_source_listener clipboard_source_listener = {
     .action = NULL
 };
 
-static void finish_predefined_output_screenshot(
-    WrappedOutput * /* output */, Image *image, void * /* data */
-) {
+static void finish_predefined_output_screenshot(Image *image) {
     if (!image) {
         report_error("capturing output failed");
-
         goto defer;
     }
 
@@ -198,13 +197,12 @@ static void finish_predefined_output_screenshot(
     link_buffer_destroy(out_data);
 
 defer:
-    image_destroy(image);
     should_active_wait = false;
 }
 
 // This function uses logical coordinates
 static void finish_predefined_region_screenshot(
-    WrappedOutput *output, Image *image, void *data
+    WrappedOutput *output, Image *image, BBox crop_bounds
 ) {
     if (!is_output_valid(output)) {
         report_error("output disappeared while screenshotting");
@@ -215,8 +213,6 @@ static void finish_predefined_region_screenshot(
         goto defer;
     }
 
-    // NOTE: this isn't dynamically allocated
-    BBox crop_bounds = *(BBox *)data;
     // move to output space
     crop_bounds = bbox_translate(
         crop_bounds, -output->logical_bounds.x, -output->logical_bounds.y
@@ -250,17 +246,16 @@ static void finish_predefined_region_screenshot(
     link_buffer_destroy(out_data);
 
 defer:
-    image_destroy(image);
     should_active_wait = false;
 }
 
-static void picker_entry_destroy(PickerListEntry *entry) {
+static void capture_entry_destroy(CaptureEntry *entry) {
     if (entry->picker) {
         switch (entry->type) {
-        case PICKER_ENTRY_REGION:
+        case CAPTURE_ENTRY_REGION_PICKER:
             region_picker_destroy(entry->picker);
             break;
-        case PICKER_ENTRY_OUTPUT:
+        case CAPTURE_ENTRY_OUTPUT_PICKER:
             output_picker_destroy(entry->picker);
             break;
         default:
@@ -273,23 +268,23 @@ static void picker_entry_destroy(PickerListEntry *entry) {
 }
 
 static void picker_entry_destroy_all() {
-    PickerListEntry *entry, *tmp;
-    wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
-        picker_entry_destroy(entry);
+    CaptureEntry *entry, *tmp;
+    wl_list_for_each_safe(entry, tmp, &active_captures, link) {
+        capture_entry_destroy(entry);
     }
 }
 
 static void picker_finish_generic(
     void *picker,
     PickerFinishReason reason,
-    Image *(*result_image_callback)(PickerListEntry *entry, void *data),
+    Image *(*result_image_callback)(CaptureEntry *entry, void *data),
     void *data
 ) {
-    PickerListEntry *entry, *tmp;
+    CaptureEntry *entry, *tmp;
     Image *to_save = NULL;
     struct wl_data_source *data_source = NULL;
     bool should_copy = config_get()->copy_to_clipboard;
-    wl_list_for_each_safe(entry, tmp, &active_pickers, link) {
+    wl_list_for_each_safe(entry, tmp, &active_captures, link) {
         if (entry->picker != picker) {
             continue;
         }
@@ -314,7 +309,7 @@ static void picker_finish_generic(
             should_active_wait = false;
         }
 
-        picker_entry_destroy(entry);
+        capture_entry_destroy(entry);
     }
 
     // The DESTROYED reason is the only one that isn't user-initiated,
@@ -351,8 +346,7 @@ static void picker_finish_generic(
     }
 }
 
-static Image *
-region_picker_finish_get_image(PickerListEntry *entry, void *data) {
+static Image *region_picker_finish_get_image(CaptureEntry *entry, void *data) {
     BBox result_region = *(BBox *)data;
     return image_crop(
         entry->image,
@@ -371,7 +365,7 @@ static void region_picker_finish(
     );
 }
 
-static Image *output_picker_finish_get_image(PickerListEntry *entry, void *) {
+static Image *output_picker_finish_get_image(CaptureEntry *entry, void *) {
     // picker_finish_generic frees this separately from the source image
     return image_copy(entry->image);
 }
@@ -381,7 +375,7 @@ output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
     picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
 }
 
-static PickerListEntry *make_picker_entry(WrappedOutput *output) {
+static CaptureEntry *make_capture_entry(WrappedOutput *output) {
     if (!is_output_valid(output)) {
         // Theoretically, if all the outputs disappear (and no new ones appear),
         // there will be no region pickers, so should_active_wait will never be
@@ -390,31 +384,91 @@ static PickerListEntry *make_picker_entry(WrappedOutput *output) {
         report_error("output disappeared while screenshotting");
         return NULL;
     }
-    PickerListEntry *entry = calloc(1, sizeof(PickerListEntry));
-    wl_list_insert(&active_pickers, &entry->link);
+    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
+    entry->output = output;
+    wl_list_insert(&active_captures, &entry->link);
 
     return entry;
 }
 
-static void
-create_picker_for_list_entry(WrappedOutput *output, Image *image, void *data) {
-    PickerListEntry *entry = data;
+static bool is_output_matching(WrappedOutput *output) {
+    if (args.mode == CAPTURE_OUTPUT) {
+        if (args.output_params.output_name) {
+            // output specified in command line
+            if (strcmp(output->name, args.output_params.output_name) == 0) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    } else if (args.mode == CAPTURE_REGION) {
+        if (args.region_params.has_region) {
+            if (bbox_contains(
+                    output->logical_bounds, args.region_params.region
+                )) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    } else if (args.mode == CAPTURE_DEFER) {
+        return true;
+    } else {
+        REPORT_UNHANDLED("mode", "%x", args.mode);
+    }
 
-    if (!is_output_valid(output)) {
+    return false;
+}
+
+static void handle_captured_output(Image *image, void *data) {
+    CaptureEntry *entry = data;
+
+    if (!is_output_valid(entry->output)) {
         report_error("output disappeared while screenshotting");
-        picker_entry_destroy(entry);
+        capture_entry_destroy(entry);
         return;
     }
 
-    entry->image = image;
+    // If these entries are getting reactivated after being in defer mode,
+    // the image's already set.
+    if (image) {
+        entry->image = image;
+    }
+
+    // This can't be checked early if mode selection was deferred,
+    // so also do it now. Returning if this is false also means
+    // the following logic doesn't have to check this
+    if (is_output_matching(entry->output)) {
+        correct_output_found = true;
+    } else {
+        capture_entry_destroy(entry);
+        return;
+    }
+
     if (args.mode == CAPTURE_OUTPUT) {
-        entry->picker = output_picker_new(output, image, output_picker_finish);
-        entry->type = PICKER_ENTRY_OUTPUT;
+        if (args.output_params.output_name) {
+            finish_predefined_output_screenshot(entry->image);
+            capture_entry_destroy(entry);
+        } else {
+            entry->picker = output_picker_new(
+                entry->output, entry->image, output_picker_finish
+            );
+            entry->type = CAPTURE_ENTRY_OUTPUT_PICKER;
+        }
     } else if (args.mode == CAPTURE_REGION) {
-        entry->picker = region_picker_new(output, image, region_picker_finish);
-        entry->type = PICKER_ENTRY_REGION;
+        if (args.region_params.has_region) {
+            finish_predefined_region_screenshot(
+                entry->output, entry->image, args.region_params.region
+            );
+            capture_entry_destroy(entry);
+        } else {
+            entry->picker = region_picker_new(
+                entry->output, entry->image, region_picker_finish
+            );
+            entry->type = CAPTURE_ENTRY_REGION_PICKER;
+        }
     } else if (args.mode == CAPTURE_DEFER) {
-        entry->type = PICKER_ENTRY_DEFER;
+        entry->type = CAPTURE_ENTRY_DEFER;
     }
 }
 
@@ -430,76 +484,25 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    // TODO: Some of the following logic is required again later.
-    // TODO: Also remove the duplication in here.
-    // So, make this function just create a PickerListEntry (which should
-    // maybe be renamed), and make everything work with those.
+    const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
+    if (only_output_name && strcmp(output->name, only_output_name) != 0) {
+        return;
+    }
 
-    if (args.mode == CAPTURE_OUTPUT) {
-        if (args.output_params.output_name) {
-            // output specified in command line
-            if (strcmp(output->name, args.output_params.output_name) == 0) {
-                log_debug("...which is correct\n");
-                correct_output_found = true;
-                capture_output(
-                    output, finish_predefined_output_screenshot, NULL
-                );
-            }
-        } else {
-            // This is for debugging so I don't lock myself out of my terminal
-            const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
-            if (only_output_name &&
-                strcmp(output->name, only_output_name) != 0) {
-                return;
-            }
-            correct_output_found = true;
-
-            PickerListEntry *entry = make_picker_entry(output);
-            if (entry) {
-                capture_output(output, create_picker_for_list_entry, entry);
-            }
-        }
-    } else if (args.mode == CAPTURE_REGION) {
-        if (args.region_params.has_region) {
-            if (bbox_contains(
-                    output->logical_bounds, args.region_params.region
-                )) {
-                log_debug("... which is correct\n");
-                correct_output_found = true;
-                capture_output(
-                    output,
-                    finish_predefined_region_screenshot,
-                    &args.region_params.region
-                );
-            }
-        } else {
-            // This is for debugging so I don't lock myself out of my terminal
-            const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
-            if (only_output_name &&
-                strcmp(output->name, only_output_name) != 0) {
-                return;
-            }
-            correct_output_found = true;
-
-            PickerListEntry *entry = make_picker_entry(output);
-            if (entry) {
-                capture_output(output, create_picker_for_list_entry, entry);
-            }
-        }
-    } else if (args.mode == CAPTURE_DEFER) {
+    if (is_output_matching(output)) {
         correct_output_found = true;
-
-        PickerListEntry *entry = make_picker_entry(output);
-        if (entry) {
-            capture_output(output, create_picker_for_list_entry, entry);
-        }
     } else {
-        REPORT_UNHANDLED("mode", "%x", args.mode);
+        return;
+    }
+
+    CaptureEntry *entry = make_capture_entry(output);
+    if (entry) {
+        capture_output(output, handle_captured_output, entry);
     }
 }
 
 int main(int argc, char **argv) {
-    wl_list_init(&active_pickers);
+    wl_list_init(&active_captures);
 
     TIMING_START(config_load);
     config_load();
@@ -513,10 +516,11 @@ int main(int argc, char **argv) {
         report_error_fatal("failed to connect to Wayland display");
     }
 
-    // Note that there's no need for a destroy callback here: the layer surfaces
-    // should get closed on their own (they don't care about the output after
-    // creation either), and ongoing screenshot operations can't really receive
-    // a destroyed callback (so they will check is_output_valid)
+    // Note that there's no need for a destroy callback here: the layer
+    // surfaces should get closed on their own (they don't care about the
+    // output after creation either), and ongoing screenshot operations
+    // can't really receive a destroyed callback (so they will check
+    // is_output_valid)
     bool found_everything = find_wayland_globals(display, &add_new_output);
     if (!found_everything) {
         report_error_fatal("didn't find every required Wayland object");
@@ -524,19 +528,16 @@ int main(int argc, char **argv) {
 
     wl_display_roundtrip(display);
     if (!correct_output_found) {
-        const char *output_name = args.mode == CAPTURE_OUTPUT
-                                      ? args.output_params.output_name
-                                      : "[unspecified]";
-        report_error_fatal("couldn't find output %s", output_name);
+        report_error_fatal("couldn't find matching output");
     }
 
     if (args.mode == CAPTURE_DEFER) {
         // Wait for all the captured outputs to be ready.
         while (true) {
-            PickerListEntry *entry;
+            CaptureEntry *entry;
             bool is_waiting = false;
-            wl_list_for_each(entry, &active_pickers, link) {
-                if (entry->type == PICKER_ENTRY_EMPTY) {
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->type == CAPTURE_ENTRY_EMPTY) {
                     log_debug("waiting for picker entry %p\n", (void *)entry);
                     is_waiting = true;
                     break;
@@ -573,10 +574,38 @@ int main(int argc, char **argv) {
             report_error_fatal("couldn't read deferred arguments");
         }
         free(line);
+
+        // It's really easy to accidentally put a newline at the end of the last
+        // argument, so trim it.
+        if (argc > 0) {
+            char *last_arg = new_argv[new_argc - 1];
+            size_t len = strlen(last_arg);
+            if (len > 0 && last_arg[len - 1] == '\n') {
+                last_arg[len - 1] = '\0';
+            }
+        }
+
         args.captured_mode_params = 0;
         parse_argv(&args, new_argc, new_argv);
 
-        // TODO: Transform PickerListEntries into the newly selected mode.
+        for (int i = 0; i < new_argc; i++) {
+            log_debug("new arg: '%s'\n", new_argv[i]);
+            free(new_argv[i]);
+        }
+
+        if (args.mode == CAPTURE_DEFER) {
+            report_error_fatal("mode selection already deferred");
+        }
+
+        correct_output_found = false;
+        CaptureEntry *entry, *tmp;
+        wl_list_for_each_safe(entry, tmp, &active_captures, link) {
+            handle_captured_output(NULL, entry);
+        }
+
+        if (!correct_output_found) {
+            report_error_fatal("couldn't find matching output");
+        }
     }
 
     while (wl_display_dispatch(display) != -1) {

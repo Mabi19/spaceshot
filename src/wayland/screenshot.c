@@ -27,7 +27,7 @@ typedef struct {
 static void frame_context_finalize(
     FrameContext *context, struct zwlr_screencopy_frame_v1 *frame, Image *result
 ) {
-    context->image_callback(context->output, result, context->user_data);
+    context->image_callback(result, context->user_data);
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
