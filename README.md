@@ -77,6 +77,53 @@ spaceshot output
 spaceshot output DP-1
 ```
 
+### Deferred mode
+Running `spaceshot defer` puts it in a special mode made for scripting, where screenshot parameters are passed in later.
+In this mode, the program flow looks like this:
+1. All the available outputs are captured and saved.
+2. spaceshot outputs a line containing "ready" on stdout.
+3. A new set of arguments is input over stdin (separated by NULs, and terminated by EOF)
+4. Screenshotting continues as normal, using the images captured during step 1 and using the arguments from step 3
+
+So, running `echo "region" | spaceshot defer` is equivalent to running `spaceshot region`.
+
+This separation can, for example, be used to make "choose-how-to-screenshot" menus, while ensuring the screenshot does not contain the menu.
+
+<details>
+    <summary>Example script</summary>
+
+This script implements a "choose-how-to-screenshot" menu. It uses [Walker](https://github.com/abenz1267/walker) in dmenu mode to show the menu. While this example only puts in a mode after deferring, all arguments are supported (and are treated as if they were passed in right after the "real" argv)
+
+```sh
+#!/bin/bash
+
+coproc spaceshot defer
+read -r READY <&"${COPROC[0]}"
+
+if [ "$READY" != "ready" ]; then
+    exit 1
+fi
+
+CHOICE=$(printf "Region\\nOutput" | walker -d)
+
+case "$CHOICE" in
+    "Region") ARGS=("region") ;;
+    "Output") ARGS=("output") ;;
+    *) exit 1 ;;
+esac
+
+for arg in "${ARGS[@]}"; do
+    printf '%s\0' "$arg" >&"${COPROC[1]}"
+done
+
+# shellcheck disable=SC2093,SC1083
+exec {COPROC[1]}>&-
+
+wait "$COPROC_PID"
+```
+
+</details>
+
 ## Configuration
 Configuration is initialized from the default options, then loaded from $XDG_CONFIG_DIRS/spaceshot/config.ini, then $XDG_CONFIG_HOME/spaceshot/config.ini, and finally from command-line arguments. All configuration files are optional, and don't need to specify every property - only the ones you want to override.
 
