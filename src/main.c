@@ -551,6 +551,7 @@ int main(int argc, char **argv) {
         }
 
         printf("ready\n");
+        fflush(stdout);
         // Read stdin until EOF and use that as the actual arguments.
         char **new_argv = NULL;
         int new_argc = 0;
