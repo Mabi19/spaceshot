@@ -81,6 +81,22 @@ char *get_output_filename() {
         );
     }
 
+    const char *EXT_PLACEHOLDER = "{ext}";
+    const int EXT_PLACEHOLDER_LEN = strlen(EXT_PLACEHOLDER);
+    int expanded_template_len = strlen(expanded_template);
+    if (expanded_template_len > EXT_PLACEHOLDER_LEN &&
+        strcmp(
+            expanded_template + expanded_template_len - EXT_PLACEHOLDER_LEN,
+            EXT_PLACEHOLDER
+        ) == 0) {
+        // This is safe, because the file extension is never longer than the
+        // placeholder.
+        strcpy(
+            expanded_template + expanded_template_len - EXT_PLACEHOLDER_LEN,
+            "png"
+        );
+    }
+
     size_t filename_buf_size = strlen(expanded_template) + 64;
     char *filename = malloc(filename_buf_size);
     time_t timestamp = time(NULL);
