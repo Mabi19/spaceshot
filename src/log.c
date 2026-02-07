@@ -38,7 +38,7 @@ void report_error_fatal(const char *format, ...) {
     va_start(args);
     print_stderr_valist(format, args);
     va_end(args);
-    exit(EXIT_FAILURE);
+    exit(2);
 }
 
 void report_warning(const char *format, ...) {

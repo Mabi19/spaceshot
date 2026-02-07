@@ -296,5 +296,5 @@ void parse_argv(Arguments *result, int argc, char **argv) {
 
     return;
 error:
-    exit(EXIT_FAILURE);
+    exit(2);
 }
