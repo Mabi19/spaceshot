@@ -1,0 +1,99 @@
+.TH SPACESHOT 1
+.SH NAME
+spaceshot \- screenshot tool for wlroots-compatible Wayland compositors
+.SH SYNOPSIS
+.B spaceshot
+\fI<mode> <mode parameters> \fR[\fIoptions\fR]
+.SH DESCRIPTION
+.B spaceshot
+is an integrated screenshot tool: it both captures images and crops them.
+It can also copy the result to the clipboard and send notifications with further actions
+(such as opening the newly created file in an image editor or viewing it in a file manager).
+.SH CONTROLS
+.SS Region picker
+Click and drag to select a region.
+While dragging, hold Alt or Space to move the selection instead of resizing it.
+Hold Ctrl while releasing the mouse button to edit the selection using edge and corner handles.
+When in edit mode, press Enter to confirm the selection.
+Press Esc to exit.
+.SS Output picker
+Click on a monitor to screenshot it, or press Esc to exit.
+.SH OPTIONS
+.SS Modes
+The mode determines how to select the part of the display to screenshot.
+.TP
+\fBregion\fR [\fIregion\fR]
+Select a rectangular region.
+The region should be in the format 'X,Y WxH', in global compositor coordinates.
+If the region is not specified, an interactive picker is opened to let the user choose.
+Note that the region must be entirely contained within one monitor.
+.TP
+\fBoutput\fR [\fIoutput-name\fR]
+Select an entire monitor (what Wayland calls an output)
+If the output is not specified, an interactive picker is opened to let the user choose.
+.TP
+\fBdefer\fR
+Prepare a screenshot for later.
+This mode captures output images, then prints 'ready' and waits for additional commands.
+Afterwards, input is read from stdin (until EOF) and parsed as arguments, separated by NULs.
+Inputting a new mode causes it to be invoked on the previously captured images.
+This is useful for scripting, for example when making "choose-how-to-screenshot" menus.
+.SS Generic options
+These options are not specific to any single mode.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help and exit.
+.TP
+\fB\-v\fR, \fB\-\-version\fR
+Print version information and exit.
+.TP
+\fB\-b\fR, \fB\-\-background\fR
+Move to background after screenshotting.
+.TP
+\fB\-c\fR, \fB\-\-copy\fR
+Copy the screenshot to the clipboard.
+.TP
+\fB\-\-no\-copy\fR
+Disable copying the screenshot to the clipboard.
+.TP
+\fB\-C\fR, \fB\-\-config\-file\fR=\fIFILE\fR
+Load an additional configuration file.
+.TP
+\fB\-n\fR, \fB\-\-notify\fR
+Send a notification after screenshotting.
+.TP
+\fB\-\-no\-notify\fR
+Disable sending notifications after screenshotting
+.TP
+\fB\-o\fR, \fB\-\-output\-file\fR=\fIFILE\fR
+Set the output file path.
+~~/ is replaced with $XDG_PICTURES_DIR and
+{ext} is replaced with the image format's file extension (currently only PNG).
+.BR strftime (3)
+specifiers are supported.
+.TP
+\fB\-\-verbose\fR
+Enable debug logging.
+.SH EXAMPLES
+.PP
+Screenshot a region interactively:
+.RS
+spaceshot region
+.RE
+.PP
+Screenshot a 50x50 area at coordinates (100, 100):
+.RS
+spaceshot region '100,100 50x50'
+.RE
+.PP
+Screenshot an output interactively:
+.RS
+spaceshot output
+.RE
+.PP
+Screenshot the output named DP\-1:
+.RS
+spaceshot output DP\-1
+.RE
+.SH SEE ALSO
+.BR spaceshot-notify (1)

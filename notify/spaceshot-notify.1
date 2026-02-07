@@ -1,0 +1,39 @@
+.TH SPACESHOT 1
+.SH NAME
+spaceshot\-notify \- spaceshot's notification service
+.SH SYNOPSIS
+.B spaceshot\-notify -s
+.PP
+.B spaceshot\-notify
+\fB\-p \fIFILE\fR
+[\fB\-c\fR]
+.SH DESCRIPTION
+.B spaceshot-notify
+is a helper program used by
+.BR spaceshot (1)
+to send notifications.
+In server mode, it manages notifications and executing actions on them.
+If the \-s flag is not specified, tells the server to create a new notification.
+Note that normally
+.B spaceshot\-notify -s
+is spawned automatically by the D-Bus daemon once a client creates a notification.
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help and exit.
+.TP
+\fB\-s\fR, \fB\-\-server\fR
+Run the server. This is normally done automatically by D-Bus
+.TP
+\fB\-p\fR, \fB\-\-path\fR
+Set the path of the saved image.
+.TP
+\fB\-c\fR, \fB\-\-copied\fR
+Mention that the image was copied to the clipboard in the notification text.
+.SH EXAMPLES
+Show a notification for the file ~/Pictures/my-screenshot.png:
+.RS
+spaceshot-notify -p '~/Pictures/my-screenshot.png' -c
+.RE
+.SH SEE ALSO
+.BR spaceshot (1)

@@ -31,3 +31,5 @@ executable(
     c_args: ['-w'], # disable C warnings
     install: true,
 )
+
+install_man('spaceshot-notify.1')

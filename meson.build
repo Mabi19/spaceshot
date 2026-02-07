@@ -32,6 +32,8 @@ configure_file(
 )
 build_conf_include = include_directories('.')
 
+install_man('spaceshot.1')
+
 subdir('config')
 subdir('src')
 if get_option('notifications')
