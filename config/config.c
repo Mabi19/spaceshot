@@ -113,7 +113,11 @@ bool config_load_file(const char *path) {
     size_t data_len = ftell(config_file);
     char data[data_len + 1];
     fseek(config_file, 0, SEEK_SET);
-    fread(data, 1, data_len, config_file);
+    size_t bytes_read = fread(data, 1, data_len, config_file);
+    if (bytes_read != data_len) {
+        fclose(config_file);
+        return false;
+    }
     data[data_len] = '\0';
     fclose(config_file);
 

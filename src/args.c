@@ -25,11 +25,14 @@ static void print_help(const char *program_name) {
         "Options:\n"
         "  -h, --help        display this help and exit\n"
         "  -v, --version     output version information and exit\n"
-        "  -b, --background  move to background after screenshotting\n"
-        "  -c, --copy        copy screenshot to clipboard\n"
+        "  -c, --copy        copy screenshot to clipboard (default)\n"
         "  --no-copy         do not copy the screenshot\n"
         "  -C, --config-file load an additional configuration file\n"
-        "  -n, --notify      send a notification after screenshotting\n"
+        "  -f, --foreground  stay in foreground when waiting for pastes\n"
+        "  --background      move to background by forking after "
+        "screenshotting (default)\n"
+        "  -n, --notify      send a notification after screenshotting "
+        "(default)\n"
         "  --no-notify       do not send notifications\n"
         "  -o, --output-file set output file path template\n"
         "  --verbose         enable debug logging\n"
@@ -42,7 +45,11 @@ static void print_version() {
 
 static void interpret_option(Arguments *args, char opt, char *value) {
     switch (opt) {
-    case 'b':
+    case 'f':
+        config_get()->move_to_background = false;
+        break;
+    case '$':
+        // only as --background
         config_get()->move_to_background = true;
         break;
     case 'h':
@@ -89,7 +96,8 @@ typedef struct {
 } LongOption;
 
 static const LongOption LONG_OPTIONS[] = {
-    {"background", 'b', false},
+    {"foreground", 'f', false},
+    {"background", '$', false},
     {"copy", 'c', false},
     {"no-copy", '!', false},
     {"config-file", 'C', true},
@@ -163,7 +171,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                 for (int j = 1; arg[j] != '\0'; j++) {
                     switch (arg[j]) {
                     // no-argument options
-                    case 'b':
+                    case 'f':
                     case 'c':
                     case 'n':
                     case 'h':
