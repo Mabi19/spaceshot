@@ -80,6 +80,9 @@ static void send_notification(char *output_filename, bool did_copy) {
             notify_bin_path =
                 notify_bin_path ? notify_bin_path : "spaceshot-notify";
             if (did_copy) {
+                log_debug(
+                    "invoking 'spaceshot-notify -p %s -c\n", output_filename
+                );
                 execlp(
                     notify_bin_path,
                     "spaceshot-notify",
@@ -89,6 +92,9 @@ static void send_notification(char *output_filename, bool did_copy) {
                     NULL
                 );
             } else {
+                log_debug(
+                    "invoking 'spaceshot-notify -p %s\n", output_filename
+                );
                 execlp(
                     notify_bin_path,
                     "spaceshot-notify",
@@ -646,7 +652,12 @@ int main(int argc, char **argv) {
                 close(STDERR_FILENO);
             }
 
-            chdir("/");
+            int ret = chdir("/");
+            if (ret != 0) {
+                // If this happens, something really weird is going on,
+                // but it technically doesn't break anything for us
+                report_error("chdir failed: %s", strerror(errno));
+            }
         }
 
         while (wl_display_dispatch(display) != -1) {

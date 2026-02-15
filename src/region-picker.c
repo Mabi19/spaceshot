@@ -232,7 +232,6 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         surface->device_height == picker->last_device_height &&
         bbox_equal(selection_box, picker->last_drawn_box) &&
         !picker->dirty_after_state_change) {
-        log_debug("skipping draw\n");
         return false;
     }
 
