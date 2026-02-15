@@ -29,7 +29,7 @@ If the region is not specified, an interactive picker is opened to let the user 
 Note that the region must be entirely contained within one monitor.
 .TP
 \fBoutput\fR [\fIoutput-name\fR]
-Select an entire monitor (what Wayland calls an output)
+Select an entire monitor (what Wayland calls an output).
 If the output is not specified, an interactive picker is opened to let the user choose.
 .TP
 \fBdefer\fR
@@ -47,11 +47,8 @@ Print help and exit.
 \fB\-v\fR, \fB\-\-version\fR
 Print version information and exit.
 .TP
-\fB\-b\fR, \fB\-\-background\fR
-Move to background after screenshotting.
-.TP
 \fB\-c\fR, \fB\-\-copy\fR
-Copy the screenshot to the clipboard.
+Copy the screenshot to the clipboard (default).
 .TP
 \fB\-\-no\-copy\fR
 Disable copying the screenshot to the clipboard.
@@ -59,8 +56,14 @@ Disable copying the screenshot to the clipboard.
 \fB\-C\fR, \fB\-\-config\-file\fR=\fIFILE\fR
 Load an additional configuration file.
 .TP
+\fB\-f\fR, \fB\-\-foreground\fR
+Stay in foreground when waiting for pastes after screenshotting.
+.TP
+\fB\-\-background\fR
+Move to background after screenshotting (default)
+.TP
 \fB\-n\fR, \fB\-\-notify\fR
-Send a notification after screenshotting.
+Send a notification after screenshotting (default).
 .TP
 \fB\-\-no\-notify\fR
 Disable sending notifications after screenshotting
