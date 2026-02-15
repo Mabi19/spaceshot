@@ -1,7 +1,8 @@
 [DBus(name = "land.mabi.SpaceshotNotify")]
-interface NotifyClient: DBusProxy {
+interface NotifyClient : DBusProxy {
     public abstract void notify_for_file(string path, bool did_copy) throws DBusError, IOError;
 }
+
 
 int main(string[] args) {
     bool is_server = false;
@@ -9,9 +10,9 @@ int main(string[] args) {
     string screenshot_path = null;
 
     OptionEntry[] entries = {
-        {"server", 's', OptionFlags.NONE, OptionArg.NONE, ref is_server, "Run the server. This is normally done automatically by D-Bus", null},
-        {"path", 'p', OptionFlags.NONE, OptionArg.FILENAME, ref screenshot_path, "Saved screenshot path", null},
-        {"copied", 'c', OptionFlags.NONE, OptionArg.NONE, ref did_copy, "Indicate that the screenshot was copied", null}
+        { "server", 's', OptionFlags.NONE, OptionArg.NONE, ref is_server, "Run the server. This is normally done automatically by D-Bus", null },
+        { "path", 'p', OptionFlags.NONE, OptionArg.FILENAME, ref screenshot_path, "Saved screenshot path", null },
+        { "copied", 'c', OptionFlags.NONE, OptionArg.NONE, ref did_copy, "Indicate that the screenshot was copied", null }
     };
 
     var context = new OptionContext("- notification service for spaceshot");
@@ -30,11 +31,25 @@ int main(string[] args) {
             stdout.printf("error: Path is required in client mode\n");
             return 1;
         }
+
+        NotifyClient client;
         try {
-            NotifyClient client = Bus.get_proxy_sync(BusType.SESSION, "land.mabi.spaceshot", "/land/mabi/spaceshot", DBusProxyFlags.NONE, null);
+            client = Bus.get_proxy_sync(BusType.SESSION, "land.mabi.spaceshot", "/land/mabi/spaceshot", DBusProxyFlags.NONE, null);
+        } catch (IOError e) {
+            printerr("error: Couldn't connect to D-Bus: %s\n", e.message);
+            return 1;
+        }
+
+        try {
             client.notify_for_file(screenshot_path, did_copy);
-        } catch (Error e) {
-            printerr("error: Couldn't invoke spaceshot notify service: %s\n", e.message);
+        } catch (DBusError e) {
+            printerr("error: Couldn't invoke spaceshot notify service (D-Bus error): %s\n", e.message);
+            if (e.code == DBusError.SERVICE_UNKNOWN) {
+                printerr("note: this usually means the D-Bus service definition wasn't installed correctly\n");
+            }
+            return 1;
+        } catch (IOError e) {
+            printerr("error: Couldn't invoke spaceshot notify service (IO error): %s\n", e.message);
             return 1;
         }
     }
