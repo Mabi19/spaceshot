@@ -16,6 +16,8 @@ ImageFormat image_format_from_wl(enum wl_shm_format format) {
     switch (format) {
     case WL_SHM_FORMAT_XRGB8888:
         return IMAGE_FORMAT_XRGB8888;
+    case WL_SHM_FORMAT_XBGR8888:
+        return IMAGE_FORMAT_XBGR8888;
     case WL_SHM_FORMAT_XRGB2101010:
         return IMAGE_FORMAT_XRGB2101010;
     case WL_SHM_FORMAT_XBGR2101010:
@@ -30,6 +32,8 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
         return WL_SHM_FORMAT_XRGB8888;
     case IMAGE_FORMAT_ARGB8888:
         return WL_SHM_FORMAT_ARGB8888;
+    case IMAGE_FORMAT_XBGR8888:
+        return WL_SHM_FORMAT_XBGR8888;
     case IMAGE_FORMAT_XRGB2101010:
         return WL_SHM_FORMAT_XRGB2101010;
     case IMAGE_FORMAT_XBGR2101010:
@@ -41,6 +45,7 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
 cairo_format_t image_format_to_cairo(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
+    case IMAGE_FORMAT_XBGR8888:
         return CAIRO_FORMAT_RGB24;
     case IMAGE_FORMAT_ARGB8888:
         return CAIRO_FORMAT_ARGB32;
@@ -55,6 +60,7 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
     case IMAGE_FORMAT_ARGB8888:
+    case IMAGE_FORMAT_XBGR8888:
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         return 4;
@@ -65,7 +71,7 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     }
 }
 
-static int image_format_default_stride(ImageFormat format, int width) {
+uint32_t image_format_default_stride(ImageFormat format, uint32_t width) {
     switch (format) {
     case IMAGE_FORMAT_GRAY8:
         return width;
@@ -183,6 +189,11 @@ static inline void image_get_pixel(
             *g = (*pixel_ptr >> 8 & 0xff) / 255.0;
             *b = (*pixel_ptr & 0xff) / 255.0;
             break;
+        case IMAGE_FORMAT_XBGR8888:
+            *b = (*pixel_ptr >> 16 & 0xff) / 255.0;
+            *g = (*pixel_ptr >> 8 & 0xff) / 255.0;
+            *r = (*pixel_ptr & 0xff) / 255.0;
+            break;
         case IMAGE_FORMAT_XRGB2101010:
             *r = (*pixel_ptr >> 20 & 0x3ff) / 1023.0;
             *g = (*pixel_ptr >> 10 & 0x3ff) / 1023.0;
@@ -239,6 +250,13 @@ static inline void image_put_pixel(
             uint8_t chan_g = g * 255.0;
             uint8_t chan_b = b * 255.0;
             *pixel_ptr = chan_r << 16 | chan_g << 8 | chan_b;
+            break;
+        }
+        case IMAGE_FORMAT_XBGR8888: {
+            uint8_t chan_r = r * 255.0;
+            uint8_t chan_g = g * 255.0;
+            uint8_t chan_b = b * 255.0;
+            *pixel_ptr = chan_b << 16 | chan_g << 8 | chan_r;
             break;
         }
         case IMAGE_FORMAT_XRGB2101010: {
@@ -317,7 +335,6 @@ LinkBuffer *image_save_png(const Image *image) {
     // results in about 33% faster encoding in my testing, with a not very
     // significant size hit.
     png_set_compression_level(png_data, config_get()->png_compression_level);
-    // png_init_io(png_data, wrapped_fd);
     png_set_write_fn(png_data, &curr_block, write_png_data, flush_png_data);
 
     // set up all the metadata
@@ -325,6 +342,7 @@ LinkBuffer *image_save_png(const Image *image) {
     int png_bit_depth, png_significant_bits;
     switch (image->format) {
     case IMAGE_FORMAT_XRGB8888:
+    case IMAGE_FORMAT_XBGR8888:
         png_bit_depth = 8;
         png_significant_bits = 8;
         break;
@@ -334,7 +352,7 @@ LinkBuffer *image_save_png(const Image *image) {
         png_significant_bits = 10;
         break;
     default:
-        REPORT_UNHANDLED("image format", "%x", image->format);
+        REPORT_UNHANDLED("image format", "0x%x", image->format);
     }
     png_set_IHDR(
         png_data,
@@ -362,10 +380,13 @@ LinkBuffer *image_save_png(const Image *image) {
 
     png_bytepp row_ptrs = malloc(image->height * sizeof(png_bytep));
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(image->format);
-    if (image->format == IMAGE_FORMAT_XRGB8888) {
-        // little-endian causes it to be effectively BGRX
+    if (image->format == IMAGE_FORMAT_XRGB8888 ||
+        image->format == IMAGE_FORMAT_XBGR8888) {
+        // little-endian causes it to be effectively BGRX or RGBX
         png_set_filler(png_data, 0, PNG_FILLER_AFTER);
-        png_set_bgr(png_data);
+        if (image->format == IMAGE_FORMAT_XRGB8888) {
+            png_set_bgr(png_data);
+        }
 
         for (uint32_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];

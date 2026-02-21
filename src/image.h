@@ -13,6 +13,7 @@ constexpr uint32_t IMAGE_FORMAT_FLIPPED_ORDER = (1 << 15);
  */
 typedef enum {
     IMAGE_FORMAT_XRGB8888 = 1,
+    IMAGE_FORMAT_XBGR8888 = IMAGE_FORMAT_XRGB8888 | IMAGE_FORMAT_FLIPPED_ORDER,
     IMAGE_FORMAT_ARGB8888 = 2,
     IMAGE_FORMAT_XRGB2101010 = 3,
     IMAGE_FORMAT_XBGR2101010 =
@@ -29,6 +30,7 @@ enum wl_shm_format image_format_to_wl(ImageFormat format);
  */
 cairo_format_t image_format_to_cairo(ImageFormat format);
 uint32_t image_format_bytes_per_pixel(ImageFormat format);
+uint32_t image_format_default_stride(ImageFormat format, uint32_t width);
 
 typedef struct {
     uint8_t *data;

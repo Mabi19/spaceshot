@@ -2,11 +2,14 @@
 #include "log.h"
 #include "wayland/seat.h"
 #include <cursor-shape-client.h>
+#include <ext-image-capture-source-client.h>
+#include <ext-image-copy-capture-client.h>
 #include <fractional-scale-client.h>
 #include <stdlib.h>
 #include <string.h>
 #include <viewporter-client.h>
 #include <wayland-client-core.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <wlr-screencopy-client.h>
 #include <xdg-output-client.h>
@@ -178,6 +181,24 @@ static void registry_handle_global(
         );
     }
 
+    if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) ==
+        0) {
+        globals->ext_image_copy_capture_manager = wl_registry_bind(
+            registry, object_id, &ext_image_copy_capture_manager_v1_interface, 1
+        );
+    }
+
+    if (strcmp(
+            interface, ext_output_image_capture_source_manager_v1_interface.name
+        ) == 0) {
+        globals->ext_output_capture_source_manager = wl_registry_bind(
+            registry,
+            object_id,
+            &ext_output_image_capture_source_manager_v1_interface,
+            1
+        );
+    }
+
     if (strcmp(interface, wp_cursor_shape_manager_v1_interface.name) == 0) {
         globals->cursor_shape_manager = wl_registry_bind(
             registry, object_id, &wp_cursor_shape_manager_v1_interface, 1
@@ -202,7 +223,7 @@ static void registry_handle_global(
     }
 
     if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
-        globals->screencopy_manager = wl_registry_bind(
+        globals->wlr_screencopy_manager = wl_registry_bind(
             registry, object_id, &zwlr_screencopy_manager_v1_interface, 3
         );
     }
@@ -289,7 +310,6 @@ bool find_wayland_globals(
         wayland_globals.fractional_scale_manager == NULL ||
         wayland_globals.viewporter == NULL ||
         wayland_globals.layer_shell == NULL ||
-        wayland_globals.screencopy_manager == NULL ||
         wayland_globals.seat_dispatcher == NULL ||
         wayland_globals.output_manager == NULL) {
         return false;
@@ -316,13 +336,27 @@ void cleanup_wayland_globals() {
 
     wl_shm_release(wayland_globals.shm);
     wl_subcompositor_destroy(wayland_globals.subcompositor);
+    if (wayland_globals.ext_image_copy_capture_manager) {
+        ext_image_copy_capture_manager_v1_destroy(
+            wayland_globals.ext_image_copy_capture_manager
+        );
+    }
+    if (wayland_globals.ext_output_capture_source_manager) {
+        ext_output_image_capture_source_manager_v1_destroy(
+            wayland_globals.ext_output_capture_source_manager
+        );
+    }
     wp_cursor_shape_manager_v1_destroy(wayland_globals.cursor_shape_manager);
     wp_fractional_scale_manager_v1_destroy(
         wayland_globals.fractional_scale_manager
     );
     wp_viewporter_destroy(wayland_globals.viewporter);
     zwlr_layer_shell_v1_destroy(wayland_globals.layer_shell);
-    zwlr_screencopy_manager_v1_destroy(wayland_globals.screencopy_manager);
+    if (wayland_globals.wlr_screencopy_manager) {
+        zwlr_screencopy_manager_v1_destroy(
+            wayland_globals.wlr_screencopy_manager
+        );
+    }
     zxdg_output_manager_v1_destroy(wayland_globals.output_manager);
 }
 

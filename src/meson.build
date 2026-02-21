@@ -17,6 +17,26 @@ extra_protocols = [
     {
         'provider': 'wp',
         'state': 'staging',
+        'name': 'ext-image-capture-source',
+        'version': 1,
+    },
+    {
+        'provider': 'wp',
+        'state': 'staging',
+        'name': 'ext-image-copy-capture',
+        'version': 1,
+    },
+    {
+        # required for ext-image-capture-source
+        # (but will also be used later)
+        'provider': 'wp',
+        'state': 'staging',
+        'name': 'ext-foreign-toplevel-list',
+        'version': 1,
+    },
+    {
+        'provider': 'wp',
+        'state': 'staging',
         'name': 'cursor-shape',
         'version': 1,
     },
@@ -115,7 +135,9 @@ sources = files(
     'wayland/label-surface.c',
     'wayland/overlay-surface.c',
     'wayland/render.c',
-    'wayland/screenshot.c',
+    'wayland/screen-capture-common.c',
+    'wayland/screen-capture-ext.c',
+    'wayland/screen-capture-wlr.c',
     'wayland/seat.c',
     'wayland/shared-memory.c',
     'args.c',

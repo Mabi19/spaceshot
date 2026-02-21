@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ext-image-capture-source-client.h"
+#include "ext-image-copy-capture-client.h"
 #include "wayland/seat.h"
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
@@ -16,11 +18,14 @@ typedef struct {
     struct wl_data_device_manager *data_device_manager;
     struct wl_shm *shm;
     struct wl_subcompositor *subcompositor;
+    struct ext_image_copy_capture_manager_v1 *ext_image_copy_capture_manager;
+    struct ext_output_image_capture_source_manager_v1
+        *ext_output_capture_source_manager;
     struct wp_cursor_shape_manager_v1 *cursor_shape_manager;
     struct wp_fractional_scale_manager_v1 *fractional_scale_manager;
     struct wp_viewporter *viewporter;
     struct zwlr_layer_shell_v1 *layer_shell;
-    struct zwlr_screencopy_manager_v1 *screencopy_manager;
+    struct zwlr_screencopy_manager_v1 *wlr_screencopy_manager;
     struct zxdg_output_manager_v1 *output_manager;
     SeatDispatcher *seat_dispatcher;
     struct wl_list outputs;

@@ -7,6 +7,7 @@ config_c, config_h, config_vapi = sc.config({
     "png-compression-level": sc.int().require("0 <= x && x <= 9"),
     "move-to-background": sc.bool(),
     "copy-to-clipboard": sc.bool(),
+    "output-capture-backends": sc.tokenlist("ext", "wlr"),
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),

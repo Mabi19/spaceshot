@@ -1,6 +1,6 @@
-#include "screenshot.h"
 #include "image.h"
 #include "log.h"
+#include "screen-capture.h"
 #include "wayland/globals.h"
 #include "wayland/shared-memory.h"
 #include <stdbool.h>
@@ -20,7 +20,7 @@ typedef struct {
     SharedBuffer *buffer;
     // callback
     WrappedOutput *output;
-    ScreenshotCallback image_callback;
+    OutputCaptureCallback image_callback;
     void *user_data;
 } FrameContext;
 
@@ -157,16 +157,20 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
     .failed = frame_handle_failed,
 };
 
-void capture_output(
-    WrappedOutput *output, ScreenshotCallback image_callback, void *data
+void capture_output_wlr(
+    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
 ) {
     struct zwlr_screencopy_frame_v1 *frame =
         zwlr_screencopy_manager_v1_capture_output(
-            wayland_globals.screencopy_manager, 0, output->wl_output
+            wayland_globals.wlr_screencopy_manager, 0, output->wl_output
         );
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->output = output;
     context->image_callback = image_callback;
     context->user_data = data;
     zwlr_screencopy_frame_v1_add_listener(frame, &frame_listener, context);
+}
+
+bool capture_output_wlr_is_available() {
+    return wayland_globals.wlr_screencopy_manager != NULL;
 }

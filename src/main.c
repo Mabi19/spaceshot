@@ -8,7 +8,7 @@
 #include "region-picker.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
-#include "wayland/screenshot.h"
+#include "wayland/screen-capture.h"
 #include "wayland/seat.h"
 #include <assert.h>
 #include <config/config.h>
@@ -188,11 +188,6 @@ static struct wl_data_source_listener clipboard_source_listener = {
 };
 
 static void finish_predefined_output_screenshot(Image *image) {
-    if (!image) {
-        report_error("capturing output failed");
-        goto defer;
-    }
-
     LinkBuffer *out_data = image_save_png(image);
 
     char *output_filename = get_output_filename();
@@ -202,7 +197,6 @@ static void finish_predefined_output_screenshot(Image *image) {
     free(output_filename);
     link_buffer_destroy(out_data);
 
-defer:
     should_active_wait = false;
 }
 
@@ -212,10 +206,6 @@ static void finish_predefined_region_screenshot(
 ) {
     if (!is_output_valid(output)) {
         report_error("output disappeared while screenshotting");
-        goto defer;
-    }
-    if (!image) {
-        report_error("capturing output failed");
         goto defer;
     }
 
@@ -449,6 +439,10 @@ static void handle_captured_output(Image *image, void *data) {
     } else {
         capture_entry_destroy(entry);
         return;
+    }
+
+    if (!entry->image) {
+        report_error_fatal("capturing output %s failed\n", entry->output->name);
     }
 
     if (args.mode == CAPTURE_OUTPUT) {
