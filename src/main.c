@@ -22,22 +22,31 @@
 #include <wayland-client.h>
 #include <wayland-util.h>
 
+/** A capture entry's state ("what is it used for") */
 typedef enum {
     /* Hasn't yet received its image. */
-    CAPTURE_ENTRY_EMPTY = 0,
+    CAPTURE_ENTRY_STATE_EMPTY = 0,
     /* Has a region picker active. */
-    CAPTURE_ENTRY_REGION_PICKER,
+    CAPTURE_ENTRY_STATE_REGION_PICKER,
     /* Has an output picker active. */
-    CAPTURE_ENTRY_OUTPUT_PICKER,
+    CAPTURE_ENTRY_STATE_OUTPUT_PICKER,
     /* Has an image saved, and will eventually be transformed into one of the
        other types. */
-    CAPTURE_ENTRY_DEFER,
+    CAPTURE_ENTRY_STATE_READY,
+} CaptureEntryState;
+
+/** The type of image this entry stores. */
+typedef enum {
+    CAPTURE_ENTRY_TYPE_OUTPUT,
 } CaptureEntryType;
 
 typedef struct {
     void *picker;
-    CaptureEntryType type;
-    WrappedOutput *output;
+    CaptureEntryState state;
+    CaptureEntryType image_type;
+    union {
+        WrappedOutput *output;
+    };
     Image *image;
     struct wl_list link;
 } CaptureEntry;
@@ -47,7 +56,6 @@ typedef struct {
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
 static bool should_active_wait = true;
 static bool should_clipboard_wait = false;
-static bool correct_output_found = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
 static Arguments args;
@@ -247,15 +255,15 @@ defer:
 
 static void capture_entry_destroy(CaptureEntry *entry) {
     if (entry->picker) {
-        switch (entry->type) {
-        case CAPTURE_ENTRY_REGION_PICKER:
+        switch (entry->state) {
+        case CAPTURE_ENTRY_STATE_REGION_PICKER:
             region_picker_destroy(entry->picker);
             break;
-        case CAPTURE_ENTRY_OUTPUT_PICKER:
+        case CAPTURE_ENTRY_STATE_OUTPUT_PICKER:
             output_picker_destroy(entry->picker);
             break;
         default:
-            REPORT_UNHANDLED("picker entry type", "%d", entry->type);
+            REPORT_UNHANDLED("picker entry type", "%d", entry->state);
         }
     }
     image_destroy(entry->image);
@@ -263,7 +271,7 @@ static void capture_entry_destroy(CaptureEntry *entry) {
     free(entry);
 }
 
-static void picker_entry_destroy_all() {
+static void capture_entry_destroy_all() {
     CaptureEntry *entry, *tmp;
     wl_list_for_each_safe(entry, tmp, &active_captures, link) {
         capture_entry_destroy(entry);
@@ -311,7 +319,7 @@ static void picker_finish_generic(
     // The DESTROYED reason is the only one that isn't user-initiated,
     // and shouldn't destroy all the others.
     if (reason != PICKER_FINISH_REASON_DESTROYED) {
-        picker_entry_destroy_all();
+        capture_entry_destroy_all();
     }
 
     if (to_save) {
@@ -371,22 +379,6 @@ output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
     picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
 }
 
-static CaptureEntry *make_capture_entry(WrappedOutput *output) {
-    if (!is_output_valid(output)) {
-        // Theoretically, if all the outputs disappear (and no new ones appear),
-        // there will be no region pickers, so should_active_wait will never be
-        // unset, so the process will remain forever. But I don't think that
-        // should ever happen.
-        report_error("output disappeared while screenshotting");
-        return NULL;
-    }
-    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
-    entry->output = output;
-    wl_list_insert(&active_captures, &entry->link);
-
-    return entry;
-}
-
 static bool is_output_matching(WrappedOutput *output) {
     if (args.mode == CAPTURE_OUTPUT) {
         if (args.output_params.output_name) {
@@ -425,51 +417,11 @@ static void handle_captured_output(Image *image, void *data) {
         return;
     }
 
-    // If these entries are getting reactivated after being in defer mode,
-    // the image's already set.
-    if (image) {
-        entry->image = image;
-    }
-
-    // This can't be checked early if mode selection was deferred,
-    // so also do it now. Returning if this is false also means
-    // the following logic doesn't have to check this
-    if (is_output_matching(entry->output)) {
-        correct_output_found = true;
-    } else {
-        capture_entry_destroy(entry);
-        return;
-    }
-
+    entry->image = image;
     if (!entry->image) {
         report_error_fatal("capturing output %s failed\n", entry->output->name);
     }
-
-    if (args.mode == CAPTURE_OUTPUT) {
-        if (args.output_params.output_name) {
-            finish_predefined_output_screenshot(entry->image);
-            capture_entry_destroy(entry);
-        } else {
-            entry->picker = output_picker_new(
-                entry->output, entry->image, output_picker_finish
-            );
-            entry->type = CAPTURE_ENTRY_OUTPUT_PICKER;
-        }
-    } else if (args.mode == CAPTURE_REGION) {
-        if (args.region_params.has_region) {
-            finish_predefined_region_screenshot(
-                entry->output, entry->image, args.region_params.region
-            );
-            capture_entry_destroy(entry);
-        } else {
-            entry->picker = region_picker_new(
-                entry->output, entry->image, region_picker_finish
-            );
-            entry->type = CAPTURE_ENTRY_REGION_PICKER;
-        }
-    } else if (args.mode == CAPTURE_DEFER) {
-        entry->type = CAPTURE_ENTRY_DEFER;
-    }
+    entry->state = CAPTURE_ENTRY_STATE_READY;
 }
 
 static void add_new_output(WrappedOutput *output) {
@@ -484,20 +436,193 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    const char *only_output_name = getenv("SPACESHOT_PICKER_ONLY");
+    const char *only_output_name = getenv("SPACESHOT_OUTPUT_ONLY");
     if (only_output_name && strcmp(output->name, only_output_name) != 0) {
         return;
     }
 
-    if (is_output_matching(output)) {
-        correct_output_found = true;
-    } else {
+    if (!is_output_valid(output)) {
+        report_error("output disappeared while screenshotting");
         return;
     }
 
-    CaptureEntry *entry = make_capture_entry(output);
-    if (entry) {
-        capture_output(output, handle_captured_output, entry);
+    // If we can rule out needing to capture any outputs right now, do that
+    if (!is_output_matching(output)) {
+        return;
+    }
+
+    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
+    entry->state = CAPTURE_ENTRY_STATE_EMPTY;
+    entry->image_type = CAPTURE_ENTRY_TYPE_OUTPUT;
+    entry->output = output;
+    wl_list_insert(&active_captures, &entry->link);
+    capture_output(output, handle_captured_output, entry);
+}
+
+static void read_deferred_args() {
+    // Read stdin until EOF and use that as the actual arguments.
+    char **new_argv = NULL;
+    int new_argc = 0;
+    int capacity = 16;
+    new_argv = malloc(capacity * sizeof(char *));
+
+    char *line = NULL;
+    size_t line_len = 0;
+    ssize_t nread;
+    while ((nread = getdelim(&line, &line_len, '\0', stdin)) != -1) {
+        if (new_argc >= capacity) {
+            capacity *= 2;
+            char **new_ptr = realloc(new_argv, capacity * sizeof(char *));
+            new_argv = new_ptr;
+        }
+        new_argv[new_argc++] = line;
+        line = NULL;
+        line_len = 0;
+    }
+    if (ferror(stdin)) {
+        report_error_fatal("couldn't read deferred arguments");
+    }
+    free(line);
+
+    // It's really easy to accidentally put a newline at the end of the last
+    // argument, so trim it.
+    if (new_argc > 0) {
+        char *last_arg = new_argv[new_argc - 1];
+        size_t len = strlen(last_arg);
+        if (len > 0 && last_arg[len - 1] == '\n') {
+            last_arg[len - 1] = '\0';
+        }
+    }
+
+    args.captured_mode_params = 0;
+    parse_argv(&args, new_argc, new_argv);
+
+    for (int i = 0; i < new_argc; i++) {
+        log_debug("new arg: '%s'\n", new_argv[i]);
+        free(new_argv[i]);
+    }
+    free(new_argv);
+}
+
+/**
+ * Act on the capture entries,
+ * based on the selected mode and its parameters.
+ */
+static void dispatch_capture_entries() {
+    // Get rid of any potential invalidated entries first
+    // so we don't have to check everywhere
+    {
+        CaptureEntry *entry, *tmp;
+        wl_list_for_each_safe(entry, tmp, &active_captures, link) {
+            switch (entry->image_type) {
+            case CAPTURE_ENTRY_TYPE_OUTPUT:
+                if (!is_output_valid(entry->output)) {
+                    capture_entry_destroy(entry);
+                }
+                break;
+            default:
+                REPORT_UNHANDLED("capture entry type", "%d", entry->image_type);
+            }
+        }
+    }
+
+    if (args.mode == CAPTURE_REGION) {
+        if (args.region_params.has_region) {
+            CaptureEntry *entry;
+            bool found = false;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
+                    is_output_matching(entry->output)) {
+                    finish_predefined_region_screenshot(
+                        entry->output, entry->image, args.region_params.region
+                    );
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                capture_entry_destroy_all();
+            } else {
+                report_error_fatal("couldn't find matching output");
+            }
+        } else {
+            CaptureEntry *entry;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
+                    continue;
+                }
+
+                entry->picker = region_picker_new(
+                    entry->output, entry->image, region_picker_finish
+                );
+                entry->state = CAPTURE_ENTRY_STATE_REGION_PICKER;
+            }
+        }
+    } else if (args.mode == CAPTURE_OUTPUT) {
+        if (args.output_params.output_name) {
+            CaptureEntry *entry;
+            bool found = false;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
+                    is_output_matching(entry->output)) {
+                    finish_predefined_output_screenshot(entry->image);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                capture_entry_destroy_all();
+            } else {
+                report_error_fatal("couldn't find matching output");
+            }
+        } else {
+            int output_count = 0;
+            CaptureEntry *entry;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+                    output_count++;
+                }
+            }
+            if (output_count == 1) {
+                // This causes a weird interaction where `spaceshot output`
+                // doesn't copy if you only have 1 monitor.
+                // TODO: add a way to copy from non-interactive modes
+                // (just call wl-copy?) Or implement ext-data-control.
+                wl_list_for_each(entry, &active_captures, link) {
+                    if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+                        finish_predefined_output_screenshot(entry->image);
+                        capture_entry_destroy(entry);
+                        break;
+                    }
+                }
+            } else if (output_count > 1) {
+                CaptureEntry *entry;
+                wl_list_for_each(entry, &active_captures, link) {
+                    if (entry->image_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
+                        continue;
+                    }
+
+                    entry->picker = output_picker_new(
+                        entry->output, entry->image, output_picker_finish
+                    );
+                    entry->state = CAPTURE_ENTRY_STATE_OUTPUT_PICKER;
+                }
+            } else {
+                report_error_fatal("no outputs captured");
+            }
+        }
+    } else if (args.mode == CAPTURE_DEFER) {
+        printf("ready\n");
+        fflush(stdout);
+        read_deferred_args();
+
+        if (args.mode == CAPTURE_DEFER) {
+            report_error_fatal("mode selection already deferred");
+        }
+
+        // This function will error out and exit the program if it can't find
+        // matching capture targets
+        dispatch_capture_entries();
     }
 }
 
@@ -516,107 +641,41 @@ int main(int argc, char **argv) {
         report_error_fatal("failed to connect to Wayland display");
     }
 
-    // TODO
-    // Make screenshot flow steered more by globally-aware phenomena.
-    // handle_captured_output currently spawns pickers;
-    // if the code that spawned output pickers was globally aware,
-    // it could skip this if there's only one output.
-    // Also active_captures should store both output and toplevel captures.
-    // The code should decide which ones are needed
+    // TODO (when toplevel capturing exists)
+    // active_captures should store both output and toplevel captures.
+    // This function should check which ones are needed
     // and only pass the necessary functions to find_wayland_globals.
 
-    // Note that there's no need for a destroy callback here: the layer
-    // surfaces should get closed on their own (they don't care about the
-    // output after creation either), and ongoing screenshot operations
-    // can't really receive a destroyed callback (so they will check
-    // is_output_valid)
     bool found_everything = find_wayland_globals(display, &add_new_output);
     if (!found_everything) {
         report_error_fatal("didn't find every required Wayland object");
     }
 
     wl_display_roundtrip(display);
-    if (!correct_output_found) {
-        report_error_fatal("couldn't find matching output");
+    // Non-matching outputs/toplevels are gonna be excluded from this list.
+    if (wl_list_empty(&active_captures)) {
+        report_error_fatal("couldn't find matching capture target");
     }
 
-    if (args.mode == CAPTURE_DEFER) {
-        // Wait for all the captured outputs to be ready.
-        while (true) {
-            CaptureEntry *entry;
-            bool is_waiting = false;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->type == CAPTURE_ENTRY_EMPTY) {
-                    log_debug("waiting for picker entry %p\n", (void *)entry);
-                    is_waiting = true;
-                    break;
-                }
-            }
-            if (is_waiting) {
-                wl_display_dispatch(display);
-            } else {
+    // Wait for all the captured outputs to be ready.
+    while (true) {
+        CaptureEntry *entry;
+        bool is_waiting = false;
+        wl_list_for_each(entry, &active_captures, link) {
+            if (entry->state == CAPTURE_ENTRY_STATE_EMPTY) {
+                log_debug("waiting for picker entry %p\n", (void *)entry);
+                is_waiting = true;
                 break;
             }
         }
-
-        printf("ready\n");
-        fflush(stdout);
-        // Read stdin until EOF and use that as the actual arguments.
-        char **new_argv = NULL;
-        int new_argc = 0;
-        int capacity = 16;
-        new_argv = malloc(capacity * sizeof(char *));
-
-        char *line = NULL;
-        size_t line_len = 0;
-        ssize_t nread;
-        while ((nread = getdelim(&line, &line_len, '\0', stdin)) != -1) {
-            if (new_argc >= capacity) {
-                capacity *= 2;
-                char **new_ptr = realloc(new_argv, capacity * sizeof(char *));
-                new_argv = new_ptr;
-            }
-            new_argv[new_argc++] = line;
-            line = NULL;
-            line_len = 0;
-        }
-        if (ferror(stdin)) {
-            report_error_fatal("couldn't read deferred arguments");
-        }
-        free(line);
-
-        // It's really easy to accidentally put a newline at the end of the last
-        // argument, so trim it.
-        if (argc > 0) {
-            char *last_arg = new_argv[new_argc - 1];
-            size_t len = strlen(last_arg);
-            if (len > 0 && last_arg[len - 1] == '\n') {
-                last_arg[len - 1] = '\0';
-            }
-        }
-
-        args.captured_mode_params = 0;
-        parse_argv(&args, new_argc, new_argv);
-
-        for (int i = 0; i < new_argc; i++) {
-            log_debug("new arg: '%s'\n", new_argv[i]);
-            free(new_argv[i]);
-        }
-
-        if (args.mode == CAPTURE_DEFER) {
-            report_error_fatal("mode selection already deferred");
-        }
-
-        correct_output_found = false;
-        CaptureEntry *entry, *tmp;
-        wl_list_for_each_safe(entry, tmp, &active_captures, link) {
-            handle_captured_output(NULL, entry);
-        }
-
-        if (!correct_output_found) {
-            report_error_fatal("couldn't find matching output");
+        if (is_waiting) {
+            wl_display_dispatch(display);
+        } else {
+            break;
         }
     }
+
+    dispatch_capture_entries();
 
     while (wl_display_dispatch(display) != -1) {
         if (!should_active_wait) {
