@@ -516,6 +516,15 @@ int main(int argc, char **argv) {
         report_error_fatal("failed to connect to Wayland display");
     }
 
+    // TODO
+    // Make screenshot flow steered more by globally-aware phenomena.
+    // handle_captured_output currently spawns pickers;
+    // if the code that spawned output pickers was globally aware,
+    // it could skip this if there's only one output.
+    // Also active_captures should store both output and toplevel captures.
+    // The code should decide which ones are needed
+    // and only pass the necessary functions to find_wayland_globals.
+
     // Note that there's no need for a destroy callback here: the layer
     // surfaces should get closed on their own (they don't care about the
     // output after creation either), and ongoing screenshot operations

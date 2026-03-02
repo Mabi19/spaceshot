@@ -487,6 +487,8 @@ static void update_cursor_shape(RegionPicker *picker) {
             shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
         }
         break;
+    default:
+        REPORT_UNHANDLED("region picker state", "%d", picker->state);
     }
     seat_dispatcher_set_cursor_for_surface(
         wayland_globals.seat_dispatcher, picker->surface, shape

@@ -27,8 +27,6 @@ extra_protocols = [
         'version': 1,
     },
     {
-        # required for ext-image-capture-source
-        # (but will also be used later)
         'provider': 'wp',
         'state': 'staging',
         'name': 'ext-foreign-toplevel-list',

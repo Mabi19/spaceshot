@@ -83,6 +83,7 @@ static int smart_border_context_thread_func(void *data) {
 
     TIMING_END(smart_border);
     atomic_store_explicit(&ctx->is_done, true, memory_order_release);
+    smart_border_context_unref(ctx);
 
     return 0;
 }
@@ -106,5 +107,6 @@ void smart_border_context_unref(SmartBorderContext *ctx) {
         cairo_pattern_destroy(ctx->pattern);
         cairo_surface_destroy(ctx->surface);
         image_destroy(ctx->result_image);
+        free(ctx);
     }
 }
