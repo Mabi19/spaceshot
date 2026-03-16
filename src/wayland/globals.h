@@ -16,6 +16,7 @@ typedef void (*OutputCallback)(WrappedOutput *);
 typedef struct {
     struct wl_compositor *compositor;
     struct wl_data_device_manager *data_device_manager;
+    struct wl_data_device *data_device;
     struct wl_shm *shm;
     struct wl_subcompositor *subcompositor;
     struct ext_image_copy_capture_manager_v1 *ext_image_copy_capture_manager;

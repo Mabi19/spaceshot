@@ -397,15 +397,9 @@ static struct wl_seat_listener seat_listener = {
     .name = seat_handle_name,
 };
 
-SeatDispatcher *seat_dispatcher_new(
-    struct wl_seat *seat, struct wl_data_device_manager *data_device_manager
-) {
+SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
     SeatDispatcher *result = calloc(1, sizeof(SeatDispatcher));
     result->seat = seat;
-
-    if (data_device_manager) {
-        seat_dispatcher_attach_data_device(result, data_device_manager);
-    }
 
     wl_seat_add_listener(seat, &seat_listener, result);
     wl_array_init(&result->listeners);
@@ -414,30 +408,6 @@ SeatDispatcher *seat_dispatcher_new(
     assert(result->keyboard_data.context);
 
     return result;
-}
-
-void seat_dispatcher_attach_data_device(
-    SeatDispatcher *dispatcher,
-    struct wl_data_device_manager *data_device_manager
-) {
-    if (dispatcher->data_device) {
-        report_warning(
-            "Tried to attach data device to seat dispatcher twice, skipping"
-        );
-        return;
-    }
-
-    dispatcher->data_device = wl_data_device_manager_get_data_device(
-        data_device_manager, dispatcher->seat
-    );
-}
-
-void seat_dispatcher_set_selection(
-    SeatDispatcher *dispatcher, struct wl_data_source *data_source
-) {
-    wl_data_device_set_selection(
-        dispatcher->data_device, data_source, dispatcher->last_clipboard_serial
-    );
 }
 
 void seat_dispatcher_set_cursor_for_surface(
@@ -507,10 +477,6 @@ void seat_dispatcher_destroy(SeatDispatcher *dispatcher) {
     xkb_context_unref(dispatcher->keyboard_data.context);
     xkb_keymap_unref(dispatcher->keyboard_data.keymap);
     xkb_state_unref(dispatcher->keyboard_data.state);
-
-    if (dispatcher->data_device) {
-        wl_data_device_release(dispatcher->data_device);
-    }
 
     wl_array_release(&dispatcher->listeners);
 

@@ -129,6 +129,8 @@ cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
 sources = files(
+    'wayland/clipboard-common.c',
+    'wayland/clipboard-core.c',
     'wayland/globals.c',
     'wayland/label-surface.c',
     'wayland/overlay-surface.c',

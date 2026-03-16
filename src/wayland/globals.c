@@ -161,13 +161,6 @@ static void registry_handle_global(
         globals->data_device_manager = wl_registry_bind(
             registry, object_id, &wl_data_device_manager_interface, 3
         );
-
-        // if this comes after the seat, give it to the SeatDispatcher
-        if (globals->seat_dispatcher) {
-            seat_dispatcher_attach_data_device(
-                globals->seat_dispatcher, globals->data_device_manager
-            );
-        }
     }
 
     if (strcmp(interface, wl_shm_interface.name) == 0) {
@@ -243,8 +236,7 @@ static void registry_handle_global(
         } else {
             struct wl_seat *seat =
                 wl_registry_bind(registry, object_id, &wl_seat_interface, 9);
-            globals->seat_dispatcher =
-                seat_dispatcher_new(seat, globals->data_device_manager);
+            globals->seat_dispatcher = seat_dispatcher_new(seat);
         }
     }
 
@@ -276,7 +268,7 @@ static void registry_handle_global_remove(
     wl_list_for_each_safe(output, tmp, &globals->outputs, link) {
         if (output->object_id == object_id) {
             log_debug("... and it's an output (%s)\n", output->name);
-            // NOTE: It turns out that all the things that could benefit from a
+            // It turns out that all the things that could benefit from a
             // destroy callback can't really receive it.
             wl_list_remove(&output->link);
 
@@ -334,6 +326,9 @@ void cleanup_wayland_globals() {
     // - wl_compositor
     // - wl_data_device_manager
 
+    if (wayland_globals.data_device) {
+        wl_data_device_release(wayland_globals.data_device);
+    }
     wl_shm_release(wayland_globals.shm);
     wl_subcompositor_destroy(wayland_globals.subcompositor);
     if (wayland_globals.ext_image_copy_capture_manager) {

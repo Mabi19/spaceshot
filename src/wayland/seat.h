@@ -62,7 +62,6 @@ typedef struct {
         struct wl_surface *focus;
     } keyboard_data;
 
-    struct wl_data_device *data_device;
     // This is the last input event's serial.
     // Used to set the clipboard selection.
     uint32_t last_clipboard_serial;
@@ -74,32 +73,9 @@ typedef struct {
 } SeatDispatcher;
 
 /**
- * Create a SeatDispatcher for the specified seat and data device manager.
- * The data device manager may be NULL if it hasn't been received yet;
- * if so, then `seat_dispatcher_attach_data_device` should be called later.
+ * Create a SeatDispatcher for the specified seat.
  */
-SeatDispatcher *seat_dispatcher_new(
-    struct wl_seat *seat, struct wl_data_device_manager *data_device_manager
-);
-
-/**
- * Attach a data device to this SeatDispatcher, which allows clipboard
- * operations. This function will be called automatically if a
- * data_device_manager is passed into seat_dispatcher_new.
- */
-void seat_dispatcher_attach_data_device(
-    SeatDispatcher *dispatcher,
-    struct wl_data_device_manager *data_device_manager
-);
-
-/**
- * Copy something to the clipboard.
- * This is here because it requires an event serial, which is tracked by the
- * seat.
- */
-void seat_dispatcher_set_selection(
-    SeatDispatcher *dispatcher, struct wl_data_source *data_source
-);
+SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat);
 
 /** Set the cursor shape for a specific OverlaySurface. */
 void seat_dispatcher_set_cursor_for_surface(

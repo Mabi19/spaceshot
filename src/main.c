@@ -6,10 +6,10 @@
 #include "output-picker.h"
 #include "paths.h"
 #include "region-picker.h"
+#include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
 #include "wayland/screen-capture.h"
-#include "wayland/seat.h"
 #include <assert.h>
 #include <config/config.h>
 #include <fcntl.h>
@@ -151,59 +151,38 @@ static void send_notification(char *output_filename, bool did_copy) {
 #endif
 }
 
-static void clipboard_handle_target(
-    void * /* data */,
-    struct wl_data_source * /* data_source */,
-    const char * /* mime_type */
-) {
-    // This space intentionally left blank
-}
-
-static void clipboard_handle_send(
-    void *data,
-    struct wl_data_source * /* wl_data_source */,
-    const char * /* mime_type */,
-    int fd
-) {
-    LinkBuffer *data_to_send = data;
-    FILE *wrapped_fd = fdopen(fd, "w");
-    if (!wrapped_fd) {
-        perror("fdopen");
-        close(fd);
-        report_error_fatal("couldn't open clipboard fd %d", fd);
-    }
-    link_buffer_write(data_to_send, wrapped_fd);
-    fclose(wrapped_fd);
-}
-
-static void
-clipboard_handle_cancelled(void *data, struct wl_data_source *data_source) {
-    LinkBuffer *stale_clipboard_data = data;
-    link_buffer_destroy(stale_clipboard_data);
-    wl_data_source_destroy(data_source);
+static void clipboard_copy_finish(ClipboardCopy *source) {
+    clipboard_copy_destroy(source);
     should_clipboard_wait = false;
 }
 
-// Most of these can be NULL because they're for DND data sources,
-// and this is a clipboard source.
-static struct wl_data_source_listener clipboard_source_listener = {
-    .target = clipboard_handle_target,
-    .send = clipboard_handle_send,
-    .cancelled = clipboard_handle_cancelled,
-    .dnd_drop_performed = NULL,
-    .dnd_finished = NULL,
-    .action = NULL
-};
-
-static void finish_predefined_output_screenshot(Image *image) {
+static void finish_noninteractive_screenshot(Image *image) {
     LinkBuffer *out_data = image_save_png(image);
+
+    ClipboardCopy *copy_source = NULL;
+    if (config_get()->copy_to_clipboard) {
+        copy_source = clipboard_copy_setup(false);
+    }
+    // the copy may not be successful
+    if (copy_source) {
+        copy_source->finished = clipboard_copy_finish;
+        ClipboardCopyOffer *offer =
+            clipboard_copy_offer_mime(copy_source, "image/png");
+        offer->buffer = out_data;
+        clipboard_copy_run(copy_source);
+        should_clipboard_wait = true;
+    }
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    send_notification(output_filename, false);
+    send_notification(output_filename, copy_source != NULL);
 
     free(output_filename);
-    link_buffer_destroy(out_data);
+    // copies take ownership of link buffers
+    // so only destroy now if NOT copied
+    if (!copy_source) {
+        link_buffer_destroy(out_data);
+    }
 
     should_active_wait = false;
 }
@@ -214,7 +193,8 @@ static void finish_predefined_region_screenshot(
 ) {
     if (!is_output_valid(output)) {
         report_error("output disappeared while screenshotting");
-        goto defer;
+        should_active_wait = false;
+        return;
     }
 
     // move to output space
@@ -239,18 +219,8 @@ static void finish_predefined_region_screenshot(
         crop_bounds.height
     );
 
-    LinkBuffer *out_data = image_save_png(cropped);
+    finish_noninteractive_screenshot(image);
     image_destroy(cropped);
-
-    char *output_filename = get_output_filename();
-    save_screenshot(out_data, output_filename);
-    send_notification(output_filename, false);
-
-    free(output_filename);
-    link_buffer_destroy(out_data);
-
-defer:
-    should_active_wait = false;
 }
 
 static void capture_entry_destroy(CaptureEntry *entry) {
@@ -286,7 +256,8 @@ static void picker_finish_generic(
 ) {
     CaptureEntry *entry, *tmp;
     Image *to_save = NULL;
-    struct wl_data_source *data_source = NULL;
+    ClipboardCopy *copy_source = NULL;
+    ClipboardCopyOffer *image_png_offer = NULL;
     bool should_copy = config_get()->copy_to_clipboard;
     wl_list_for_each_safe(entry, tmp, &active_captures, link) {
         if (entry->picker != picker) {
@@ -294,15 +265,13 @@ static void picker_finish_generic(
         }
 
         if (reason == PICKER_FINISH_REASON_SELECTED) {
-            if (config_get()->copy_to_clipboard) {
+            if (should_copy) {
                 // Set up the copy while the picker's still alive
-                data_source = wl_data_device_manager_create_data_source(
-                    wayland_globals.data_device_manager
-                );
-                wl_data_source_offer(data_source, "image/png");
-                seat_dispatcher_set_selection(
-                    wayland_globals.seat_dispatcher, data_source
-                );
+                copy_source = clipboard_copy_setup(true);
+                assert(copy_source);
+                copy_source->finished = clipboard_copy_finish;
+                image_png_offer =
+                    clipboard_copy_offer_mime(copy_source, "image/png");
             }
 
             to_save = result_image_callback(entry, data);
@@ -334,10 +303,9 @@ static void picker_finish_generic(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
+        image_png_offer->buffer = out_data;
         if (should_copy) {
-            wl_data_source_add_listener(
-                data_source, &clipboard_source_listener, out_data
-            );
+            clipboard_copy_run(copy_source);
             should_clipboard_wait = true;
         }
 
@@ -565,7 +533,7 @@ static void dispatch_capture_entries() {
             wl_list_for_each(entry, &active_captures, link) {
                 if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
                     is_output_matching(entry->output)) {
-                    finish_predefined_output_screenshot(entry->image);
+                    finish_noninteractive_screenshot(entry->image);
                     found = true;
                     break;
                 }
@@ -590,7 +558,7 @@ static void dispatch_capture_entries() {
                 // (just call wl-copy?) Or implement ext-data-control.
                 wl_list_for_each(entry, &active_captures, link) {
                     if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
-                        finish_predefined_output_screenshot(entry->image);
+                        finish_noninteractive_screenshot(entry->image);
                         capture_entry_destroy(entry);
                         break;
                     }
