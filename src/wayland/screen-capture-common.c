@@ -1,15 +1,16 @@
 #include "config/config.h"
 #include "log.h"
 #include "screen-capture.h"
+#include "wayland/toplevel.h"
 
 void capture_output_ext(
-    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
+    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
 );
 
 bool capture_output_ext_is_available();
 
 void capture_output_wlr(
-    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
+    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
 );
 
 bool capture_output_wlr_is_available();
@@ -21,7 +22,7 @@ typedef enum {
 } OutputCaptureBackend;
 
 void capture_output(
-    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
+    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
 ) {
     static bool has_selected_backend = false;
     static OutputCaptureBackend backend;
@@ -65,6 +66,43 @@ void capture_output(
         break;
     case OUTPUT_CAPTURE_BACKEND_WLR:
         capture_output_wlr(output, image_callback, data);
+        break;
+    }
+}
+
+void capture_toplevel_ext(
+    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+);
+
+bool capture_toplevel_ext_is_available();
+
+typedef enum {
+    TOPLEVEL_CAPTURE_BACKEND_NONE,
+    TOPLEVEL_CAPTURE_BACKEND_EXT,
+} ToplevelCaptureBackend;
+
+void capture_toplevel(
+    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+) {
+    static bool has_selected_backend = false;
+    static ToplevelCaptureBackend backend;
+
+    if (!has_selected_backend) {
+        has_selected_backend = true;
+        backend = TOPLEVEL_CAPTURE_BACKEND_NONE;
+
+        if (capture_toplevel_ext_is_available()) {
+            backend = TOPLEVEL_CAPTURE_BACKEND_EXT;
+        }
+
+        log_debug("chosen output backend: %d\n", backend);
+    }
+
+    switch (backend) {
+    case TOPLEVEL_CAPTURE_BACKEND_NONE:
+        report_error_fatal("couldn't choose an output capture backend");
+    case TOPLEVEL_CAPTURE_BACKEND_EXT:
+        capture_toplevel_ext(toplevel, image_callback, data);
         break;
     }
 }

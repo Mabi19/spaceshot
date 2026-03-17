@@ -5,6 +5,7 @@
 typedef enum {
     CAPTURE_OUTPUT,
     CAPTURE_REGION,
+    CAPTURE_TOPLEVEL,
     CAPTURE_DEFER,
 } CaptureMode;
 
@@ -19,10 +20,15 @@ typedef struct {
 } RegionCaptureParams;
 
 typedef struct {
+    char *toplevel_id;
+} ToplevelCaptureParams;
+
+typedef struct {
     CaptureMode mode;
     union {
         OutputCaptureParams output_params;
         RegionCaptureParams region_params;
+        ToplevelCaptureParams toplevel_params;
     };
     int captured_mode_params;
     const char *executable_name;

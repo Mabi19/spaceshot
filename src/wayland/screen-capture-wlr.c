@@ -20,7 +20,7 @@ typedef struct {
     SharedBuffer *buffer;
     // callback
     WrappedOutput *output;
-    OutputCaptureCallback image_callback;
+    ImageCaptureCallback image_callback;
     void *user_data;
 } FrameContext;
 
@@ -158,7 +158,7 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 };
 
 void capture_output_wlr(
-    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
+    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
 ) {
     struct zwlr_screencopy_frame_v1 *frame =
         zwlr_screencopy_manager_v1_capture_output(

@@ -240,6 +240,10 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     result->region_params.region =
                         (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
                     result->region_params.has_region = false;
+                } else if (strcmp(mode, "toplevel") == 0) {
+                    result->mode = CAPTURE_TOPLEVEL;
+                    result->toplevel_params =
+                        (ToplevelCaptureParams){.toplevel_id = NULL};
                 } else if (strcmp(mode, "defer") == 0) {
                     result->mode = CAPTURE_DEFER;
                 } else {
@@ -279,6 +283,14 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         );
                         goto error;
                     }
+                } else if (result->mode == CAPTURE_TOPLEVEL) {
+                    if (result->captured_mode_params == 1) {
+                        result->toplevel_params.toplevel_id = strdup(arg);
+                    } else {
+                        report_error(
+                            "too many parameters for mode 'toplevel' (max 1)"
+                        );
+                    }
                 } else if (result->mode == CAPTURE_DEFER) {
                     report_error(
                         "too many parameters for mode 'defer' (max 0)"
@@ -297,6 +309,15 @@ void parse_argv(Arguments *result, int argc, char **argv) {
     if (result->captured_mode_params == 0) {
         report_error(
             "a mode is required\ntry %s --help for more information",
+            result->executable_name
+        );
+        goto error;
+    }
+
+    if (result->mode == CAPTURE_TOPLEVEL &&
+        !result->toplevel_params.toplevel_id) {
+        report_error(
+            "a toplevel id is required\ntry %s --help for more information",
             result->executable_name
         );
         goto error;

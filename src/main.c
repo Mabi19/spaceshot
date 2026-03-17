@@ -10,6 +10,7 @@
 #include "wayland/globals.h"
 #include "wayland/output.h"
 #include "wayland/screen-capture.h"
+#include "wayland/toplevel.h"
 #include <assert.h>
 #include <config/config.h>
 #include <fcntl.h>
@@ -38,6 +39,7 @@ typedef enum {
 /** The type of image this entry stores. */
 typedef enum {
     CAPTURE_ENTRY_TYPE_OUTPUT,
+    CAPTURE_ENTRY_TYPE_TOPLEVEL,
 } CaptureEntryType;
 
 typedef struct {
@@ -46,6 +48,7 @@ typedef struct {
     CaptureEntryType image_type;
     union {
         WrappedOutput *output;
+        WrappedToplevel *toplevel;
     };
     Image *image;
     struct wl_list link;
@@ -369,9 +372,27 @@ static bool is_output_matching(WrappedOutput *output) {
         }
     } else if (args.mode == CAPTURE_DEFER) {
         return true;
-    } else {
-        REPORT_UNHANDLED("mode", "%x", args.mode);
     }
+    // in toplevel mode, we don't need outputs
+    // (this can happen if we defer into toplevel, and an output appears after
+    // the mode switch)
+
+    return false;
+}
+
+static bool is_toplevel_matching(WrappedToplevel *toplevel) {
+    if (args.mode == CAPTURE_TOPLEVEL) {
+        if (args.toplevel_params.toplevel_id) {
+            if (strcmp(
+                    toplevel->identifier, args.toplevel_params.toplevel_id
+                ) == 0) {
+                return true;
+            }
+        } else {
+            return true;
+        }
+    }
+    // in non-toplevel modes, we don't need toplevels
 
     return false;
 }
@@ -425,6 +446,69 @@ static void add_new_output(WrappedOutput *output) {
     entry->output = output;
     wl_list_insert(&active_captures, &entry->link);
     capture_output(output, handle_captured_output, entry);
+}
+
+static void handle_captured_toplevel(Image *image, void *data) {
+    CaptureEntry *entry = data;
+
+    if (!is_toplevel_valid(entry->toplevel)) {
+        report_error("toplevel disappeared while screenshotting");
+        capture_entry_destroy(entry);
+        return;
+    }
+
+    entry->image = image;
+    if (!entry->image) {
+        report_error_fatal(
+            "capturing toplevel %s failed\n", entry->toplevel->identifier
+        );
+    }
+    entry->state = CAPTURE_ENTRY_STATE_READY;
+}
+
+static void add_new_toplevel(WrappedToplevel *toplevel) {
+    log_debug(
+        "Got toplevel %p with id %s and title %s\n",
+        (void *)toplevel->handle,
+        toplevel->identifier,
+        toplevel->title
+    );
+
+    if (!should_active_wait) {
+        return;
+    }
+
+    if (!is_toplevel_matching(toplevel)) {
+        return;
+    }
+
+    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
+    entry->state = CAPTURE_ENTRY_STATE_EMPTY;
+    entry->image_type = CAPTURE_ENTRY_TYPE_TOPLEVEL;
+    entry->toplevel = toplevel;
+    wl_list_insert(&active_captures, &entry->link);
+    capture_toplevel(toplevel, handle_captured_toplevel, entry);
+}
+
+static void get_required_capture_types(bool *output, bool *toplevel) {
+    switch (args.mode) {
+    case CAPTURE_REGION:
+    case CAPTURE_OUTPUT:
+        *output = true;
+        *toplevel = false;
+        break;
+    case CAPTURE_TOPLEVEL:
+        *output = false;
+        *toplevel = true;
+        break;
+    case CAPTURE_DEFER:
+        // TODO: figure out how defer should work
+        *output = true;
+        *toplevel = false;
+        break;
+    default:
+        REPORT_UNHANDLED("capture mode", "%d", args.mode);
+    }
 }
 
 static void read_deferred_args() {
@@ -485,6 +569,11 @@ static void dispatch_capture_entries() {
             switch (entry->image_type) {
             case CAPTURE_ENTRY_TYPE_OUTPUT:
                 if (!is_output_valid(entry->output)) {
+                    capture_entry_destroy(entry);
+                }
+                break;
+            case CAPTURE_ENTRY_TYPE_TOPLEVEL:
+                if (!is_toplevel_valid(entry->toplevel)) {
                     capture_entry_destroy(entry);
                 }
                 break;
@@ -579,6 +668,26 @@ static void dispatch_capture_entries() {
                 report_error_fatal("no outputs captured");
             }
         }
+    } else if (args.mode == CAPTURE_TOPLEVEL) {
+        if (args.toplevel_params.toplevel_id) {
+            CaptureEntry *entry;
+            bool found = false;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type == CAPTURE_ENTRY_TYPE_TOPLEVEL &&
+                    is_toplevel_matching(entry->toplevel)) {
+                    finish_noninteractive_screenshot(entry->image);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                capture_entry_destroy_all();
+            } else {
+                report_error_fatal("couldn't find matching toplevel");
+            }
+        } else {
+            report_error_fatal("there is no toplevel picker");
+        }
     } else if (args.mode == CAPTURE_DEFER) {
         printf("ready\n");
         fflush(stdout);
@@ -609,12 +718,14 @@ int main(int argc, char **argv) {
         report_error_fatal("failed to connect to Wayland display");
     }
 
-    // TODO (when toplevel capturing exists)
-    // active_captures should store both output and toplevel captures.
-    // This function should check which ones are needed
-    // and only pass the necessary functions to find_wayland_globals.
+    bool needs_output, needs_toplevel;
+    get_required_capture_types(&needs_output, &needs_toplevel);
 
-    bool found_everything = find_wayland_globals(display, &add_new_output);
+    bool found_everything = find_wayland_globals(
+        display,
+        needs_output ? add_new_output : NULL,
+        needs_toplevel ? add_new_toplevel : NULL
+    );
     if (!found_everything) {
         report_error_fatal("didn't find every required Wayland object");
     }
@@ -698,6 +809,8 @@ int main(int argc, char **argv) {
     }
 
     cleanup_wayland_globals();
+    // destroying some objects is async, so wait a bit
+    wl_display_roundtrip(display);
     wl_display_disconnect(display);
     int exit_code = was_cancelled ? 1 : 0;
     return exit_code;

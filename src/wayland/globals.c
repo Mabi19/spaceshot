@@ -1,6 +1,8 @@
 #include "globals.h"
+#include "ext-foreign-toplevel-list-client.h"
 #include "log.h"
 #include "wayland/seat.h"
+#include "wayland/toplevel.h"
 #include <cursor-shape-client.h>
 #include <ext-image-capture-source-client.h>
 #include <ext-image-copy-capture-client.h>
@@ -143,6 +145,104 @@ static const struct zxdg_output_v1_listener xdg_output_listener = {
     .done = xdg_output_handle_done
 };
 
+/** Doesn't remove from the list. */
+static void wrapped_toplevel_destroy(WrappedToplevel *toplevel) {
+    free(toplevel->identifier);
+    free(toplevel->app_id);
+    free(toplevel->title);
+    ext_foreign_toplevel_handle_v1_destroy(toplevel->handle);
+    free(toplevel);
+}
+
+static void toplevel_handle_handle_identifier(
+    void *data,
+    struct ext_foreign_toplevel_handle_v1 * /* toplevel */,
+    const char *identifier
+) {
+    WrappedToplevel *toplevel = data;
+    free(toplevel->identifier);
+    toplevel->identifier = strdup(identifier);
+}
+
+static void toplevel_handle_handle_app_id(
+    void *data,
+    struct ext_foreign_toplevel_handle_v1 * /* toplevel */,
+    const char *app_id
+) {
+    WrappedToplevel *toplevel = data;
+    free(toplevel->app_id);
+    toplevel->app_id = strdup(app_id);
+}
+
+static void toplevel_handle_handle_title(
+    void *data,
+    struct ext_foreign_toplevel_handle_v1 * /* toplevel */,
+    const char *title
+) {
+    WrappedToplevel *toplevel = data;
+    free(toplevel->title);
+    toplevel->title = strdup(title);
+}
+
+static void toplevel_handle_handle_done(
+    void *data, struct ext_foreign_toplevel_handle_v1 * /* toplevel */
+) {
+    WrappedToplevel *toplevel = data;
+    wayland_globals.handle_toplevel_create(toplevel);
+}
+
+static void toplevel_handle_handle_closed(
+    void *data, struct ext_foreign_toplevel_handle_v1 * /* toplevel */
+) {
+    WrappedToplevel *toplevel = data;
+    wl_list_remove(&toplevel->link);
+    wrapped_toplevel_destroy(toplevel);
+}
+
+static const struct ext_foreign_toplevel_handle_v1_listener
+    toplevel_handle_listener = {
+        .identifier = toplevel_handle_handle_identifier,
+        .app_id = toplevel_handle_handle_app_id,
+        .title = toplevel_handle_handle_title,
+        .done = toplevel_handle_handle_done,
+        .closed = toplevel_handle_handle_closed
+};
+
+static void toplevel_list_handle_toplevel(
+    void *data,
+    struct ext_foreign_toplevel_list_v1 * /* list */,
+    struct ext_foreign_toplevel_handle_v1 *toplevel_handle
+) {
+    WaylandGlobals *globals = data;
+
+    WrappedToplevel *toplevel = calloc(1, sizeof(WrappedToplevel));
+    toplevel->handle = toplevel_handle;
+    ext_foreign_toplevel_handle_v1_add_listener(
+        toplevel_handle, &toplevel_handle_listener, toplevel
+    );
+
+    wl_list_insert(&globals->toplevels, &toplevel->link);
+}
+
+static void toplevel_list_handle_finished(
+    void *data, struct ext_foreign_toplevel_list_v1 *list
+) {
+    WrappedToplevel *toplevel, *tmp;
+    wl_list_for_each_safe(toplevel, tmp, &wayland_globals.toplevels, link) {
+        wl_list_remove(&toplevel->link);
+        wrapped_toplevel_destroy(toplevel);
+    }
+    ext_foreign_toplevel_list_v1_destroy(list);
+    WaylandGlobals *globals = data;
+    globals->ext_foreign_toplevel_list = NULL;
+}
+
+static const struct ext_foreign_toplevel_list_v1_listener
+    toplevel_list_listener = {
+        .toplevel = toplevel_list_handle_toplevel,
+        .finished = toplevel_list_handle_finished,
+};
+
 static void registry_handle_global(
     void *data,
     struct wl_registry *registry,
@@ -174,10 +274,32 @@ static void registry_handle_global(
         );
     }
 
+    if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) == 0 &&
+        globals->handle_toplevel_create) {
+        globals->ext_foreign_toplevel_list = wl_registry_bind(
+            registry, object_id, &ext_foreign_toplevel_list_v1_interface, 1
+        );
+        ext_foreign_toplevel_list_v1_add_listener(
+            globals->ext_foreign_toplevel_list, &toplevel_list_listener, globals
+        );
+    }
+
     if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) ==
         0) {
         globals->ext_image_copy_capture_manager = wl_registry_bind(
             registry, object_id, &ext_image_copy_capture_manager_v1_interface, 1
+        );
+    }
+
+    if (strcmp(
+            interface,
+            ext_foreign_toplevel_image_capture_source_manager_v1_interface.name
+        ) == 0) {
+        globals->ext_toplevel_capture_source_manager = wl_registry_bind(
+            registry,
+            object_id,
+            &ext_foreign_toplevel_image_capture_source_manager_v1_interface,
+            1
         );
     }
 
@@ -240,7 +362,8 @@ static void registry_handle_global(
         }
     }
 
-    if (strcmp(interface, wl_output_interface.name) == 0) {
+    if (strcmp(interface, wl_output_interface.name) == 0 &&
+        globals->handle_output_create) {
         struct wl_output *wl_output =
             wl_registry_bind(registry, object_id, &wl_output_interface, 4);
 
@@ -287,12 +410,16 @@ static const struct wl_registry_listener registry_listener = {
 };
 
 bool find_wayland_globals(
-    struct wl_display *display, OutputCallback create_output_callback
+    struct wl_display *display,
+    OutputCallback create_output_callback,
+    ToplevelCallback create_toplevel_callback
 ) {
     // initialize wayland_globals object
     memset(&wayland_globals, 0, sizeof(WaylandGlobals));
     wl_list_init(&wayland_globals.outputs);
+    wl_list_init(&wayland_globals.toplevels);
     wayland_globals.handle_output_create = create_output_callback;
+    wayland_globals.handle_toplevel_create = create_toplevel_callback;
 
     struct wl_registry *registry = wl_display_get_registry(display);
     wl_registry_add_listener(registry, &registry_listener, &wayland_globals);
@@ -302,8 +429,16 @@ bool find_wayland_globals(
         wayland_globals.fractional_scale_manager == NULL ||
         wayland_globals.viewporter == NULL ||
         wayland_globals.layer_shell == NULL ||
-        wayland_globals.seat_dispatcher == NULL ||
-        wayland_globals.output_manager == NULL) {
+        wayland_globals.seat_dispatcher == NULL) {
+        return false;
+    }
+
+    if (create_output_callback && wayland_globals.output_manager == NULL) {
+        return false;
+    }
+
+    if (create_toplevel_callback &&
+        wayland_globals.ext_foreign_toplevel_list == NULL) {
         return false;
     }
 
@@ -331,6 +466,11 @@ void cleanup_wayland_globals() {
     }
     wl_shm_release(wayland_globals.shm);
     wl_subcompositor_destroy(wayland_globals.subcompositor);
+    if (wayland_globals.ext_foreign_toplevel_list) {
+        ext_foreign_toplevel_list_v1_stop(
+            wayland_globals.ext_foreign_toplevel_list
+        );
+    }
     if (wayland_globals.ext_image_copy_capture_manager) {
         ext_image_copy_capture_manager_v1_destroy(
             wayland_globals.ext_image_copy_capture_manager
@@ -352,13 +492,25 @@ void cleanup_wayland_globals() {
             wayland_globals.wlr_screencopy_manager
         );
     }
-    zxdg_output_manager_v1_destroy(wayland_globals.output_manager);
+    if (wayland_globals.output_manager) {
+        zxdg_output_manager_v1_destroy(wayland_globals.output_manager);
+    }
 }
 
 bool is_output_valid(WrappedOutput *test_output) {
     WrappedOutput *it;
     wl_list_for_each(it, &wayland_globals.outputs, link) {
         if (it == test_output) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_toplevel_valid(WrappedToplevel *test_toplevel) {
+    WrappedToplevel *it;
+    wl_list_for_each(it, &wayland_globals.toplevels, link) {
+        if (it == test_toplevel) {
             return true;
         }
     }

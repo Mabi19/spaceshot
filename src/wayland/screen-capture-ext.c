@@ -19,9 +19,7 @@ typedef struct {
     struct ext_image_capture_source_v1 *source;
     struct ext_image_copy_capture_session_v1 *session;
     SharedBuffer *buffer;
-    // callback
-    WrappedOutput *output;
-    OutputCaptureCallback image_callback;
+    ImageCaptureCallback image_callback;
     void *user_data;
     // this context is passed as user data to two different listeners
     // so refcounting is necessary
@@ -229,11 +227,9 @@ static const struct ext_image_copy_capture_session_v1_listener
 };
 
 void capture_output_ext(
-    WrappedOutput *output, OutputCaptureCallback image_callback, void *data
+    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
 ) {
-
     FrameContext *context = calloc(1, sizeof(FrameContext));
-    context->output = output;
     context->image_callback = image_callback;
     context->user_data = data;
 
@@ -251,7 +247,35 @@ void capture_output_ext(
     );
 }
 
+void capture_toplevel_ext(
+    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+) {
+    FrameContext *context = calloc(1, sizeof(FrameContext));
+    context->image_callback = image_callback;
+    context->user_data = data;
+
+    context->source =
+        ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+            wayland_globals.ext_toplevel_capture_source_manager,
+            toplevel->handle
+        );
+
+    context->session = ext_image_copy_capture_manager_v1_create_session(
+        wayland_globals.ext_image_copy_capture_manager, context->source, 0
+    );
+
+    context->ref_count = 1;
+    ext_image_copy_capture_session_v1_add_listener(
+        context->session, &session_listener, context
+    );
+}
+
 bool capture_output_ext_is_available() {
     return wayland_globals.ext_output_capture_source_manager != NULL &&
+           wayland_globals.ext_image_copy_capture_manager != NULL;
+}
+
+bool capture_toplevel_ext_is_available() {
+    return wayland_globals.ext_toplevel_capture_source_manager != NULL &&
            wayland_globals.ext_image_copy_capture_manager != NULL;
 }
