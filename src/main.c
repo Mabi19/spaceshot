@@ -641,10 +641,6 @@ static void dispatch_capture_entries() {
                 }
             }
             if (output_count == 1) {
-                // This causes a weird interaction where `spaceshot output`
-                // doesn't copy if you only have 1 monitor.
-                // TODO: add a way to copy from non-interactive modes
-                // (just call wl-copy?) Or implement ext-data-control.
                 wl_list_for_each(entry, &active_captures, link) {
                     if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
                         finish_noninteractive_screenshot(entry->image);

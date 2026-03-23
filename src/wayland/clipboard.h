@@ -1,9 +1,11 @@
 #pragma once
+#include "ext-data-control-client.h"
 #include "link-buffer.h"
 #include <wayland-client.h>
 
 typedef enum {
     CLIPBOARD_COPY_SOURCE_CORE,
+    CLIPBOARD_COPY_SOURCE_EXT,
 } ClipboardCopyType;
 
 typedef struct {
@@ -19,6 +21,7 @@ typedef struct {
 typedef struct ClipboardCopy {
     ClipboardCopyType type;
     struct wl_data_source *core_data_source;
+    struct ext_data_control_source_v1 *ext_data_source;
     /**
      * The function to call when no more copying will occur from this source,
      * usually due to it being replaced with another.

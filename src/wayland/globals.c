@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "ext-data-control-client.h"
 #include "ext-foreign-toplevel-list-client.h"
 #include "log.h"
 #include "wayland/seat.h"
@@ -248,7 +249,7 @@ static void registry_handle_global(
     struct wl_registry *registry,
     uint32_t object_id,
     const char *interface,
-    uint32_t /* version */
+    uint32_t version
 ) {
     WaylandGlobals *globals = data;
 
@@ -264,13 +265,23 @@ static void registry_handle_global(
     }
 
     if (strcmp(interface, wl_shm_interface.name) == 0) {
-        globals->shm =
-            wl_registry_bind(registry, object_id, &wl_shm_interface, 1);
+        // wl_shm_release is only available from version 2 onwards.
+        // But not all compositors support version 2, so bind 1 if 2 isn't
+        // available.
+        globals->shm = wl_registry_bind(
+            registry, object_id, &wl_shm_interface, version > 1 ? 2 : 1
+        );
     }
 
     if (strcmp(interface, wl_subcompositor_interface.name) == 0) {
         globals->subcompositor = wl_registry_bind(
             registry, object_id, &wl_subcompositor_interface, 1
+        );
+    }
+
+    if (strcmp(interface, ext_data_control_manager_v1_interface.name) == 0) {
+        globals->ext_data_control_manager = wl_registry_bind(
+            registry, object_id, &ext_data_control_manager_v1_interface, 1
         );
     }
 
@@ -464,7 +475,9 @@ void cleanup_wayland_globals() {
     if (wayland_globals.data_device) {
         wl_data_device_release(wayland_globals.data_device);
     }
-    wl_shm_release(wayland_globals.shm);
+    if (wl_shm_get_version(wayland_globals.shm) >= 2) {
+        wl_shm_release(wayland_globals.shm);
+    }
     wl_subcompositor_destroy(wayland_globals.subcompositor);
     if (wayland_globals.ext_foreign_toplevel_list) {
         ext_foreign_toplevel_list_v1_stop(

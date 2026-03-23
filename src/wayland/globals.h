@@ -3,6 +3,7 @@
 #include "wayland/seat.h"
 #include "wayland/toplevel.h"
 #include <cursor-shape-client.h>
+#include <ext-data-control-client.h>
 #include <ext-image-capture-source-client.h>
 #include <ext-image-copy-capture-client.h>
 #include <fractional-scale-client.h>
@@ -21,6 +22,8 @@ typedef struct {
     struct wl_data_device *data_device;
     struct wl_shm *shm;
     struct wl_subcompositor *subcompositor;
+    struct ext_data_control_manager_v1 *ext_data_control_manager;
+    struct ext_data_control_device_v1 *ext_data_control_device;
     struct ext_foreign_toplevel_list_v1 *ext_foreign_toplevel_list;
     struct ext_image_copy_capture_manager_v1 *ext_image_copy_capture_manager;
     struct ext_foreign_toplevel_image_capture_source_manager_v1

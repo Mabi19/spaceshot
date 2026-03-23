@@ -17,6 +17,12 @@ extra_protocols = [
     {
         'provider': 'wp',
         'state': 'staging',
+        'name': 'ext-data-control',
+        'version': 1,
+    },
+    {
+        'provider': 'wp',
+        'state': 'staging',
         'name': 'ext-image-capture-source',
         'version': 1,
     },
@@ -131,6 +137,7 @@ m_dep = cc.find_library('m', required: false)
 sources = files(
     'wayland/clipboard-common.c',
     'wayland/clipboard-core.c',
+    'wayland/clipboard-ext.c',
     'wayland/globals.c',
     'wayland/label-surface.c',
     'wayland/overlay-surface.c',
