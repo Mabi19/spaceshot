@@ -306,8 +306,8 @@ static void picker_finish_generic(
 
         LinkBuffer *out_data = image_save_png(to_save);
         image_destroy(to_save);
-        image_png_offer->buffer = out_data;
         if (should_copy) {
+            image_png_offer->buffer = out_data;
             clipboard_copy_run(copy_source);
             should_clipboard_wait = true;
         }
