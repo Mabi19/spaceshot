@@ -19,17 +19,18 @@ Note that spaceshot will not allow selecting a region which overlaps multiple mo
 Planned:
 - Snapping to predefined aspect ratios (Shift?)
 - More configuration options (mostly concerning appearance)
-- Screenshotting individual windows
-    - There isn't a widely-supported protocol for this yet
-    - ext-image-capture-source-v1 is ideal, but support is limited
-    - May be implemented using hyprland-toplevel-export-v1 first
+- A toplevel picker
 
 ### Controls
+Region mode:
 - Click and drag to select a region
 - Press Esc or click in place to cancel
 - Hold Alt or Space to move the selection instead of resizing it
 - Hold Ctrl while releasing the mouse button to edit the selection by dragging its edges or corners
     - In edit mode, press Enter to confirm
+
+Output mode:
+- Click on an output to capture it
 
 ## Building
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
@@ -75,17 +76,21 @@ spaceshot region '150,150 300x200'
 spaceshot output
 # screenshot a predefined output
 spaceshot output DP-1
+# screenshot a toplevel
+# pass in an ext-foreign-toplevel-list-v1 identifier
+# you can usually get these via compositor IPC or the lswt tool
+spaceshot toplevel 1800003b
 ```
 
 ### Deferred mode
 Running `spaceshot defer` puts it in a special mode made for scripting, where screenshot parameters are passed in later.
 In this mode, the program flow looks like this:
-1. All the available outputs are captured and saved.
+1. All the available outputs and/or toplevels (depending on parameters) are captured and saved.
 2. spaceshot outputs a line containing "ready" on stdout.
 3. A new set of arguments is input over stdin (separated by NULs, and terminated by EOF)
 4. Screenshotting continues as normal, using the images captured during step 1 and using the arguments from step 3
 
-So, running `echo "region" | spaceshot defer` is equivalent to running `spaceshot region`.
+So, running `echo "region" | spaceshot defer output` is equivalent to running `spaceshot region`.
 
 This separation can, for example, be used to make "choose-how-to-screenshot" menus, while ensuring the screenshot does not contain the menu.
 
@@ -97,7 +102,7 @@ This script implements a "choose-how-to-screenshot" menu. It uses [Walker](https
 ```sh
 #!/bin/bash
 
-coproc spaceshot defer
+coproc spaceshot defer output
 read -r READY <&"${COPROC[0]}"
 
 if [ "$READY" != "ready" ]; then

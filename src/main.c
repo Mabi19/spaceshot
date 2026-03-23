@@ -371,6 +371,7 @@ static bool is_output_matching(WrappedOutput *output) {
             return true;
         }
     } else if (args.mode == CAPTURE_DEFER) {
+        // if we're not deferring outputs, we're not listening for them at all
         return true;
     }
     // in toplevel mode, we don't need outputs
@@ -391,6 +392,9 @@ static bool is_toplevel_matching(WrappedToplevel *toplevel) {
         } else {
             return true;
         }
+    } else if (args.mode == CAPTURE_DEFER) {
+        // if we're not deferring toplevels, we're not listening for them at all
+        return true;
     }
     // in non-toplevel modes, we don't need toplevels
 
@@ -502,9 +506,8 @@ static void get_required_capture_types(bool *output, bool *toplevel) {
         *toplevel = true;
         break;
     case CAPTURE_DEFER:
-        // TODO: figure out how defer should work
-        *output = true;
-        *toplevel = false;
+        *output = args.defer_params.needs_output;
+        *toplevel = args.defer_params.needs_toplevel;
         break;
     default:
         REPORT_UNHANDLED("capture mode", "%d", args.mode);
@@ -733,6 +736,7 @@ int main(int argc, char **argv) {
     }
 
     // Wait for all the captured outputs to be ready.
+    TIMING_START(capture);
     while (true) {
         CaptureEntry *entry;
         bool is_waiting = false;
@@ -749,6 +753,7 @@ int main(int argc, char **argv) {
             break;
         }
     }
+    TIMING_END(capture);
 
     dispatch_capture_entries();
 

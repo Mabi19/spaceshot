@@ -12,13 +12,19 @@ static void print_help(const char *program_name) {
     printf("Usage: %s <mode> <mode parameters> [options]\n", program_name);
     printf(
         "Modes:\n"
-        "  - output <output-name>: screenshot an entire output\n"
+        "  - output [output-name]: screenshot an entire output\n"
+        "    if output is not specified and there's more than one connected, "
+        "opens the output picker to let the user choose\n"
         "  - region [region]: screenshot a region\n"
         "    region format is 'X,Y WxH', in global compositor space\n"
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
-        "  - defer: prepare a screenshot for later\n"
+        "  - toplevel <identifier>: screenshot a toplevel (window)\n"
+        "    pass in an ext-foreign-toplevel-list-v1 identifier\n"
+        "  - defer <targets>: prepare a screenshot for later\n"
+        "    at least one of the keywords 'output' or 'toplevel' must be "
+        "passed in as targets to be captured for later usage\n"
         "    prints 'ready' when everything is captured; "
         "afterwards, write mode and additional arguments to stdin, separated "
         "by null bytes, to continue as normal\n"
@@ -246,12 +252,16 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         (ToplevelCaptureParams){.toplevel_id = NULL};
                 } else if (strcmp(mode, "defer") == 0) {
                     result->mode = CAPTURE_DEFER;
+                    result->defer_params =
+                        (DeferParams){.needs_output = false,
+                                      .needs_toplevel = false};
                 } else {
                     report_error(
                         "invalid mode %s\n"
-                        "valid modes are 'output <output-name>', "
+                        "valid modes are 'output [output-name]', "
                         "'region [region]', "
-                        "and 'defer'\n",
+                        "'toplevel <toplevel>', "
+                        "and 'defer <targets>'\n",
                         mode
                     );
                     goto error;
@@ -290,12 +300,17 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         report_error(
                             "too many parameters for mode 'toplevel' (max 1)"
                         );
+                        goto error;
                     }
                 } else if (result->mode == CAPTURE_DEFER) {
-                    report_error(
-                        "too many parameters for mode 'defer' (max 0)"
-                    );
-                    goto error;
+                    if (strcmp(arg, "output") == 0) {
+                        result->defer_params.needs_output = true;
+                    } else if (strcmp(arg, "toplevel") == 0) {
+                        result->defer_params.needs_toplevel = true;
+                    } else {
+                        report_error("invalid defer target '%s'", arg);
+                        goto error;
+                    }
                 } else {
                     REPORT_UNHANDLED("mode", "%d", result->mode);
                     goto error;
@@ -318,6 +333,16 @@ void parse_argv(Arguments *result, int argc, char **argv) {
         !result->toplevel_params.toplevel_id) {
         report_error(
             "a toplevel id is required\ntry %s --help for more information",
+            result->executable_name
+        );
+        goto error;
+    }
+
+    if (result->mode == CAPTURE_DEFER && !result->defer_params.needs_output &&
+        !result->defer_params.needs_toplevel) {
+        report_error(
+            "at least one defer target is required\ntry %s --help for more "
+            "information",
             result->executable_name
         );
         goto error;

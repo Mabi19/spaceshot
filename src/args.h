@@ -24,11 +24,17 @@ typedef struct {
 } ToplevelCaptureParams;
 
 typedef struct {
+    bool needs_output;
+    bool needs_toplevel;
+} DeferParams;
+
+typedef struct {
     CaptureMode mode;
     union {
         OutputCaptureParams output_params;
         RegionCaptureParams region_params;
         ToplevelCaptureParams toplevel_params;
+        DeferParams defer_params;
     };
     int captured_mode_params;
     const char *executable_name;
