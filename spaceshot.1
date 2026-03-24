@@ -3,7 +3,7 @@
 spaceshot \- screenshot tool for wlroots-compatible Wayland compositors
 .SH SYNOPSIS
 .B spaceshot
-\fI<mode> <mode parameters> \fR[\fIoptions\fR]
+\fImode\fR \fImodeparams\fR \fR[\fIoptions\fR]
 .SH DESCRIPTION
 .B spaceshot
 is an integrated screenshot tool: it both captures images and crops them.
@@ -32,9 +32,23 @@ Note that the region must be entirely contained within one monitor.
 Select an entire monitor (what Wayland calls an output).
 If the output is not specified, an interactive picker is opened to let the user choose.
 .TP
-\fBdefer\fR
+\fBtoplevel\fR \fIidentifier\fR
+Select a regular app window (what Wayland calls a toplevel).
+The identifier is an ext-foreign-toplevel-list-v1 ID,
+which you can get via compositor IPC or the
+.BR lswt (1)
+tool.
+.TP
+\fBdefer \fItargets\fR
 Prepare a screenshot for later.
-This mode captures output images, then prints 'ready' and waits for additional commands.
+The available targets are all outputs and all toplevels, selected by adding the keywords
+.BR output
+and
+.BR toplevel
+respectively, as mode parameters.
+At least one target must be chosen, but you can put both.
+Note that capturing every toplevel can take a while if there are a lot of them.
+This mode captures target images, then prints 'ready' and waits for additional commands.
 Afterwards, input is read from stdin (until EOF) and parsed as arguments, separated by NULs.
 Inputting a new mode causes it to be invoked on the previously captured images.
 This is useful for scripting, for example when making "choose-how-to-screenshot" menus.
@@ -97,6 +111,10 @@ spaceshot output
 Screenshot the output named DP\-1:
 .RS
 spaceshot output DP\-1
+.RE
+Screenshot the toplevel with identifier 1800003b:
+.RS
+spaceshot toplevel 1800003b
 .RE
 .SH EXIT STATUS
 .TP
