@@ -9,7 +9,7 @@ It takes a screenshot first and then allows selecting a region on it, which make
 ## Features
 - Proper (fractional) scaling support: snaps to device pixels and not logical pixels, which makes selections more precise
 - 10-bit image format support (saved as 16-bit PNGs) (note that this may require compositor configuration)
-- Integrated copying to clipboard (only in interactive modes)
+- Integrated copying to clipboard
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
 - Sending notifications, with actions to open the result file, edit it, and view it in a file manager
@@ -83,7 +83,7 @@ spaceshot toplevel 1800003b
 ```
 
 ### Deferred mode
-Running `spaceshot defer` puts it in a special mode made for scripting, where screenshot parameters are passed in later.
+Running `spaceshot defer <targets>` puts it in a special mode made for scripting, where screenshot parameters are passed in later.
 In this mode, the program flow looks like this:
 1. All the available outputs and/or toplevels (depending on parameters) are captured and saved.
 2. spaceshot outputs a line containing "ready" on stdout.
