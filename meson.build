@@ -16,11 +16,6 @@ build_conf.set(
     description: 'Record timing information',
 )
 build_conf.set(
-    'SPACESHOT_DEBUG_CLIPPING',
-    get_option('debug-clipping'),
-    description: 'Draw clip regions on screen instead of applying them',
-)
-build_conf.set(
     'SPACESHOT_NOTIFICATIONS',
     get_option('notifications'),
     description: 'Send notifications after screenshotting',

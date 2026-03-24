@@ -702,6 +702,9 @@ static void dispatch_capture_entries() {
     }
 }
 
+// defined in debug.c
+extern void init_debug_mode();
+
 int main(int argc, char **argv) {
     wl_list_init(&active_captures);
 
@@ -709,6 +712,7 @@ int main(int argc, char **argv) {
     config_load();
     TIMING_END(config_load);
     set_program_name(argv[0]);
+    init_debug_mode();
     args.executable_name = argv[0];
     parse_argv(&args, argc - 1, argv + 1);
 

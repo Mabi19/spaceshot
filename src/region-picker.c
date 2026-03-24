@@ -3,6 +3,7 @@
 #include "bbox.h"
 #include "config/config.h"
 #include "cursor-shape-client.h"
+#include "debug.h"
 #include "image.h"
 #include "log.h"
 #include "smart-border.h"
@@ -242,25 +243,30 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     picker->dirty_after_state_change = false;
 
-#ifndef SPACESHOT_DEBUG_CLIPPING
-    cairo_reset_clip(cr);
-    if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
-        // apply the clip regions
-        cairo_rectangle(
-            cr,
-            outer_clip_region.x,
-            outer_clip_region.y,
-            outer_clip_region.width,
-            outer_clip_region.height
-        );
+    // the smart border will appear later and swap out the background,
+    // so also turn off clipping for that
+    // you could definitely handle that more efficiently, but this is a debug
+    // mode, it doesn't need to be performant
+    if (debug_mode != DEBUG_MODE_CLIPPING &&
+        debug_mode != DEBUG_MODE_SMART_BORDER) {
+        cairo_reset_clip(cr);
+        if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
+            // apply the clip regions
+            cairo_rectangle(
+                cr,
+                outer_clip_region.x,
+                outer_clip_region.y,
+                outer_clip_region.width,
+                outer_clip_region.height
+            );
 
-        if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
-            cairo_bbox_reverse(cr, inner_clip_region);
+            if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
+                cairo_bbox_reverse(cr, inner_clip_region);
+            }
+
+            cairo_clip(cr);
         }
-
-        cairo_clip(cr);
     }
-#endif
 
     if (picker->state != REGION_PICKER_EMPTY) {
         picker->last_drawn_box = selection_box;
@@ -271,25 +277,38 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     TIMING_START(frame);
 
-    cairo_set_source(cr, picker->background_pattern);
-    cairo_paint(cr);
+    bool has_smart_border =
+        picker->smart_border &&
+        atomic_load_explicit(
+            &picker->smart_border->is_done, memory_order_acquire
+        );
 
-    double x_scale =
-        (double)surface->device_width /
-        (double)cairo_image_surface_get_width(picker->background_surface);
-    double y_scale =
-        (double)surface->device_height /
-        (double)cairo_image_surface_get_height(picker->background_surface);
+    if (debug_mode == DEBUG_MODE_SMART_BORDER) {
+        if (has_smart_border) {
+            cairo_set_source(cr, picker->smart_border->pattern);
+        } else {
+            // fallback
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        }
+        cairo_paint(cr);
+    } else {
+        double x_scale =
+            (double)surface->device_width /
+            (double)cairo_image_surface_get_width(picker->background_surface);
+        double y_scale =
+            (double)surface->device_height /
+            (double)cairo_image_surface_get_height(picker->background_surface);
 
-    cairo_save(cr);
-    if (x_scale != 1.0 || y_scale != 1.0) {
-        log_debug("background requires scaling\n");
-        cairo_scale(cr, x_scale, y_scale);
+        cairo_save(cr);
+        if (x_scale != 1.0 || y_scale != 1.0) {
+            log_debug("background requires scaling\n");
+            cairo_scale(cr, x_scale, y_scale);
+        }
+        cairo_pattern_set_filter(picker->background_pattern, CAIRO_FILTER_FAST);
+        cairo_set_source(cr, picker->background_pattern);
+        cairo_paint(cr);
+        cairo_restore(cr);
     }
-    cairo_pattern_set_filter(picker->background_pattern, CAIRO_FILTER_FAST);
-    cairo_set_source(cr, picker->background_pattern);
-    cairo_paint(cr);
-    cairo_restore(cr);
 
     // background
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
@@ -425,33 +444,34 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
     TIMING_END(frame);
 
-#ifdef SPACESHOT_DEBUG_CLIPPING
-    if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
-        // draw the clip regions
-        cairo_rectangle(
-            cr,
-            outer_clip_region.x,
-            outer_clip_region.y,
-            outer_clip_region.width,
-            outer_clip_region.height
-        );
+    if (debug_mode == DEBUG_MODE_CLIPPING) {
+        if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
+            // draw the clip regions
+            cairo_rectangle(
+                cr,
+                outer_clip_region.x,
+                outer_clip_region.y,
+                outer_clip_region.width,
+                outer_clip_region.height
+            );
 
-        if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
-            cairo_bbox_reverse(cr, inner_clip_region);
+            if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
+                cairo_bbox_reverse(cr, inner_clip_region);
+            }
+
+            cairo_set_source_rgba(cr, 0.0, 0.5, 0.0, 0.5);
+            cairo_fill(cr);
         }
-
-        cairo_set_source_rgba(cr, 0.0, 0.5, 0.0, 0.5);
-        cairo_fill(cr);
     }
-#endif
 
-#ifndef SPACESHOT_DEBUG_CLIPPING
-    overlay_surface_damage(surface, outer_clip_region);
-#else
-    overlay_surface_damage(
-        surface, (BBox){0, 0, surface->device_width, surface->device_height}
-    );
-#endif
+    if (debug_mode == DEBUG_MODE_CLIPPING ||
+        debug_mode == DEBUG_MODE_SMART_BORDER) {
+        overlay_surface_damage(
+            surface, (BBox){0, 0, surface->device_width, surface->device_height}
+        );
+    } else {
+        overlay_surface_damage(surface, outer_clip_region);
+    }
     return true;
 }
 

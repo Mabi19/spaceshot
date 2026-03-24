@@ -149,6 +149,7 @@ sources = files(
     'wayland/shared-memory.c',
     'args.c',
     'bbox.c',
+    'debug.c',
     'image.c',
     'link-buffer.c',
     'log.c',
