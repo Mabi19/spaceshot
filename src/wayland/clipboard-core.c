@@ -78,11 +78,13 @@ static struct wl_data_device *get_data_device() {
 }
 
 void clipboard_core_setup_impl(ClipboardCopy *source) {
-    struct wl_data_device *data_device = get_data_device();
     source->core_data_source = wl_data_device_manager_create_data_source(
         wayland_globals.data_device_manager
     );
+}
 
+void clipboard_core_activate_impl(ClipboardCopy *source) {
+    struct wl_data_device *data_device = get_data_device();
     wl_data_device_set_selection(
         data_device,
         source->core_data_source,

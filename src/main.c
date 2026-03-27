@@ -172,6 +172,7 @@ static void finish_noninteractive_screenshot(Image *image) {
         ClipboardCopyOffer *offer =
             clipboard_copy_offer_mime(copy_source, "image/png");
         offer->buffer = out_data;
+        clipboard_copy_activate(copy_source);
         clipboard_copy_run(copy_source);
         should_clipboard_wait = true;
     }
@@ -275,6 +276,7 @@ static void picker_finish_generic(
                 copy_source->finished = clipboard_copy_finish;
                 image_png_offer =
                     clipboard_copy_offer_mime(copy_source, "image/png");
+                clipboard_copy_activate(copy_source);
             }
 
             to_save = result_image_callback(entry, data);

@@ -7,11 +7,13 @@
 extern void clipboard_core_setup_impl(ClipboardCopy *source);
 extern void
 clipboard_core_offer_impl(ClipboardCopy *source, ClipboardCopyOffer *offer);
+extern void clipboard_core_activate_impl(ClipboardCopy *source);
 extern void clipboard_core_run_impl(ClipboardCopy *source);
 
 extern void clipboard_ext_setup_impl(ClipboardCopy *source);
 extern void
 clipboard_ext_offer_impl(ClipboardCopy *source, ClipboardCopyOffer *offer);
+extern void clipboard_ext_activate_impl(ClipboardCopy *source);
 extern void clipboard_ext_run_impl(ClipboardCopy *source);
 
 ClipboardCopy *clipboard_copy_setup(bool has_surface_serial) {
@@ -45,6 +47,16 @@ clipboard_copy_offer_mime(ClipboardCopy *source, const char *mime) {
     }
     wl_list_insert(&source->offers, &offer->link);
     return offer;
+}
+
+void clipboard_copy_activate(ClipboardCopy *source) {
+    if (source->type == CLIPBOARD_COPY_SOURCE_CORE) {
+        clipboard_core_activate_impl(source);
+    } else if (source->type == CLIPBOARD_COPY_SOURCE_EXT) {
+        clipboard_ext_activate_impl(source);
+    } else {
+        REPORT_UNHANDLED("clipboard copy source type", "%d", source->type);
+    }
 }
 
 void clipboard_copy_run(ClipboardCopy *source) {

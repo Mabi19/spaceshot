@@ -66,11 +66,13 @@ static struct ext_data_control_device_v1 *get_data_device() {
 }
 
 void clipboard_ext_setup_impl(ClipboardCopy *source) {
-    struct ext_data_control_device_v1 *data_device = get_data_device();
     source->ext_data_source = ext_data_control_manager_v1_create_data_source(
         wayland_globals.ext_data_control_manager
     );
+}
 
+void clipboard_ext_activate_impl(ClipboardCopy *source) {
+    struct ext_data_control_device_v1 *data_device = get_data_device();
     ext_data_control_device_v1_set_selection(
         data_device, source->ext_data_source
     );

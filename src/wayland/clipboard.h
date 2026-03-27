@@ -46,6 +46,13 @@ ClipboardCopy *clipboard_copy_setup(bool has_surface_serial);
 ClipboardCopyOffer *
 clipboard_copy_offer_mime(ClipboardCopy *source, const char *mime);
 /**
+ * Tell the compositor to set the clipboard.
+ * This does not actually start waiting for pastes, see @c clipboard_copy_run
+ * for that. Don't call wl_display_dispatch between this and @c
+ * clipboard_copy_run, or you can miss pastes.
+ */
+void clipboard_copy_activate(ClipboardCopy *source);
+/**
  * Activate the copy. All offers added by this point need to have at least one
  * data pointer filled out.
  */
