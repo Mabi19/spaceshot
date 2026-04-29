@@ -104,6 +104,7 @@ Image *image_new_from_wayland(
     uint32_t height,
     uint32_t stride
 ) {
+    TIMING_START(image_new_from_wayland);
     ImageFormat format = image_format_from_wl(wl_format);
 
     Image *result = image_new(width, height, format);
@@ -111,6 +112,7 @@ Image *image_new_from_wayland(
         return NULL;
 
     // copy the data
+    log_debug("wl stride: %u, target stride: %u\n", stride, result->stride);
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(format);
     const uint8_t *source_row = data;
     uint8_t *result_row = result->data;
@@ -120,6 +122,7 @@ Image *image_new_from_wayland(
         result_row += result->stride;
     }
 
+    TIMING_END(image_new_from_wayland);
     return result;
 }
 
@@ -393,8 +396,10 @@ LinkBuffer *image_save_png(const Image *image) {
         }
 
         png_write_image(png_data, row_ptrs);
-    } else if (image->format == IMAGE_FORMAT_XRGB2101010 ||
-               image->format == IMAGE_FORMAT_XBGR2101010) {
+    } else if (
+        image->format == IMAGE_FORMAT_XRGB2101010 ||
+        image->format == IMAGE_FORMAT_XBGR2101010
+    ) {
         // this needs transcoding anyway, so use the PNG pixel format directly
         uint16_t *transcoded_data = malloc(image->width * image->height * 6);
         uint16_t *current_pixel = transcoded_data;

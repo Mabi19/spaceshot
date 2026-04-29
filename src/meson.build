@@ -157,6 +157,7 @@ sources = files(
     'paths.c',
     'region-picker.c',
     'smart-border.c',
+    'toplevel-picker.c',
 )
 
 executable(

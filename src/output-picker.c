@@ -99,7 +99,8 @@ static void output_picker_handle_keyboard(void *data, KeyboardEvent event) {
     switch (event.keysym) {
     case XKB_KEY_Escape:
         // only cancel once, on the focused surface
-        if (picker->state == OUTPUT_PICKER_ACTIVE) {
+        if (picker->state == OUTPUT_PICKER_ACTIVE &&
+            event.type == KEYBOARD_EVENT_RELEASE) {
             picker->finish_callback(picker, PICKER_FINISH_REASON_CANCELLED);
         }
         break;

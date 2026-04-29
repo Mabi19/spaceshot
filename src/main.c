@@ -5,7 +5,9 @@
 #include "log.h"
 #include "output-picker.h"
 #include "paths.h"
+#include "picker-common.h"
 #include "region-picker.h"
+#include "toplevel-picker.h"
 #include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
@@ -31,6 +33,8 @@ typedef enum {
     CAPTURE_ENTRY_STATE_REGION_PICKER,
     /* Has an output picker active. */
     CAPTURE_ENTRY_STATE_OUTPUT_PICKER,
+    /* There is a toplevel picker active that contains this. */
+    CAPTURE_ENTRY_STATE_TOPLEVEL_PICKER,
     /* Has an image saved, and will eventually be transformed into one of the
        other types. */
     CAPTURE_ENTRY_STATE_READY,
@@ -235,6 +239,8 @@ static void capture_entry_destroy(CaptureEntry *entry) {
         case CAPTURE_ENTRY_STATE_OUTPUT_PICKER:
             output_picker_destroy(entry->picker);
             break;
+        case CAPTURE_ENTRY_STATE_TOPLEVEL_PICKER:
+            break;
         default:
             REPORT_UNHANDLED("picker entry type", "%d", entry->state);
         }
@@ -348,6 +354,54 @@ static Image *output_picker_finish_get_image(CaptureEntry *entry, void *) {
 static void
 output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
     picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
+}
+
+static void toplevel_picker_finish(
+    ToplevelPicker *picker, PickerFinishReason reason, Image *result
+) {
+    if (reason == PICKER_FINISH_REASON_SELECTED) {
+        ClipboardCopy *copy_source = NULL;
+        ClipboardCopyOffer *image_png_offer = NULL;
+        bool should_copy = config_get()->copy_to_clipboard;
+        if (should_copy) {
+            // Set up the copy while the picker's still alive
+            copy_source = clipboard_copy_setup(true);
+            assert(copy_source);
+            copy_source->finished = clipboard_copy_finish;
+            image_png_offer =
+                clipboard_copy_offer_mime(copy_source, "image/png");
+        }
+
+        toplevel_picker_destroy(picker);
+
+        if (wl_display_flush(display) == -1) {
+            report_warning(
+                "flushing Wayland display failed before encoding image"
+            );
+        }
+
+        LinkBuffer *out_data = image_save_png(result);
+        image_destroy(result);
+        if (should_copy) {
+            image_png_offer->buffer = out_data;
+            clipboard_copy_run(copy_source);
+            should_clipboard_wait = true;
+        }
+
+        char *output_filename = get_output_filename();
+        save_screenshot(out_data, output_filename);
+        send_notification(output_filename, should_copy);
+
+        free(output_filename);
+    } else {
+        // there is only one toplevel picker, so if it's closed we can't really
+        // continue anymore. So cancel instead
+        printf("selection cancelled\n");
+        was_cancelled = true;
+    }
+
+    capture_entry_destroy_all();
+    should_active_wait = false;
 }
 
 static bool is_output_matching(WrappedOutput *output) {
@@ -685,7 +739,18 @@ static void dispatch_capture_entries() {
                 report_error_fatal("couldn't find matching toplevel");
             }
         } else {
-            report_error_fatal("there is no toplevel picker");
+            ToplevelPicker *picker =
+                toplevel_picker_new(toplevel_picker_finish);
+            CaptureEntry *entry;
+            wl_list_for_each(entry, &active_captures, link) {
+                if (entry->image_type != CAPTURE_ENTRY_TYPE_TOPLEVEL) {
+                    toplevel_picker_add(
+                        picker, entry->toplevel->title, entry->image
+                    );
+                    entry->state = CAPTURE_ENTRY_STATE_TOPLEVEL_PICKER;
+                }
+                toplevel_picker_present(picker);
+            }
         }
     } else if (args.mode == CAPTURE_DEFER) {
         printf("ready\n");
