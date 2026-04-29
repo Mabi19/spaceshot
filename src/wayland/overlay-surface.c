@@ -163,7 +163,7 @@ OverlaySurface *overlay_surface_new(
     result->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
         wayland_globals.layer_shell,
         result->wl_surface,
-        output->wl_output,
+        output ? output->wl_output : NULL,
         ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         "spaceshot"
     );
