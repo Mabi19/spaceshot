@@ -112,11 +112,15 @@ static void calculate_clip_regions(
         picker->dirty_after_state_change) {
         double outer_expand = 4.0 * picker->surface->scale / 120.0;
         border_width_pixels += outer_expand;
-        double inner_contract = 4.0 * picker->surface->scale / 120.0;
-        inner->x += inner_contract;
-        inner->y += inner_contract;
-        inner->width -= 2.0 * inner_contract;
-        inner->height -= 2.0 * inner_contract;
+        // Only contract the inner hole when one actually exists; otherwise
+        // there's nothing to shrink and we'd produce a negative-size box.
+        if (inner->width > 0 && inner->height > 0) {
+            double inner_contract = 4.0 * picker->surface->scale / 120.0;
+            inner->x += inner_contract;
+            inner->y += inner_contract;
+            inner->width -= 2.0 * inner_contract;
+            inner->height -= 2.0 * inner_contract;
+        }
     }
 
     // adjust for borders
@@ -469,8 +473,56 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
         overlay_surface_damage(
             surface, (BBox){0, 0, surface->device_width, surface->device_height}
         );
-    } else {
+    } else if (inner_clip_region.width == 0 || inner_clip_region.height == 0) {
+        // The clip region is just a rectangle, so splitting is unnecessary.
         overlay_surface_damage(surface, outer_clip_region);
+    } else {
+        // split the clip region into (up to) 4 boxes because wayland doesn't
+        // work with holey boxes like our clip area
+        // TODO: probably refactor this into a helper function
+        BBox current_box;
+        // top
+        current_box = (BBox){
+            .x = outer_clip_region.x,
+            .y = outer_clip_region.y,
+            .width = outer_clip_region.width,
+            .height = inner_clip_region.y - outer_clip_region.y
+        };
+        if (current_box.width > 0 && current_box.height > 0) {
+            overlay_surface_damage(surface, current_box);
+        }
+        // bottom
+        current_box = (BBox){
+            .x = outer_clip_region.x,
+            .y = inner_clip_region.y + inner_clip_region.height,
+            .width = outer_clip_region.width,
+            .height = outer_clip_region.y + outer_clip_region.height -
+                      inner_clip_region.y - inner_clip_region.height
+        };
+        if (current_box.width > 0 && current_box.height > 0) {
+            overlay_surface_damage(surface, current_box);
+        }
+        // left
+        current_box = (BBox){
+            .x = outer_clip_region.x,
+            .y = inner_clip_region.y,
+            .width = inner_clip_region.x - outer_clip_region.x,
+            .height = inner_clip_region.height,
+        };
+        if (current_box.width > 0 && current_box.height > 0) {
+            overlay_surface_damage(surface, current_box);
+        }
+        // right
+        current_box = (BBox){
+            .x = inner_clip_region.x + inner_clip_region.width,
+            .y = inner_clip_region.y,
+            .width = outer_clip_region.x + outer_clip_region.width -
+                     inner_clip_region.x - inner_clip_region.width,
+            .height = inner_clip_region.height,
+        };
+        if (current_box.width > 0 && current_box.height > 0) {
+            overlay_surface_damage(surface, current_box);
+        }
     }
     return true;
 }
