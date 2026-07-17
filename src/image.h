@@ -32,6 +32,26 @@ cairo_format_t image_format_to_cairo(ImageFormat format);
 uint32_t image_format_bytes_per_pixel(ImageFormat format);
 uint32_t image_format_default_stride(ImageFormat format, uint32_t width);
 
+/** An enum of image transformations. Rotations are counterclockwise. */
+typedef enum {
+    IMAGE_TRANSFORM_NORMAL,
+    IMAGE_TRANSFORM_90,
+    IMAGE_TRANSFORM_180,
+    IMAGE_TRANSFORM_270,
+    IMAGE_TRANSFORM_FLIPPED,
+    IMAGE_TRANSFORM_FLIPPED_90,
+    IMAGE_TRANSFORM_FLIPPED_180,
+    IMAGE_TRANSFORM_FLIPPED_270,
+} ImageTransform;
+
+ImageTransform image_transform_from_wl(enum wl_output_transform transform);
+/**
+ * Get an image transform's inverse, such that
+ * image_transform(image_transform(img, T), image_transform_invert(T))
+ * is the same as img.
+ */
+ImageTransform image_transform_invert(ImageTransform transform);
+
 typedef struct {
     uint8_t *data;
     ImageFormat format;
@@ -52,6 +72,9 @@ Image *image_new_from_wayland(
 void image_destroy(Image *image);
 
 Image *image_copy(const Image *src);
+
+/** Apply a transform to an image, returning a new image. */
+Image *image_transform(const Image *src, ImageTransform transform);
 
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height

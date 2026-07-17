@@ -129,6 +129,139 @@ Image *image_copy(const Image *src) {
     return result;
 }
 
+ImageTransform image_transform_from_wl(enum wl_output_transform transform) {
+    switch (transform) {
+    case WL_OUTPUT_TRANSFORM_NORMAL:
+        return IMAGE_TRANSFORM_NORMAL;
+    case WL_OUTPUT_TRANSFORM_90:
+        return IMAGE_TRANSFORM_90;
+    case WL_OUTPUT_TRANSFORM_180:
+        return IMAGE_TRANSFORM_180;
+    case WL_OUTPUT_TRANSFORM_270:
+        return IMAGE_TRANSFORM_270;
+    case WL_OUTPUT_TRANSFORM_FLIPPED:
+        return IMAGE_TRANSFORM_FLIPPED;
+    case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+        return IMAGE_TRANSFORM_FLIPPED_90;
+    case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+        return IMAGE_TRANSFORM_FLIPPED_180;
+    case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+        return IMAGE_TRANSFORM_FLIPPED_270;
+    default:
+        REPORT_UNHANDLED("wl output transform", "%d", transform);
+    }
+}
+
+ImageTransform image_transform_invert(ImageTransform transform) {
+    switch (transform) {
+    case IMAGE_TRANSFORM_NORMAL:
+        return IMAGE_TRANSFORM_NORMAL;
+    case IMAGE_TRANSFORM_90:
+        return IMAGE_TRANSFORM_270;
+    case IMAGE_TRANSFORM_180:
+        return IMAGE_TRANSFORM_180;
+    case IMAGE_TRANSFORM_270:
+        return IMAGE_TRANSFORM_90;
+    case IMAGE_TRANSFORM_FLIPPED:
+    case IMAGE_TRANSFORM_FLIPPED_90:
+    case IMAGE_TRANSFORM_FLIPPED_180:
+    case IMAGE_TRANSFORM_FLIPPED_270:
+        return transform;
+    default:
+        REPORT_UNHANDLED("image transform", "%d", transform);
+    }
+}
+
+static bool image_transform_swaps_dimensions(ImageTransform transform) {
+    switch (transform) {
+    case IMAGE_TRANSFORM_90:
+    case IMAGE_TRANSFORM_270:
+    case IMAGE_TRANSFORM_FLIPPED_90:
+    case IMAGE_TRANSFORM_FLIPPED_270:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static inline void image_transform_coords(
+    ImageTransform transform,
+    uint32_t width,
+    uint32_t height,
+    uint32_t x,
+    uint32_t y,
+    uint32_t *dest_x,
+    uint32_t *dest_y
+) {
+    switch (transform) {
+    case IMAGE_TRANSFORM_NORMAL:
+        *dest_x = x;
+        *dest_y = y;
+        break;
+    case IMAGE_TRANSFORM_90:
+        *dest_x = y;
+        *dest_y = width - 1 - x;
+        break;
+    case IMAGE_TRANSFORM_180:
+        *dest_x = width - 1 - x;
+        *dest_y = height - 1 - y;
+        break;
+    case IMAGE_TRANSFORM_270:
+        *dest_x = height - 1 - y;
+        *dest_y = x;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED:
+        *dest_x = width - 1 - x;
+        *dest_y = y;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_90:
+        *dest_x = y;
+        *dest_y = x;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_180:
+        *dest_x = x;
+        *dest_y = height - 1 - y;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_270:
+        *dest_x = height - 1 - y;
+        *dest_y = width - 1 - x;
+        break;
+    default:
+        REPORT_UNHANDLED("image transform", "%d", transform);
+    }
+}
+
+Image *image_transform(const Image *src, ImageTransform transform) {
+    bool swap_dimensions = image_transform_swaps_dimensions(transform);
+    Image *result = image_new(
+        swap_dimensions ? src->height : src->width,
+        swap_dimensions ? src->width : src->height,
+        src->format
+    );
+    if (!result) {
+        return NULL;
+    }
+
+    uint32_t bytes_per_pixel = image_format_bytes_per_pixel(src->format);
+    for (uint32_t y = 0; y < src->height; y++) {
+        const uint8_t *source_row = src->data + y * src->stride;
+        for (uint32_t x = 0; x < src->width; x++) {
+            uint32_t dest_x, dest_y;
+            image_transform_coords(
+                transform, src->width, src->height, x, y, &dest_x, &dest_y
+            );
+            memcpy(
+                result->data + dest_y * result->stride +
+                    dest_x * bytes_per_pixel,
+                source_row + x * bytes_per_pixel,
+                bytes_per_pixel
+            );
+        }
+    }
+
+    return result;
+}
+
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
 ) {
@@ -393,8 +526,10 @@ LinkBuffer *image_save_png(const Image *image) {
         }
 
         png_write_image(png_data, row_ptrs);
-    } else if (image->format == IMAGE_FORMAT_XRGB2101010 ||
-               image->format == IMAGE_FORMAT_XBGR2101010) {
+    } else if (
+        image->format == IMAGE_FORMAT_XRGB2101010 ||
+        image->format == IMAGE_FORMAT_XBGR2101010
+    ) {
         // this needs transcoding anyway, so use the PNG pixel format directly
         uint16_t *transcoded_data = malloc(image->width * image->height * 6);
         uint16_t *current_pixel = transcoded_data;

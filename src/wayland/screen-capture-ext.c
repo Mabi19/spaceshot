@@ -15,6 +15,8 @@ typedef struct {
     uint32_t width;
     uint32_t height;
     bool has_selected_format;
+    // Transform applied by the compositor to the captured buffer
+    ImageTransform transform;
     // associated Wayland objects
     struct ext_image_capture_source_v1 *source;
     struct ext_image_copy_capture_session_v1 *session;
@@ -84,13 +86,21 @@ frame_handle_ready(void *data, struct ext_image_copy_capture_frame_v1 *frame) {
     uint32_t stride = image_format_default_stride(
         image_format_from_wl(context->selected_format), context->width
     );
-    context->result = image_new_from_wayland(
+    Image *captured = image_new_from_wayland(
         context->selected_format,
         context->buffer->data,
         context->width,
         context->height,
         stride
     );
+    if (context->transform == IMAGE_TRANSFORM_NORMAL) {
+        context->result = captured;
+    } else {
+        context->result = image_transform(
+            captured, image_transform_invert(context->transform)
+        );
+        image_destroy(captured);
+    }
 
     // This deletes BOTH objects which have a reference to the frame context.
     // So, unref twice!
@@ -102,17 +112,13 @@ frame_handle_ready(void *data, struct ext_image_copy_capture_frame_v1 *frame) {
 }
 
 static void frame_handle_transform(
-    void * /* data */,
+    void *data,
     struct ext_image_copy_capture_frame_v1 * /* frame */,
     uint32_t transform
 ) {
-    if (transform != WL_OUTPUT_TRANSFORM_NORMAL) {
-        // TODO
-        // Unfortunately I don't have a good way to test these.
-        report_error_fatal(
-            "captured image was transformed and couldn't be handled\n"
-        );
-    }
+    FrameContext *context = data;
+    context->transform = image_transform_from_wl(transform);
+    log_debug("got buffer transform %u\n", transform);
 }
 
 static const struct ext_image_copy_capture_frame_v1_listener frame_listener = {
