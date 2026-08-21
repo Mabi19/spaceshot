@@ -1,4 +1,5 @@
 #pragma once
+#include "render/command.h"
 #include "wayland/output.h"
 #include "wayland/render.h"
 #include <cairo.h>
@@ -10,10 +11,10 @@
 constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 
 /**
- * Returns whether the surface contents were actually updated. This should call
- * overlay_surface_damage() itself
+ * Draw the current contents of the overlay surface, by returning a linked list
+ * of render commands. This should call overlay_surface_damage() itself
  */
-typedef bool (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
+typedef RenderCommand *(*OverlaySurfaceDrawCallback)(void *user_data);
 
 /**
  * Like @c OverlaySurfaceDrawCallback, except that you have to attach a buffer

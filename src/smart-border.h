@@ -1,5 +1,6 @@
 #pragma once
 #include "image.h"
+#include "render/texture.h"
 #include <stdatomic.h>
 #include <threads.h>
 
@@ -7,8 +8,7 @@ typedef struct {
     const Image *base;
     uint32_t scale;
     Image *result_image;
-    cairo_surface_t *surface;
-    cairo_pattern_t *pattern;
+    RenderTexture *result_texture;
     atomic_bool is_done;
     atomic_int ref_count;
 } SmartBorderContext;

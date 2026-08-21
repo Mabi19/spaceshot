@@ -1,7 +1,9 @@
 #include "config.h"
 #include "parse.h"
+#include <math.h>
 #include <memory.h>
 #include <pwd.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -136,4 +138,9 @@ void config_load() {
     for (int i = 0; config_dirs[i] != NULL; i++) {
         config_load_file(config_dirs[i]);
     }
+}
+
+int config_length_to_pixels(ConfigLength length, uint32_t surface_scale) {
+    // length.unit is only pixels for now
+    return round((length.value * surface_scale) / 120.0);
 }

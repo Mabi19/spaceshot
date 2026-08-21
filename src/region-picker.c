@@ -2,17 +2,18 @@
 #include "anchor.h"
 #include "bbox.h"
 #include "config/config.h"
-#include "cursor-shape-client.h"
-#include "debug.h"
 #include "image.h"
+#include "link-buffer.h"
 #include "log.h"
+#include "render/command.h"
+#include "render/texture.h"
 #include "smart-border.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
-#include "wayland/render.h"
 #include "wayland/seat.h"
 #include <cairo.h>
+#include <cursor-shape-client.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,10 @@
 static const double CANCEL_THRESHOLD = 2.0;
 
 static BBox get_bbox_containing_selection(RegionPicker *picker) {
+    if (picker->state == REGION_PICKER_EMPTY) {
+        return (BBox){.x = 0, .y = 0, .width = 0, .height = 0};
+    }
+
     double left = fmin(picker->x1, picker->x2);
     double top = fmin(picker->y1, picker->y2);
     double right = fmax(picker->x1, picker->x2);
@@ -43,91 +48,6 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
     };
     result = bbox_constrain(result, surface_bounds);
     return result;
-}
-
-static void calculate_clip_regions(
-    RegionPicker *picker, const BBox *curr_sel, BBox *outer, BBox *inner
-) {
-    uint32_t device_width = picker->surface->device_width;
-    uint32_t device_height = picker->surface->device_height;
-    double border_width_pixels = config_length_to_pixels(
-        config_get()->region.selection_border_width, picker->surface->scale
-    );
-
-    if (device_width != picker->last_device_width ||
-        device_height != picker->last_device_height) {
-        // needs full redraw
-        outer->x = 0;
-        outer->y = 0;
-        outer->width = device_width;
-        outer->height = device_height;
-        return;
-    }
-
-    if (picker->state == REGION_PICKER_EMPTY &&
-        !picker->dirty_after_state_change) {
-        // selection can't have changed
-        outer->width = 0;
-        outer->height = 0;
-        return;
-    }
-
-    BBox *last_sel = &picker->last_drawn_box;
-    if (!picker->can_compare_boxes) {
-        // only one box (either nothing -> something or something -> nothing)
-        // entire selection needs to be damaged
-        // note that in the something -> nothing case this uses the fact that
-        // the selection isn't deleted when changing to the EMPTY state
-        *outer = *curr_sel;
-        inner->width = 0;
-        inner->height = 0;
-    } else {
-        double last_right = last_sel->x + last_sel->width;
-        double last_bottom = last_sel->y + last_sel->height;
-        double curr_right = curr_sel->x + curr_sel->width;
-        double curr_bottom = curr_sel->y + curr_sel->height;
-
-        outer->x = fmin(last_sel->x, curr_sel->x);
-        outer->y = fmin(last_sel->y, curr_sel->y);
-        outer->width = fmax(last_right, curr_right) - outer->x;
-        outer->height = fmax(last_bottom, curr_bottom) - outer->y;
-
-        if (!picker->dirty_after_state_change) {
-            // The boxes are only directly comparable when the state is the
-            // same.
-            inner->x = fmax(last_sel->x, curr_sel->x);
-            inner->y = fmax(last_sel->y, curr_sel->y);
-            inner->width = fmin(last_right, curr_right) - inner->x;
-            inner->height = fmin(last_bottom, curr_bottom) - inner->y;
-        } else {
-            inner->width = 0;
-            inner->height = 0;
-        }
-    }
-
-    // When switching, the new mode's expansion may be smaller than the
-    // previous, causing stale pixels. So, if the state changed, always
-    // maximally expand
-    if (picker->state == REGION_PICKER_EDITING ||
-        picker->dirty_after_state_change) {
-        double outer_expand = 4.0 * picker->surface->scale / 120.0;
-        border_width_pixels += outer_expand;
-        // Only contract the inner hole when one actually exists; otherwise
-        // there's nothing to shrink and we'd produce a negative-size box.
-        if (inner->width > 0 && inner->height > 0) {
-            double inner_contract = 4.0 * picker->surface->scale / 120.0;
-            inner->x += inner_contract;
-            inner->y += inner_contract;
-            inner->width -= 2.0 * inner_contract;
-            inner->height -= 2.0 * inner_contract;
-        }
-    }
-
-    // adjust for borders
-    outer->x -= border_width_pixels;
-    outer->y -= border_width_pixels;
-    outer->width += 2.0 * border_width_pixels;
-    outer->height += 2.0 * border_width_pixels;
 }
 
 /**
@@ -229,55 +149,83 @@ static void cairo_bbox_reverse(cairo_t *cr, BBox rect) {
     cairo_close_path(cr);
 }
 
-static bool region_picker_draw(void *data, cairo_t *cr) {
+/**
+ * Decompose a box and a hole within it into (up to) 4 normal boxes.
+ * Returns the amount of boxes created from the decomposition (filled slots in
+ * the array)
+ */
+static int decompose_holey_bbox(BBox outer, BBox inner, BBox out[4]) {
+    int i = 0;
+    BBox current_box;
+    // top
+    current_box = (BBox){
+        .x = outer.x,
+        .y = outer.y,
+        .width = outer.width,
+        .height = inner.y - outer.y
+    };
+    if (current_box.width > 0 && current_box.height > 0) {
+        out[i] = current_box;
+        i++;
+    }
+    // bottom
+    current_box = (BBox){
+        .x = outer.x,
+        .y = inner.y + inner.height,
+        .width = outer.width,
+        .height = outer.y + outer.height - inner.y - inner.height
+    };
+    if (current_box.width > 0 && current_box.height > 0) {
+        out[i] = current_box;
+        i++;
+    }
+    // left
+    current_box = (BBox){
+        .x = outer.x,
+        .y = inner.y,
+        .width = inner.x - outer.x,
+        .height = inner.height,
+    };
+    if (current_box.width > 0 && current_box.height > 0) {
+        out[i] = current_box;
+        i++;
+    }
+    // right
+    current_box = (BBox){
+        .x = inner.x + inner.width,
+        .y = inner.y,
+        .width = outer.x + outer.width - inner.x - inner.width,
+        .height = inner.height,
+    };
+    if (current_box.width > 0 && current_box.height > 0) {
+        out[i] = current_box;
+        i++;
+    }
+    return i;
+}
+
+static RenderCommand *region_picker_draw(void *data) {
     RegionPicker *picker = data;
     OverlaySurface *surface = picker->surface;
+
+    link_buffer_reset(picker->command_arena);
+    RENDER_DISPLAY_LIST(picker->command_arena);
+
+    // The full surface.
+    BBox full_surface_box = {
+        0, 0, surface->device_width, surface->device_height
+    };
+    // The inside of the selection (also the inner edge of the border).
     BBox selection_box = get_bbox_containing_selection(picker);
-    if (surface->device_width == picker->last_device_width &&
-        surface->device_height == picker->last_device_height &&
-        bbox_equal(selection_box, picker->last_drawn_box) &&
-        !picker->dirty_after_state_change) {
-        return false;
-    }
-
-    BBox inner_clip_region = {0}, outer_clip_region = {0};
-    calculate_clip_regions(
-        picker, &selection_box, &outer_clip_region, &inner_clip_region
+    // The outer edge of the selection border.
+    BBox border_box = selection_box;
+    double border_width_pixels = config_length_to_pixels(
+        config_get()->region.selection_border_width, surface->scale
     );
-
-    picker->dirty_after_state_change = false;
-
-    // the smart border will appear later and swap out the background,
-    // so also turn off clipping for that
-    // you could definitely handle that more efficiently, but this is a debug
-    // mode, it doesn't need to be performant
-    if (debug_mode != DEBUG_MODE_CLIPPING &&
-        debug_mode != DEBUG_MODE_SMART_BORDER) {
-        cairo_reset_clip(cr);
-        if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
-            // apply the clip regions
-            cairo_rectangle(
-                cr,
-                outer_clip_region.x,
-                outer_clip_region.y,
-                outer_clip_region.width,
-                outer_clip_region.height
-            );
-
-            if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
-                cairo_bbox_reverse(cr, inner_clip_region);
-            }
-
-            cairo_clip(cr);
-        }
-    }
-
-    if (picker->state != REGION_PICKER_EMPTY) {
-        picker->last_drawn_box = selection_box;
-        picker->can_compare_boxes = true;
-    }
-    picker->last_device_width = surface->device_width;
-    picker->last_device_height = surface->device_height;
+    border_box.x -= border_width_pixels;
+    border_box.y -= border_width_pixels;
+    border_box.width += 2.0 * border_width_pixels;
+    border_box.height += 2.0 * border_width_pixels;
 
     TIMING_START(frame);
 
@@ -287,110 +235,87 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
             &picker->smart_border->is_done, memory_order_acquire
         );
 
-    if (debug_mode == DEBUG_MODE_SMART_BORDER) {
-        if (has_smart_border) {
-            cairo_set_source(cr, picker->smart_border->pattern);
-        } else {
-            // fallback
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    RENDER_RECT(
+            .bounds = full_surface_box, .texture = picker->background_texture
+    );
+
+    // dark overlay
+    if (selection_box.width > 0 && selection_box.height > 0) {
+        BBox rects[4];
+        int count = decompose_holey_bbox(full_surface_box, border_box, rects);
+        log_debug("decomposed boxes: %d\n", count);
+        for (int i = 0; i < count; i++) {
+            RENDER_RECT(
+                    .bounds = rects[i],
+                    .color = config_color_to_render_color(
+                        config_get()->region.background
+                    ),
+            );
         }
-        cairo_paint(cr);
     } else {
-        double x_scale =
-            (double)surface->device_width /
-            (double)cairo_image_surface_get_width(picker->background_surface);
-        double y_scale =
-            (double)surface->device_height /
-            (double)cairo_image_surface_get_height(picker->background_surface);
-
-        cairo_save(cr);
-        if (x_scale != 1.0 || y_scale != 1.0) {
-            log_debug("background requires scaling\n");
-            cairo_scale(cr, x_scale, y_scale);
-        }
-        cairo_pattern_set_filter(picker->background_pattern, CAIRO_FILTER_FAST);
-        cairo_set_source(cr, picker->background_pattern);
-        cairo_paint(cr);
-        cairo_restore(cr);
+        RENDER_RECT(
+                .bounds = full_surface_box,
+                .color = config_color_to_render_color(
+                    config_get()->region.background
+                ),
+        );
     }
-
-    // background
-    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
-    cairo_set_source_config_color(
-        cr, config_get()->region.background, surface->pixel_format
-    );
-    cairo_rectangle(
-        cr, 0.0, 0.0, surface->device_width, surface->device_height
-    );
-
-    double border_width_pixels = config_length_to_pixels(
-        config_get()->region.selection_border_width, surface->scale
-    );
-    if (picker->state != REGION_PICKER_EMPTY && selection_box.width != 0 &&
-        selection_box.height != 0) {
-        // poke a hole in it
-        BBox border_box = selection_box;
-        border_box.x -= border_width_pixels;
-        border_box.y -= border_width_pixels;
-        border_box.width += 2.0 * border_width_pixels;
-        border_box.height += 2.0 * border_width_pixels;
-        cairo_bbox_reverse(cr, border_box);
-    }
-    cairo_fill(cr);
 
     if (picker->state != REGION_PICKER_EMPTY &&
         !(picker->x1 == picker->x2 && picker->y1 == picker->y2)) {
-        // border
-        // the offset is so that it doesn't occlude the visible area
-        double border_offset = border_width_pixels / 2;
-        cairo_set_line_width(cr, border_width_pixels);
-
+        RenderColor border_color;
+        RenderTexture *border_texture = NULL;
+        // TODO: UVs (once they get implemented)
         if (config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
             if (picker->smart_border &&
                 atomic_load_explicit(
                     &picker->smart_border->is_done, memory_order_acquire
                 )) {
-                cairo_set_source(cr, picker->smart_border->pattern);
+                border_color = (RenderColor){1, 1, 1, 1};
+                border_texture = picker->smart_border->result_texture;
             } else {
                 // fallback
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                border_color = (RenderColor){1, 1, 1, 1};
             }
         } else {
-            cairo_set_source_config_color(
-                cr,
-                config_get()->region.selection_border_color.v_color,
-                surface->pixel_format
+            border_color = config_color_to_render_color(
+                config_get()->region.selection_border_color.v_color
             );
         }
-        cairo_rectangle(
-            cr,
-            selection_box.x - border_offset,
-            selection_box.y - border_offset,
-            selection_box.width + 2 * border_offset,
-            selection_box.height + 2 * border_offset
-        );
-        cairo_stroke(cr);
+
+        BBox border_rects[4];
+        int count =
+            decompose_holey_bbox(border_box, selection_box, border_rects);
+
+        for (int i = 0; i < count; i++) {
+            RENDER_RECT(
+                    .bounds = border_rects[i],
+                    .color = border_color,
+                    .texture = border_texture,
+            );
+        }
 
         if (picker->state == REGION_PICKER_EDITING) {
+            double border_center_offset = border_width_pixels / 2.0;
             double x_positions[] = {
-                selection_box.x - border_offset,
+                selection_box.x - border_center_offset,
                 selection_box.x + selection_box.width / 2.0,
-                selection_box.x + selection_box.width + border_offset,
-                selection_box.x + selection_box.width + border_offset,
-                selection_box.x + selection_box.width + border_offset,
+                selection_box.x + selection_box.width + border_center_offset,
+                selection_box.x + selection_box.width + border_center_offset,
+                selection_box.x + selection_box.width + border_center_offset,
                 selection_box.x + selection_box.width / 2.0,
-                selection_box.x - border_offset,
-                selection_box.x - border_offset,
+                selection_box.x - border_center_offset,
+                selection_box.x - border_center_offset,
             };
             double y_positions[] = {
-                selection_box.y - border_offset,
-                selection_box.y - border_offset,
-                selection_box.y - border_offset,
+                selection_box.y - border_center_offset,
+                selection_box.y - border_center_offset,
+                selection_box.y - border_center_offset,
                 selection_box.y + selection_box.height / 2.0,
-                selection_box.y + selection_box.height + border_offset,
-                selection_box.y + selection_box.height + border_offset,
-                selection_box.y + selection_box.height + border_offset,
+                selection_box.y + selection_box.height + border_center_offset,
+                selection_box.y + selection_box.height + border_center_offset,
+                selection_box.y + selection_box.height + border_center_offset,
                 selection_box.y + selection_box.height / 2.0,
             };
 
@@ -401,130 +326,64 @@ static bool region_picker_draw(void *data, cairo_t *cr) {
 
             bool is_smart = config_get()->region.selection_border_color.type ==
                             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART;
+            RenderColor outer_handle_color;
             if (is_smart) {
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                outer_handle_color = (RenderColor){1.0, 1.0, 1.0, 1.0};
             } else {
-                // carry over from border draw
+                outer_handle_color = border_color;
             }
             for (int i = 0; i < 8; i++) {
                 double x = x_positions[i];
                 double y = y_positions[i];
-                cairo_rectangle(
-                    cr,
-                    x - outer_half_size,
-                    y - outer_half_size,
-                    2.0 * outer_half_size,
-                    2.0 * outer_half_size
+                RENDER_RECT(
+                        .bounds =
+                            (BBox){
+                                x - outer_half_size,
+                                y - outer_half_size,
+                                2.0 * outer_half_size,
+                                2.0 * outer_half_size
+                            },
+                        .color = outer_handle_color
                 );
-                cairo_fill(cr);
             }
 
+            RenderColor inner_handle_color;
             if (is_smart) {
-                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                inner_handle_color = (RenderColor){0.0, 0.0, 0.0, 1.0};
             } else {
                 ConfigColor border =
                     config_get()->region.selection_border_color.v_color;
                 float gray_level = (border.r + border.g + border.b) / 3.0;
                 if (gray_level < 0.4375) {
-                    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                    inner_handle_color = (RenderColor){1.0, 1.0, 1.0, 1.0};
                 } else {
-                    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                    inner_handle_color = (RenderColor){0.0, 0.0, 0.0, 1.0};
                 }
             }
             for (int i = 0; i < 8; i++) {
                 double x = x_positions[i];
                 double y = y_positions[i];
-                cairo_rectangle(
-                    cr,
-                    x - inner_half_size,
-                    y - inner_half_size,
-                    2.0 * inner_half_size,
-                    2.0 * inner_half_size
+                RENDER_RECT(
+                        .bounds =
+                            (BBox){
+                                x - inner_half_size,
+                                y - inner_half_size,
+                                2.0 * inner_half_size,
+                                2.0 * inner_half_size
+                            },
+                        .color = inner_handle_color,
                 );
-                cairo_fill(cr);
             }
         }
     }
 
     TIMING_END(frame);
 
-    if (debug_mode == DEBUG_MODE_CLIPPING) {
-        if (outer_clip_region.width != 0 && outer_clip_region.height != 0) {
-            // draw the clip regions
-            cairo_rectangle(
-                cr,
-                outer_clip_region.x,
-                outer_clip_region.y,
-                outer_clip_region.width,
-                outer_clip_region.height
-            );
+    overlay_surface_damage(
+        surface, (BBox){0, 0, surface->device_width, surface->device_height}
+    );
 
-            if (inner_clip_region.width != 0 && inner_clip_region.height != 0) {
-                cairo_bbox_reverse(cr, inner_clip_region);
-            }
-
-            cairo_set_source_rgba(cr, 0.0, 0.5, 0.0, 0.5);
-            cairo_fill(cr);
-        }
-    }
-
-    if (debug_mode == DEBUG_MODE_CLIPPING ||
-        debug_mode == DEBUG_MODE_SMART_BORDER) {
-        overlay_surface_damage(
-            surface, (BBox){0, 0, surface->device_width, surface->device_height}
-        );
-    } else if (inner_clip_region.width == 0 || inner_clip_region.height == 0) {
-        // The clip region is just a rectangle, so splitting is unnecessary.
-        overlay_surface_damage(surface, outer_clip_region);
-    } else {
-        // split the clip region into (up to) 4 boxes because wayland doesn't
-        // work with holey boxes like our clip area
-        // TODO: probably refactor this into a helper function
-        BBox current_box;
-        // top
-        current_box = (BBox){
-            .x = outer_clip_region.x,
-            .y = outer_clip_region.y,
-            .width = outer_clip_region.width,
-            .height = inner_clip_region.y - outer_clip_region.y
-        };
-        if (current_box.width > 0 && current_box.height > 0) {
-            overlay_surface_damage(surface, current_box);
-        }
-        // bottom
-        current_box = (BBox){
-            .x = outer_clip_region.x,
-            .y = inner_clip_region.y + inner_clip_region.height,
-            .width = outer_clip_region.width,
-            .height = outer_clip_region.y + outer_clip_region.height -
-                      inner_clip_region.y - inner_clip_region.height
-        };
-        if (current_box.width > 0 && current_box.height > 0) {
-            overlay_surface_damage(surface, current_box);
-        }
-        // left
-        current_box = (BBox){
-            .x = outer_clip_region.x,
-            .y = inner_clip_region.y,
-            .width = inner_clip_region.x - outer_clip_region.x,
-            .height = inner_clip_region.height,
-        };
-        if (current_box.width > 0 && current_box.height > 0) {
-            overlay_surface_damage(surface, current_box);
-        }
-        // right
-        current_box = (BBox){
-            .x = inner_clip_region.x + inner_clip_region.width,
-            .y = inner_clip_region.y,
-            .width = outer_clip_region.x + outer_clip_region.width -
-                     inner_clip_region.x - inner_clip_region.width,
-            .height = inner_clip_region.height,
-        };
-        if (current_box.width > 0 && current_box.height > 0) {
-            overlay_surface_damage(surface, current_box);
-        }
-    }
-    return true;
+    return RENDER_DISPLAY_LIST_FINISH;
 }
 
 static void update_cursor_shape(RegionPicker *picker) {
@@ -570,7 +429,6 @@ static void update_cursor_shape(RegionPicker *picker) {
 static void change_state(RegionPicker *picker, RegionPickerState new_state) {
     switch (new_state) {
     case REGION_PICKER_EMPTY:
-        picker->can_compare_boxes = false;
         break;
     case REGION_PICKER_DRAGGING:
         picker->move_flag = false;
@@ -579,7 +437,6 @@ static void change_state(RegionPicker *picker, RegionPickerState new_state) {
         memset(&picker->edit_data, 0, sizeof(picker->edit_data));
         break;
     }
-    picker->dirty_after_state_change = true;
     picker->state = new_state;
     update_cursor_shape(picker);
 }
@@ -847,9 +704,9 @@ RegionPicker *region_picker_new(
     );
     result->state = REGION_PICKER_EMPTY;
     result->background_image = background;
-    result->background_surface = image_make_cairo_surface(background);
-    result->background_pattern =
-        cairo_pattern_create_for_surface(result->background_surface);
+    result->background_texture = render_texture_new_from_image(background);
+
+    result->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
 
     seat_dispatcher_add_listener(
         wayland_globals.seat_dispatcher,
@@ -875,8 +732,7 @@ void region_picker_destroy(RegionPicker *picker) {
         smart_border_context_unref(picker->smart_border);
     }
 
-    cairo_pattern_destroy(picker->background_pattern);
-    cairo_surface_destroy(picker->background_surface);
+    render_texture_destroy(picker->background_texture);
     overlay_surface_destroy(picker->surface);
 
     free(picker);

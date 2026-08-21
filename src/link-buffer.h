@@ -13,7 +13,7 @@ typedef struct LinkBufferBlock {
  * The size to pass in to link_buffer_new if the link buffer is to be used as a
  * growable arena.
  */
-constexpr size_t LINK_BUFFER_ARENA_SIZE = 256 - sizeof(LinkBufferBlock);
+constexpr size_t LINK_BUFFER_ARENA_SIZE = 1024 - sizeof(LinkBufferBlock);
 
 /**
  * The size to pass in to link_buffer_new if the link buffer is to be used to
