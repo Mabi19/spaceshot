@@ -221,7 +221,11 @@ static RenderDisplayList region_picker_draw(void *data) {
     TIMING_START(frame);
 
     RENDER_RECT(
-        dl, .bounds = full_surface_box, .texture = picker->background_texture
+        dl,
+        .bounds = full_surface_box,
+        .color = RENDER_COLOR_DEFAULT,
+        .texture = picker->background_texture,
+        .uv = RENDER_UV_DEFAULT,
     );
 
     // dark overlay
@@ -251,7 +255,6 @@ static RenderDisplayList region_picker_draw(void *data) {
         !(picker->x1 == picker->x2 && picker->y1 == picker->y2)) {
         RenderColor border_color;
         RenderTexture *border_texture = NULL;
-        // TODO: UVs (once they get implemented)
         if (config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
             if (picker->smart_border &&
@@ -275,11 +278,21 @@ static RenderDisplayList region_picker_draw(void *data) {
             decompose_holey_bbox(border_box, selection_box, border_rects);
 
         for (int i = 0; i < count; i++) {
+            BBox border_rect = border_rects[i];
+
+            RenderUV screenspace_uv = {
+                border_rect.x / surface->device_width,
+                border_rect.y / surface->device_height,
+                (border_rect.x + border_rect.width) / surface->device_width,
+                (border_rect.y + border_rect.height) / surface->device_height,
+            };
+
             RENDER_RECT(
                 dl,
-                .bounds = border_rects[i],
+                .bounds = border_rect,
                 .color = border_color,
                 .texture = border_texture,
+                .uv = screenspace_uv,
             );
         }
 
@@ -447,6 +460,12 @@ static void confirm_selection(RegionPicker *picker) {
 static void region_picker_handle_mouse(void *data, MouseEvent event) {
     RegionPicker *picker = data;
 
+    RegionPickerState prev_state = picker->state;
+    double prev_x1 = picker->x1;
+    double prev_y1 = picker->y1;
+    double prev_x2 = picker->x2;
+    double prev_y2 = picker->y2;
+
     // constrain the selection into the bounds of the picker
     double surface_x =
         fmax(0.0, fmin(event.surface_x, picker->surface->logical_width));
@@ -469,7 +488,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         if (event.buttons_released & POINTER_BUTTON_LEFT) {
             if (picker->edit_flag) {
                 change_state(picker, REGION_PICKER_EDITING);
-                overlay_surface_queue_draw(picker->surface);
             } else {
                 confirm_selection(picker);
                 return;
@@ -487,7 +505,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                     picker->x2 = surface_x;
                     picker->y2 = surface_y;
                 }
-                overlay_surface_queue_draw(picker->surface);
             }
         }
         break;
@@ -525,7 +542,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             picker->y2 += new_y1 - picker->y1;
             picker->x1 = new_x1;
             picker->y1 = new_y1;
-            overlay_surface_queue_draw(picker->surface);
         } else {
             if (picker->edit_data.modify_x) {
                 *picker->edit_data.modify_x =
@@ -540,7 +556,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
             if (event.focus != picker->surface->wl_surface) {
                 change_state(picker, REGION_PICKER_EMPTY);
-                overlay_surface_queue_draw(picker->surface);
             } else {
                 Anchor anchor;
                 if (hit_test_at_position(
@@ -592,7 +607,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                     picker->x2 = surface_x;
                     picker->y2 = surface_y;
                     change_state(picker, REGION_PICKER_DRAGGING);
-                    overlay_surface_queue_draw(picker->surface);
                 }
             }
         } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
@@ -606,6 +620,12 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     }
     default:
         REPORT_UNHANDLED("region picker state", "%d", picker->state);
+    }
+
+    if (prev_state != picker->state || prev_x1 != picker->x1 ||
+        prev_y1 != picker->y1 || prev_x2 != picker->x2 ||
+        prev_y2 != picker->y2) {
+        overlay_surface_queue_draw(picker->surface);
     }
 }
 
