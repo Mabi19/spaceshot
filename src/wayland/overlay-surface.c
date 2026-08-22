@@ -52,6 +52,9 @@ static RenderBuffer *get_unused_buffer(OverlaySurface *surface) {
     surface->buffers[0] = render_buffer_new(
         surface->device_width, surface->device_height, surface->pixel_format
     );
+    overlay_surface_damage(
+        surface, (BBox){0, 0, surface->device_width, surface->device_height}
+    );
     log_debug("overwrote buffer #0 (last resort)\n");
 
     return surface->buffers[0];
@@ -77,6 +80,9 @@ static void overlay_surface_draw_immediate(OverlaySurface *surface) {
         if (!did_update) {
             return;
         }
+        overlay_surface_damage(
+            surface, (BBox){0, 0, surface->device_width, surface->device_height}
+        );
         cairo_surface_flush(draw_buf->cairo_surface);
         render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
     } else {

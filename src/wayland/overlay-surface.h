@@ -11,10 +11,10 @@
 constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 
 /**
- * Draw the current contents of the overlay surface, by returning a linked list
- * of render commands. This should call overlay_surface_damage() itself
+ * Draw the current contents of the overlay surface, by returning a display list
+ * of render commands.
  */
-typedef RenderCommand *(*OverlaySurfaceDrawCallback)(void *user_data);
+typedef RenderDisplayList (*OverlaySurfaceDrawCallback)(void *user_data);
 
 /**
  * Like @c OverlaySurfaceDrawCallback, except that you have to attach a buffer

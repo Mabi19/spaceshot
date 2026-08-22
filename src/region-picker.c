@@ -140,15 +140,6 @@ get_cursor_for_anchor(Anchor anchor) {
     }
 }
 
-// Like cairo_rectangle(), but in the reverse winding order.
-static void cairo_bbox_reverse(cairo_t *cr, BBox rect) {
-    cairo_move_to(cr, rect.x, rect.y);
-    cairo_line_to(cr, rect.x, rect.y + rect.height);
-    cairo_line_to(cr, rect.x + rect.width, rect.y + rect.height);
-    cairo_line_to(cr, rect.x + rect.width, rect.y);
-    cairo_close_path(cr);
-}
-
 /**
  * Decompose a box and a hole within it into (up to) 4 normal boxes.
  * Returns the amount of boxes created from the decomposition (filled slots in
@@ -204,12 +195,12 @@ static int decompose_holey_bbox(BBox outer, BBox inner, BBox out[4]) {
     return i;
 }
 
-static RenderCommand *region_picker_draw(void *data) {
+static RenderDisplayList region_picker_draw(void *data) {
     RegionPicker *picker = data;
     OverlaySurface *surface = picker->surface;
 
     link_buffer_reset(picker->command_arena);
-    RENDER_DISPLAY_LIST(picker->command_arena);
+    RenderDisplayList dl = {.arena = picker->command_arena};
 
     // The full surface.
     BBox full_surface_box = {
@@ -229,14 +220,8 @@ static RenderCommand *region_picker_draw(void *data) {
 
     TIMING_START(frame);
 
-    bool has_smart_border =
-        picker->smart_border &&
-        atomic_load_explicit(
-            &picker->smart_border->is_done, memory_order_acquire
-        );
-
     RENDER_RECT(
-            .bounds = full_surface_box, .texture = picker->background_texture
+        dl, .bounds = full_surface_box, .texture = picker->background_texture
     );
 
     // dark overlay
@@ -246,18 +231,19 @@ static RenderCommand *region_picker_draw(void *data) {
         log_debug("decomposed boxes: %d\n", count);
         for (int i = 0; i < count; i++) {
             RENDER_RECT(
-                    .bounds = rects[i],
-                    .color = config_color_to_render_color(
-                        config_get()->region.background
-                    ),
+                dl,
+                .bounds = rects[i],
+                .color = config_color_to_render_color(
+                    config_get()->region.background
+                ),
             );
         }
     } else {
         RENDER_RECT(
-                .bounds = full_surface_box,
-                .color = config_color_to_render_color(
-                    config_get()->region.background
-                ),
+            dl,
+            .bounds = full_surface_box,
+            .color =
+                config_color_to_render_color(config_get()->region.background),
         );
     }
 
@@ -290,9 +276,10 @@ static RenderCommand *region_picker_draw(void *data) {
 
         for (int i = 0; i < count; i++) {
             RENDER_RECT(
-                    .bounds = border_rects[i],
-                    .color = border_color,
-                    .texture = border_texture,
+                dl,
+                .bounds = border_rects[i],
+                .color = border_color,
+                .texture = border_texture,
             );
         }
 
@@ -336,14 +323,15 @@ static RenderCommand *region_picker_draw(void *data) {
                 double x = x_positions[i];
                 double y = y_positions[i];
                 RENDER_RECT(
-                        .bounds =
-                            (BBox){
-                                x - outer_half_size,
-                                y - outer_half_size,
-                                2.0 * outer_half_size,
-                                2.0 * outer_half_size
-                            },
-                        .color = outer_handle_color
+                    dl,
+                    .bounds =
+                        (BBox){
+                            x - outer_half_size,
+                            y - outer_half_size,
+                            2.0 * outer_half_size,
+                            2.0 * outer_half_size
+                        },
+                    .color = outer_handle_color
                 );
             }
 
@@ -364,14 +352,15 @@ static RenderCommand *region_picker_draw(void *data) {
                 double x = x_positions[i];
                 double y = y_positions[i];
                 RENDER_RECT(
-                        .bounds =
-                            (BBox){
-                                x - inner_half_size,
-                                y - inner_half_size,
-                                2.0 * inner_half_size,
-                                2.0 * inner_half_size
-                            },
-                        .color = inner_handle_color,
+                    dl,
+                    .bounds =
+                        (BBox){
+                            x - inner_half_size,
+                            y - inner_half_size,
+                            2.0 * inner_half_size,
+                            2.0 * inner_half_size
+                        },
+                    .color = inner_handle_color,
                 );
             }
         }
@@ -379,11 +368,7 @@ static RenderCommand *region_picker_draw(void *data) {
 
     TIMING_END(frame);
 
-    overlay_surface_damage(
-        surface, (BBox){0, 0, surface->device_width, surface->device_height}
-    );
-
-    return RENDER_DISPLAY_LIST_FINISH;
+    return dl;
 }
 
 static void update_cursor_shape(RegionPicker *picker) {
@@ -484,6 +469,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
         if (event.buttons_released & POINTER_BUTTON_LEFT) {
             if (picker->edit_flag) {
                 change_state(picker, REGION_PICKER_EDITING);
+                overlay_surface_queue_draw(picker->surface);
             } else {
                 confirm_selection(picker);
                 return;
@@ -501,6 +487,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                     picker->x2 = surface_x;
                     picker->y2 = surface_y;
                 }
+                overlay_surface_queue_draw(picker->surface);
             }
         }
         break;
@@ -538,6 +525,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             picker->y2 += new_y1 - picker->y1;
             picker->x1 = new_x1;
             picker->y1 = new_y1;
+            overlay_surface_queue_draw(picker->surface);
         } else {
             if (picker->edit_data.modify_x) {
                 *picker->edit_data.modify_x =
@@ -551,8 +539,8 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
 
         if (event.buttons_pressed & POINTER_BUTTON_LEFT) {
             if (event.focus != picker->surface->wl_surface) {
-                // This switch unfortunately doesn't work.
                 change_state(picker, REGION_PICKER_EMPTY);
+                overlay_surface_queue_draw(picker->surface);
             } else {
                 Anchor anchor;
                 if (hit_test_at_position(
@@ -604,6 +592,7 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                     picker->x2 = surface_x;
                     picker->y2 = surface_y;
                     change_state(picker, REGION_PICKER_DRAGGING);
+                    overlay_surface_queue_draw(picker->surface);
                 }
             }
         } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
@@ -618,8 +607,6 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     default:
         REPORT_UNHANDLED("region picker state", "%d", picker->state);
     }
-
-    overlay_surface_queue_draw(picker->surface);
 }
 
 static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
