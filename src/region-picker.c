@@ -277,6 +277,7 @@ static RenderDisplayList region_picker_draw(void *data) {
         int count =
             decompose_holey_bbox(border_box, selection_box, border_rects);
 
+        log_debug("border decomposed into %d rects\n", count);
         for (int i = 0; i < count; i++) {
             BBox border_rect = border_rects[i];
 
@@ -687,8 +688,9 @@ static void region_picker_handle_scale(void *data, uint32_t scale) {
     if (!picker->smart_border &&
         config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-        picker->smart_border =
-            smart_border_context_start(picker->background_image, scale);
+        picker->smart_border = smart_border_context_start(
+            picker->surface->renderer, picker->background_image, scale
+        );
     }
 }
 
@@ -711,7 +713,8 @@ RegionPicker *region_picker_new(
     );
     result->state = REGION_PICKER_EMPTY;
     result->background_image = background;
-    result->background_texture = render_texture_new_from_image(background);
+    result->background_texture =
+        result->surface->renderer->texture_new_from_image(background);
 
     result->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
 
@@ -739,7 +742,7 @@ void region_picker_destroy(RegionPicker *picker) {
         smart_border_context_unref(picker->smart_border);
     }
 
-    render_texture_destroy(picker->background_texture);
+    picker->surface->renderer->texture_destroy(picker->background_texture);
     overlay_surface_destroy(picker->surface);
 
     free(picker);

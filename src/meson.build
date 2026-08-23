@@ -135,13 +135,13 @@ cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
 sources = files(
+    'render/cairo.c',
     'wayland/clipboard-common.c',
     'wayland/clipboard-core.c',
     'wayland/clipboard-ext.c',
     'wayland/globals.c',
-    'wayland/label-surface.c',
+    # 'wayland/label-surface.c',
     'wayland/overlay-surface.c',
-    'wayland/render.c',
     'wayland/screen-capture-common.c',
     'wayland/screen-capture-ext.c',
     'wayland/screen-capture-wlr.c',

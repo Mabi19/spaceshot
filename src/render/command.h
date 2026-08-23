@@ -1,6 +1,7 @@
 #pragma once
 #include "bbox.h"
 #include "config/config.h"
+#include "link-buffer.h"
 #include "render/texture.h"
 
 /** A 4-float color with premultiplied alpha (unlike ConfigColor) */
@@ -19,7 +20,6 @@ static inline RenderColor config_color_to_render_color(ConfigColor src) {
 
 typedef enum {
     RENDER_COMMAND_RECT,
-    RENDER_COMMAND_TEXT,
 } RenderCommandType;
 
 typedef struct RenderCommand {

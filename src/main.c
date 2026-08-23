@@ -13,6 +13,7 @@
 #include "wayland/toplevel.h"
 #include <assert.h>
 #include <config/config.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +22,6 @@
 #include <threads.h>
 #include <unistd.h>
 #include <wayland-client.h>
-#include <wayland-util.h>
 
 /** A capture entry's state ("what is it used for") */
 typedef enum {

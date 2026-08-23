@@ -25,6 +25,7 @@ config_lib = static_library(
         config_generated[0],
         config_generated[1],
     ],
+    dependencies: [meson.get_compiler('c').find_library('m', required: false)],
     vala_header: 'config/config.h',
     vala_vapi: config_generated[2].full_path(),
 )

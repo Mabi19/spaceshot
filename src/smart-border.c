@@ -1,6 +1,5 @@
 #include "smart-border.h"
 #include "log.h"
-#include "render/texture.h"
 #include <stdatomic.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -82,7 +81,8 @@ static int smart_border_context_thread_func(void *data) {
     // GL textures can't be created off-thread.
     // We'll also want to have a GPU implementation anyway for dmabuf-sourced
     // textures, so... maybe only run this code on the cairo backend?
-    ctx->result_texture = render_texture_new_from_image(ctx->result_image);
+    ctx->result_texture =
+        ctx->renderer->texture_new_from_image(ctx->result_image);
 
     TIMING_END(smart_border);
     atomic_store_explicit(&ctx->is_done, true, memory_order_release);
@@ -91,9 +91,11 @@ static int smart_border_context_thread_func(void *data) {
     return 0;
 }
 
-SmartBorderContext *
-smart_border_context_start(const Image *base, uint32_t scale) {
+SmartBorderContext *smart_border_context_start(
+    const Renderer *renderer, const Image *base, uint32_t scale
+) {
     SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
+    ctx->renderer = renderer;
     ctx->base = base;
     ctx->scale = scale;
     ctx->ref_count = 2;
@@ -107,7 +109,7 @@ smart_border_context_start(const Image *base, uint32_t scale) {
 
 void smart_border_context_unref(SmartBorderContext *ctx) {
     if (atomic_fetch_sub(&ctx->ref_count, 1) == 1) {
-        render_texture_destroy(ctx->result_texture);
+        ctx->renderer->texture_destroy(ctx->result_texture);
         image_destroy(ctx->result_image);
         free(ctx);
     }

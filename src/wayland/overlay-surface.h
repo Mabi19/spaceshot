@@ -1,8 +1,8 @@
 #pragma once
+#include "image.h"
 #include "render/command.h"
+#include "render/renderer.h"
 #include "wayland/output.h"
-#include "wayland/render.h"
-#include <cairo.h>
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <wayland-client.h>
@@ -57,7 +57,8 @@ typedef struct {
     uint32_t device_height;
     /** The window's pixel format. */
     ImageFormat pixel_format;
-    RenderBuffer *buffers[OVERLAY_SURFACE_BUFFER_COUNT];
+    const Renderer *renderer;
+    RenderCanvas *canvas;
     // callback things
     OverlaySurfaceHandlers handlers;
     // technically also a callback thing.

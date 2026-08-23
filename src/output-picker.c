@@ -1,33 +1,34 @@
 #include "output-picker.h"
 #include "bbox.h"
-#include "config/config.h"
+// #include "config/config.h"
 #include "log.h"
 #include "picker-common.h"
 #include "wayland/globals.h"
-#include "wayland/label-surface.h"
+// #include "wayland/label-surface.h"
 #include "wayland/overlay-surface.h"
-#include "wayland/render.h"
+// #include "wayland/render.h"
 #include "wayland/seat.h"
 #include "wayland/shared-memory.h"
 #include <cairo.h>
 #include <cursor-shape-client.h>
 #include <stdlib.h>
+#include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
-static const double LABEL_Y_OFFSET = 12;
+// static const double LABEL_Y_OFFSET = 12;
 
 static void output_picker_render(void *user_data) {
     OutputPicker *picker = user_data;
 
-    label_surface_set_position(
-        picker->label,
-        picker->surface->logical_width / 2,
-        picker->move_label_down
-            ? picker->surface->logical_height - LABEL_Y_OFFSET
-            : LABEL_Y_OFFSET,
-        picker->move_label_down ? ANCHOR_BOTTOM : ANCHOR_TOP
-    );
-    label_surface_show(picker->label);
+    // label_surface_set_position(
+    //     picker->label,
+    //     picker->surface->logical_width / 2,
+    //     picker->move_label_down
+    //         ? picker->surface->logical_height - LABEL_Y_OFFSET
+    //         : LABEL_Y_OFFSET,
+    //     picker->move_label_down ? ANCHOR_BOTTOM : ANCHOR_TOP
+    // );
+    // label_surface_show(picker->label);
 
     if (picker->state == picker->last_drawn_state) {
         return;
@@ -69,20 +70,21 @@ static void output_picker_handle_mouse(void *data, MouseEvent event) {
         should_redraw = true;
     }
 
-    int32_t label_width =
-        picker->label->device_width * picker->label->scale / 120.0;
-    int32_t label_height =
-        picker->label->device_height * picker->label->scale / 120.0;
-    int32_t center_x = picker->surface->logical_width / 2;
+    // int32_t label_width =
+    //     picker->label->device_width * picker->label->scale / 120.0;
+    // int32_t label_height =
+    //     picker->label->device_height * picker->label->scale / 120.0;
+    // int32_t center_x = picker->surface->logical_width / 2;
 
-    // intentionally a bit bigger than the label
-    bool new_move = fabs(center_x - event.surface_x) < label_width / 2.0 + 24 &&
-                    event.surface_y < label_height + LABEL_Y_OFFSET + 24;
+    // // intentionally a bit bigger than the label
+    // bool new_move = fabs(center_x - event.surface_x) < label_width / 2.0 + 24
+    // &&
+    //                 event.surface_y < label_height + LABEL_Y_OFFSET + 24;
 
-    if (picker->move_label_down != new_move) {
-        picker->move_label_down = new_move;
-        should_redraw = true;
-    }
+    // if (picker->move_label_down != new_move) {
+    //     picker->move_label_down = new_move;
+    //     should_redraw = true;
+    // }
 
     if (should_redraw) {
         overlay_surface_queue_draw(picker->surface);
@@ -111,6 +113,18 @@ static SeatListener output_picker_seat_listener = {
     .keyboard = output_picker_handle_keyboard,
 };
 
+// Temporarily here while the output picker still draws manually
+static void cairo_set_source_config_color(
+    cairo_t *cr, ConfigColor color, ImageFormat surface_format
+) {
+    // cairo only supports RGB order, so trick it if necessary
+    if (surface_format & IMAGE_FORMAT_FLIPPED_ORDER) {
+        cairo_set_source_rgba(cr, color.b, color.g, color.r, color.a);
+    } else {
+        cairo_set_source_rgba(cr, color.r, color.g, color.b, color.a);
+    }
+}
+
 OutputPicker *output_picker_new(
     WrappedOutput *output,
     Image *background,
@@ -129,19 +143,19 @@ OutputPicker *output_picker_new(
         result
     );
 
-    result->label = label_surface_new(
-        result->surface->wl_surface,
-        output->name,
-        (LabelSurfaceStyle){
-            .font_family = "Sans",
-            .font_size = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 16},
-            .text_color = {.r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0},
-            .background_color = {.r = 0.0, .g = 0.0, .b = 0.0, .a = 0.75},
-            .padding_x = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 6.0},
-            .padding_y = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 4.0},
-            .corner_radius = 4.0
-        }
-    );
+    // result->label = label_surface_new(
+    //     result->surface->wl_surface,
+    //     output->name,
+    //     (LabelSurfaceStyle){
+    //         .font_family = "Sans",
+    //         .font_size = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 16},
+    //         .text_color = {.r = 1.0, .g = 1.0, .b = 1.0, .a = 1.0},
+    //         .background_color = {.r = 0.0, .g = 0.0, .b = 0.0, .a = 0.75},
+    //         .padding_x = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 6.0},
+    //         .padding_y = {.unit = CONFIG_LENGTH_UNIT_PX, .value = 4.0},
+    //         .corner_radius = 4.0
+    //     }
+    // );
 
     result->background = background;
     result->background_buf = shared_buffer_new(
@@ -214,7 +228,7 @@ void output_picker_destroy(OutputPicker *picker) {
     shared_buffer_destroy(picker->background_buf);
     shared_buffer_destroy(picker->background_inactive_buf);
 
-    label_surface_destroy(picker->label);
+    // label_surface_destroy(picker->label);
     overlay_surface_destroy(picker->surface);
     free(picker);
 }

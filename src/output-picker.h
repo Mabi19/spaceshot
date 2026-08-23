@@ -1,7 +1,8 @@
 #pragma once
 #include "picker-common.h"
-#include "wayland/label-surface.h"
+// #include "wayland/label-surface.h"
 #include "wayland/overlay-surface.h"
+#include "wayland/shared-memory.h"
 
 struct OutputPicker;
 
@@ -17,7 +18,7 @@ typedef enum {
 
 typedef struct OutputPicker {
     OverlaySurface *surface;
-    LabelSurface *label;
+    // LabelSurface *label;
 
     OutputPickerState state;
     OutputPickerState last_drawn_state;

@@ -40,6 +40,7 @@ static void next_block(LinkBuffer *buffer) {
             );
         }
         buffer->last->next = new_block;
+        buffer->last = new_block;
         new_block->next = NULL;
         new_block->used_size = 0;
     }
