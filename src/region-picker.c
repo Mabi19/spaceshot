@@ -218,8 +218,6 @@ static RenderDisplayList region_picker_draw(void *data) {
     border_box.width += 2.0 * border_width_pixels;
     border_box.height += 2.0 * border_width_pixels;
 
-    TIMING_START(frame);
-
     RENDER_RECT(
         dl,
         .bounds = full_surface_box,
@@ -232,7 +230,6 @@ static RenderDisplayList region_picker_draw(void *data) {
     if (selection_box.width > 0 && selection_box.height > 0) {
         BBox rects[4];
         int count = decompose_holey_bbox(full_surface_box, border_box, rects);
-        log_debug("decomposed boxes: %d\n", count);
         for (int i = 0; i < count; i++) {
             RENDER_RECT(
                 dl,
@@ -277,7 +274,6 @@ static RenderDisplayList region_picker_draw(void *data) {
         int count =
             decompose_holey_bbox(border_box, selection_box, border_rects);
 
-        log_debug("border decomposed into %d rects\n", count);
         for (int i = 0; i < count; i++) {
             BBox border_rect = border_rects[i];
 
@@ -379,8 +375,6 @@ static RenderDisplayList region_picker_draw(void *data) {
             }
         }
     }
-
-    TIMING_END(frame);
 
     return dl;
 }

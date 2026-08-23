@@ -172,7 +172,8 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     CairoBuffer *draw_buf = get_unused_buffer(canvas);
     cairo_t *cr = draw_buf->cr;
 
-    log_debug("cairo frame start\n");
+    TIMING_START(cairo_frame);
+
     RenderCommand *cmd = dl.first;
     while (cmd != NULL) {
         switch (cmd->type) {
@@ -187,35 +188,19 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                     rect->bounds.width,
                     rect->bounds.height
                 );
-                log_debug(
-                    "rect (%f %f %f %f)\n",
-                    rect->bounds.x,
-                    rect->bounds.y,
-                    rect->bounds.width,
-                    rect->bounds.height
-                );
+
                 if (rect->texture) {
                     // TODO: UVs (set the pattern matrix)
                     // TODO: tinting (tricky. Clay can just tint anything, so we
                     // will need it eventually)
                     cairo_set_source(cr, (cairo_pattern_t *)rect->texture);
                     cairo_fill(cr);
-                    log_debug("... with texture %p\n", (void *)rect->texture);
                 } else {
                     cairo_set_source_render_color(
                         cr, rect->color, canvas->pixel_format
                     );
                     cairo_fill(cr);
-                    log_debug(
-                        "... with color (%f %f %f %f)\n",
-                        rect->color.r,
-                        rect->color.g,
-                        rect->color.b,
-                        rect->color.a
-                    );
                 }
-            } else {
-                log_debug("fully transparent rect\n");
             }
 
             // TODO: border
@@ -227,9 +212,11 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         }
         cmd = cmd->next;
     }
-    log_debug("cairo frame end\n");
 
     cairo_surface_flush(draw_buf->cairo_surface);
+
+    TIMING_END(cairo_frame);
+
     cairo_buffer_attach_to_surface(draw_buf, canvas->wl_surface);
     // Finishing a frame with GL commits, so also do it here for consistency.
     wl_surface_commit(canvas->wl_surface);
