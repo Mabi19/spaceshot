@@ -19,7 +19,7 @@ typedef struct {
         RenderCanvas *canvas, uint32_t device_width, uint32_t device_height
     );
     void (*canvas_destroy)(RenderCanvas *canvas);
-    /** Draw a display list and commit the surface. */
+    /** Draw a display list, then damage and commit the surface. */
     void (*draw)(RenderCanvas *canvas, const RenderDisplayList dl);
 
     RenderTexture *(*texture_new_from_image)(const Image *image);

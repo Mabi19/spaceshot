@@ -202,7 +202,6 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                     cairo_fill(cr);
                 }
             }
-
             // TODO: border
 
             break;
@@ -218,7 +217,11 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     TIMING_END(cairo_frame);
 
     cairo_buffer_attach_to_surface(draw_buf, canvas->wl_surface);
-    // Finishing a frame with GL commits, so also do it here for consistency.
+    // Finishing a frame with GL damages commits, so also do it here for
+    // consistency.
+    wl_surface_damage_buffer(
+        canvas->wl_surface, 0, 0, canvas->device_width, canvas->device_height
+    );
     wl_surface_commit(canvas->wl_surface);
 }
 

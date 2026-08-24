@@ -73,6 +73,10 @@ typedef struct {
     RenderUV uv;
 } RenderCommandRect;
 
+/** Note that a display list's commands MUST cover the whole surface to not
+ * produce ghosting. */
+// TODO: make a "CLEAR" command? the toplevel picker will have a translucent
+// background
 typedef struct {
     LinkBuffer *arena;
     RenderCommand *first;

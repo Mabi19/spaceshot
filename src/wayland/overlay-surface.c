@@ -26,9 +26,6 @@ static void overlay_surface_draw_immediate(OverlaySurface *surface) {
     if (surface->handlers.draw) {
         RenderDisplayList dl = surface->handlers.draw(surface->user_data);
         surface->renderer->draw(surface->canvas, dl);
-        overlay_surface_damage(
-            surface, (BBox){0, 0, surface->device_width, surface->device_height}
-        );
     } else {
         surface->handlers.manual_render(surface->user_data);
         wl_surface_commit(surface->wl_surface);
@@ -231,7 +228,10 @@ void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
 }
 
 void overlay_surface_destroy(OverlaySurface *surface) {
-    surface->renderer->canvas_destroy(surface->canvas);
+    // TODO: can be removed once manual_render is gone
+    if (surface->canvas) {
+        surface->renderer->canvas_destroy(surface->canvas);
+    }
 
     wp_fractional_scale_v1_destroy(surface->fractional_scale);
     wp_viewport_destroy(surface->viewport);
