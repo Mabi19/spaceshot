@@ -19,13 +19,33 @@ static inline RenderColor config_color_to_render_color(ConfigColor src) {
 }
 
 typedef enum {
+    RENDER_COMMAND_CLEAR,
     RENDER_COMMAND_RECT,
+    RENDER_COMMAND_TEXT,
+    RENDER_COMMAND_PUSH_CLIP,
+    RENDER_COMMAND_POP_CLIP,
 } RenderCommandType;
 
 typedef struct RenderCommand {
     struct RenderCommand *next;
     RenderCommandType type;
 } RenderCommand;
+
+/**
+ * Note that a display list's commands MUST cover the whole surface
+ * to not produce ghosting.
+ */
+typedef struct {
+    LinkBuffer *arena;
+    RenderCommand *first;
+    RenderCommand *last;
+} RenderDisplayList;
+
+/** Set the entire canvas to a solid color. */
+typedef struct {
+    RenderCommand header;
+    RenderColor color;
+} RenderCommandClear;
 
 typedef struct {
     float tl;
@@ -77,40 +97,90 @@ typedef struct {
     RenderUV uv;
 } RenderCommandRect;
 
-/**
- * Note that a display list's commands MUST cover the whole surface
- * to not produce ghosting.
- */
 typedef struct {
-    LinkBuffer *arena;
-    RenderCommand *first;
-    RenderCommand *last;
-} RenderDisplayList;
+    const char *font_family;
+    float font_size;
+    RenderColor text_color;
+} RenderTextStyle;
+
+typedef struct {
+    RenderCommand header;
+    float x;
+    float y;
+    /** Not null-terminated. */
+    // TODO: explicitly support the Pango behavior of "-1 = null terminated"?
+    const char *content;
+    size_t length;
+    RenderTextStyle style;
+} RenderCommandText;
 
 /**
- * Push a rectangle to the display list. Only the bounds have to be specified.
- * If a texture is supplied, the color instead tints the texture.
+ * Intersect a box with the clipping region.
+ * The clipping region is a rectangle, and starts off as the whole canvas every
+ * frame. A matching number of "pop clip" commands must be issued as well.
  */
-#define RENDER_RECT(dl, ...)                                                   \
+typedef struct {
+    RenderCommand header;
+    BBox bounds;
+} RenderCommandPushClip;
+
+/**
+ * Undo the last "push clip".
+ * See RenderCommandPushClip for more details on clipping.
+ */
+typedef struct {
+    RenderCommand header;
+} RenderCommandPopClip;
+
+#define RENDER_PUSH_COMMAND(CmdType, CMD_ENUM, dl, ...)                        \
     do {                                                                       \
-        RenderCommandRect *cmd_rect = link_buffer_alloc(                       \
-            (dl).arena, sizeof(RenderCommandRect), alignof(RenderCommandRect)  \
-        );                                                                     \
+        CmdType *cmd =                                                         \
+            link_buffer_alloc((dl).arena, sizeof(CmdType), alignof(CmdType));  \
         if ((dl).last)                                                         \
-            (dl).last->next = &cmd_rect->header;                               \
+            (dl).last->next = &cmd->header;                                    \
         if (!(dl).first)                                                       \
-            (dl).first = &cmd_rect->header;                                    \
-        *cmd_rect = (RenderCommandRect){                                       \
+            (dl).first = &cmd->header;                                         \
+        *cmd = (CmdType){                                                      \
             .header =                                                          \
                 {                                                              \
-                    .type = RENDER_COMMAND_RECT,                               \
+                    .type = CMD_ENUM,                                          \
                     .next = NULL,                                              \
                 },                                                             \
             __VA_ARGS__                                                        \
         };                                                                     \
-        (dl).last = &cmd_rect->header;                                         \
+        (dl).last = &cmd->header;                                              \
     } while (0)
 
-// TODO: clearing the canvas, if you want a translucent background
-// TODO: text
-// TODO: push/pop clip rectangles
+/** Push a clear to the display list. */
+#define RENDER_CLEAR(dl, clear_color)                                          \
+    RENDER_PUSH_COMMAND(                                                       \
+        RenderCommandClear, RENDER_COMMAND_CLEAR, (dl), .color = (clear_color) \
+    )
+
+/**
+ * Push a rectangle to the display list. Only the bounds and color have to be
+ * specified. See RenderCommandRect for details.
+ */
+#define RENDER_RECT(dl, ...)                                                   \
+    RENDER_PUSH_COMMAND(                                                       \
+        RenderCommandRect, RENDER_COMMAND_RECT, (dl), __VA_ARGS__              \
+    )
+
+/** Push a line of text to the display list. Every field must be specified. */
+#define RENDER_TEXT(dl, ...)                                                   \
+    RENDER_PUSH_COMMAND(                                                       \
+        RenderCommandText, RENDER_COMMAND_TEXT, (dl), __VA_ARGS__              \
+    )
+
+/** Push a clip rectangle to the display list. */
+#define RENDER_PUSH_CLIP(dl, clip_rect)                                        \
+    RENDER_PUSH_COMMAND(                                                       \
+        RenderCommandPushClip,                                                 \
+        RENDER_COMMAND_PUSH_CLIP,                                              \
+        (dl),                                                                  \
+        .bounds = (clip_rect)                                                  \
+    )
+
+/** Add popping the last clip rectangle to the display list. */
+#define RENDER_POP_CLIP(dl)                                                    \
+    RENDER_PUSH_COMMAND(RenderCommandPopClip, RENDER_COMMAND_POP_CLIP, (dl))
