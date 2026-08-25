@@ -172,7 +172,7 @@ static void set_source_render_color(
 }
 
 static void
-make_rounded_rect_path(cairo_t *cr, BBox bounds, RenderRectRadius radii) {
+make_rounded_rect_path(cairo_t *cr, BBox bounds, RenderBorderRadius radii) {
     constexpr double PI = 3.141592653589793115997963468544185161590576171875;
     constexpr double DEG = PI / 180.0;
 
@@ -182,14 +182,10 @@ make_rounded_rect_path(cairo_t *cr, BBox bounds, RenderRectRadius radii) {
     // this, but this is good enough.
     double limit =
         (bounds.width < bounds.height ? bounds.width : bounds.height) / 2.0;
-    if (radii.tl > limit)
-        radii.tl = limit;
-    if (radii.tr > limit)
-        radii.tr = limit;
-    if (radii.bl > limit)
-        radii.bl = limit;
-    if (radii.br > limit)
-        radii.br = limit;
+    radii.tl = fmin(radii.tl, limit);
+    radii.tr = fmin(radii.tr, limit);
+    radii.bl = fmin(radii.bl, limit);
+    radii.br = fmin(radii.br, limit);
 
     if (radii.tl > 0) {
         cairo_new_sub_path(cr);
@@ -250,6 +246,8 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     CairoCanvas *canvas = (CairoCanvas *)render_canvas;
     CairoBuffer *draw_buf = get_unused_buffer(canvas);
     cairo_t *cr = draw_buf->cr;
+    // Necessary for borders to draw properly, and doesn't impact anything else.
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
 
     TIMING_START(cairo_frame);
 
@@ -312,6 +310,64 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             }
 
             if (rect->border_color.a > 0) {
+                // The outer edge of the border is the same as the regular
+                // rectangle.
+                make_rounded_rect_path(cr, rect->bounds, rect->border_radius);
+                // The inner edge is inset.
+                // Limit the border width to the corresponding rectangle
+                // dimension
+                RenderBorderWidth bwidth = rect->border_width;
+                double width = rect->bounds.width;
+                double height = rect->bounds.height;
+                if (bwidth.left + bwidth.right > width) {
+                    double shrink_factor = width / (bwidth.left + bwidth.right);
+                    bwidth.left *= shrink_factor;
+                    bwidth.right *= shrink_factor;
+                }
+                if (bwidth.top + bwidth.bottom > height) {
+                    double shrink_factor = width / (bwidth.top + bwidth.bottom);
+                    bwidth.top *= shrink_factor;
+                    bwidth.bottom *= shrink_factor;
+                }
+                // Compute the inner rectangle, where the border isn't.
+                BBox inner_rect = rect->bounds;
+                inner_rect.x += bwidth.left;
+                inner_rect.width -= bwidth.left;
+                inner_rect.width -= bwidth.right;
+                inner_rect.y += bwidth.top;
+                inner_rect.height -= bwidth.top;
+                inner_rect.height -= bwidth.bottom;
+
+                // Only poke a hole if there is a hole to be poked.
+                // Float imprecision may have caused small errors that mean the
+                // width is slightly above zero when logically the border should
+                // cover the whole rect.
+                if (inner_rect.width > 1e-6 && inner_rect.height > 1e-6) {
+                    // To look good, inner radius + border width = outer radius.
+                    // Here each corner touches two (potentially different)
+                    // border widths; apply the reduction using the thicker
+                    // border because overadjusting looks better than
+                    // underadjusting.
+                    RenderBorderRadius inner_radius = rect->border_radius;
+                    inner_radius.tl = fmax(
+                        inner_radius.tl - fmax(bwidth.top, bwidth.left), 0
+                    );
+                    inner_radius.tr = fmax(
+                        inner_radius.tr - fmax(bwidth.top, bwidth.right), 0
+                    );
+                    inner_radius.bl = fmax(
+                        inner_radius.bl - fmax(bwidth.bottom, bwidth.left), 0
+                    );
+                    inner_radius.br = fmax(
+                        inner_radius.br - fmax(bwidth.bottom, bwidth.right), 0
+                    );
+                    make_rounded_rect_path(cr, inner_rect, inner_radius);
+
+                    set_source_render_color(
+                        cr, rect->border_color, canvas->pixel_format
+                    );
+                    cairo_fill(cr);
+                }
             }
 
             break;

@@ -32,7 +32,7 @@ typedef struct {
     float tr;
     float bl;
     float br;
-} RenderRectRadius;
+} RenderBorderRadius;
 
 typedef struct {
     float left;
@@ -67,12 +67,12 @@ typedef struct {
      * Must be set (unless you want to render nothing)
      */
     RenderColor color;
-    RenderRectRadius border_radius;
+    RenderTexture *texture;
+    RenderBorderRadius border_radius;
     /** The border is inset to the rectangle (like CSS box-sizing: border-box).
      */
     RenderBorderWidth border_width;
     RenderColor border_color;
-    RenderTexture *texture;
     /** Must be set if the texture is set. */
     RenderUV uv;
 } RenderCommandRect;
