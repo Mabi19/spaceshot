@@ -25,6 +25,12 @@ typedef struct {
     ImageFormat pixel_format;
 } CairoCanvas;
 
+typedef struct {
+    cairo_pattern_t *pattern;
+    uint32_t width;
+    uint32_t height;
+} CairoTexture;
+
 static void
 buffer_handle_release(void *data, struct wl_buffer * /* wl_buffer */) {
     CairoBuffer *buffer = data;
@@ -36,7 +42,7 @@ static const struct wl_buffer_listener buffer_listener = {
 };
 
 static CairoBuffer *
-cairo_buffer_new(uint32_t width, uint32_t height, ImageFormat format) {
+buffer_new(uint32_t width, uint32_t height, ImageFormat format) {
     CairoBuffer *result = calloc(1, sizeof(CairoBuffer));
 
     uint32_t stride =
@@ -53,15 +59,14 @@ cairo_buffer_new(uint32_t width, uint32_t height, ImageFormat format) {
     return result;
 }
 
-static void cairo_buffer_attach_to_surface(
-    CairoBuffer *buffer, struct wl_surface *surface
-) {
+static void
+buffer_attach_to_surface(CairoBuffer *buffer, struct wl_surface *surface) {
     assert(!buffer->is_busy);
     wl_surface_attach(surface, buffer->shm->wl_buffer, 0, 0);
     buffer->is_busy = true;
 }
 
-void cairo_buffer_destroy(CairoBuffer *buffer) {
+static void buffer_destroy(CairoBuffer *buffer) {
     cairo_destroy(buffer->cr);
     cairo_surface_destroy(buffer->cairo_surface);
     shared_buffer_destroy(buffer->shm);
@@ -91,9 +96,9 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
                 continue;
             }
             log_debug("destroyed buffer #%zu\n", i);
-            cairo_buffer_destroy(canvas->buffers[i]);
+            buffer_destroy(canvas->buffers[i]);
         }
-        canvas->buffers[i] = cairo_buffer_new(
+        canvas->buffers[i] = buffer_new(
             canvas->device_width, canvas->device_height, canvas->pixel_format
         );
         log_debug("created buffer #%zu\n", i);
@@ -102,9 +107,9 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
 
     // last resort: overwrite the first one
     if (canvas->buffers[0]) {
-        cairo_buffer_destroy(canvas->buffers[0]);
+        buffer_destroy(canvas->buffers[0]);
     }
-    canvas->buffers[0] = cairo_buffer_new(
+    canvas->buffers[0] = buffer_new(
         canvas->device_width, canvas->device_height, canvas->pixel_format
     );
     log_debug("overwrote buffer #0 (last resort)\n");
@@ -112,7 +117,7 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
     return canvas->buffers[0];
 }
 
-static RenderCanvas *cairo_canvas_new(
+static RenderCanvas *renderer_cairo_canvas_new(
     struct wl_surface *surface,
     uint32_t device_width,
     uint32_t device_height,
@@ -126,7 +131,7 @@ static RenderCanvas *cairo_canvas_new(
     return (RenderCanvas *)result;
 }
 
-static void cairo_canvas_resize(
+static void renderer_cairo_canvas_resize(
     RenderCanvas *render_canvas, uint32_t device_width, uint32_t device_height
 ) {
     CairoCanvas *canvas = (CairoCanvas *)render_canvas;
@@ -135,19 +140,19 @@ static void cairo_canvas_resize(
     // buffers are invalidated when acquired in get_unused_buffer
 }
 
-static void cairo_canvas_destroy(RenderCanvas *render_canvas) {
+static void renderer_cairo_canvas_destroy(RenderCanvas *render_canvas) {
     CairoCanvas *canvas = (CairoCanvas *)render_canvas;
 
     for (size_t i = 0; i < CAIRO_CANVAS_BUFFER_COUNT; i++) {
         if (canvas->buffers[i]) {
-            cairo_buffer_destroy(canvas->buffers[i]);
+            buffer_destroy(canvas->buffers[i]);
         }
     }
 
     free(canvas);
 }
 
-static void cairo_set_source_render_color(
+static void set_source_render_color(
     cairo_t *cr, RenderColor color, ImageFormat surface_format
 ) {
     float r, g, b;
@@ -167,7 +172,81 @@ static void cairo_set_source_render_color(
 }
 
 static void
-cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
+make_rounded_rect_path(cairo_t *cr, BBox bounds, RenderRectRadius radii) {
+    constexpr double PI = 3.141592653589793115997963468544185161590576171875;
+    constexpr double DEG = PI / 180.0;
+
+    // Constrain border radii so the rounded corners don't become bigger than
+    // the box. Every corner is allowed to have a radius of at most half the
+    // shorter side length. You can definitely have a more precise way of doing
+    // this, but this is good enough.
+    double limit =
+        (bounds.width < bounds.height ? bounds.width : bounds.height) / 2.0;
+    if (radii.tl > limit)
+        radii.tl = limit;
+    if (radii.tr > limit)
+        radii.tr = limit;
+    if (radii.bl > limit)
+        radii.bl = limit;
+    if (radii.br > limit)
+        radii.br = limit;
+
+    if (radii.tl > 0) {
+        cairo_new_sub_path(cr);
+        cairo_arc(
+            cr,
+            bounds.x + radii.tl,
+            bounds.y + radii.tl,
+            radii.tl,
+            -180 * DEG,
+            -90 * DEG
+        );
+    } else {
+        // this also starts a sub-path, so the close path below still works
+        cairo_move_to(cr, bounds.x, bounds.y);
+    }
+    if (radii.tr > 0) {
+        cairo_arc(
+            cr,
+            bounds.x + bounds.width - radii.tr,
+            bounds.y + radii.tr,
+            radii.tr,
+            -90 * DEG,
+            0 * DEG
+        );
+    } else {
+        cairo_line_to(cr, bounds.x + bounds.width, bounds.y);
+    }
+    if (radii.br > 0) {
+        cairo_arc(
+            cr,
+            bounds.x + bounds.width - radii.br,
+            bounds.y + bounds.height - radii.br,
+            radii.br,
+            0 * DEG,
+            90 * DEG
+        );
+    } else {
+        cairo_line_to(cr, bounds.x + bounds.width, bounds.y + bounds.height);
+    }
+    if (radii.bl > 0) {
+        cairo_arc(
+            cr,
+            bounds.x + radii.bl,
+            bounds.y + bounds.height - radii.bl,
+            radii.bl,
+            90 * DEG,
+            180 * DEG
+        );
+    } else {
+        cairo_line_to(cr, bounds.x, bounds.y + bounds.height);
+    }
+
+    cairo_close_path(cr);
+}
+
+static void
+renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     CairoCanvas *canvas = (CairoCanvas *)render_canvas;
     CairoBuffer *draw_buf = get_unused_buffer(canvas);
     cairo_t *cr = draw_buf->cr;
@@ -180,29 +259,60 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         case RENDER_COMMAND_RECT: {
             RenderCommandRect *rect = (RenderCommandRect *)cmd;
             if (rect->color.a > 0) {
-                // TODO: border radii (make a helper?)
-                cairo_rectangle(
-                    cr,
-                    rect->bounds.x,
-                    rect->bounds.y,
-                    rect->bounds.width,
-                    rect->bounds.height
-                );
+                assert(rect->bounds.width > 0 && rect->bounds.height > 0);
+                make_rounded_rect_path(cr, rect->bounds, rect->border_radius);
 
                 if (rect->texture) {
-                    // TODO: UVs (set the pattern matrix)
-                    // TODO: tinting (tricky. Clay can just tint anything, so we
-                    // will need it eventually)
-                    cairo_set_source(cr, (cairo_pattern_t *)rect->texture);
-                    cairo_fill(cr);
+                    // UVs: set the pattern matrix
+                    assert(
+                        rect->uv.u1 > rect->uv.u0 && rect->uv.v1 > rect->uv.v0
+                    );
+                    CairoTexture *tex = (CairoTexture *)rect->texture;
+                    double sx = (rect->uv.u1 - rect->uv.u0) * tex->width /
+                                rect->bounds.width;
+                    double sy = (rect->uv.v1 - rect->uv.v0) * tex->height /
+                                rect->bounds.height;
+                    cairo_matrix_t ctm;
+                    cairo_matrix_init(
+                        &ctm,
+                        sx, // scale x
+                        0,
+                        0,
+                        sy, // scale y
+                        rect->uv.u0 * tex->width -
+                            sx * rect->bounds.x, // translate x
+                        rect->uv.v0 * tex->height -
+                            sy * rect->bounds.y // translate y
+                    );
+                    cairo_pattern_set_matrix(tex->pattern, &ctm);
+
+                    // Tint: We can't do a proper multiply in Cairo, so instead
+                    // white means "render as-is" and for anything else the
+                    // image is treated as an alpha mask.
+                    RenderColor tint = rect->color;
+                    if (tint.r != 1 || tint.g != 1 || tint.b != 1 ||
+                        tint.a != 1) {
+                        cairo_save(cr);
+                        cairo_clip(cr);
+                        set_source_render_color(cr, tint, canvas->pixel_format);
+                        cairo_mask(cr, tex->pattern);
+                        cairo_restore(cr);
+                    } else {
+                        // Tint is opaque white, which means no change. So we
+                        // can just draw it directly
+                        cairo_set_source(cr, tex->pattern);
+                        cairo_fill(cr);
+                    }
                 } else {
-                    cairo_set_source_render_color(
+                    set_source_render_color(
                         cr, rect->color, canvas->pixel_format
                     );
                     cairo_fill(cr);
                 }
             }
-            // TODO: border
+
+            if (rect->border_color.a > 0) {
+            }
 
             break;
         }
@@ -212,11 +322,12 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         cmd = cmd->next;
     }
 
+    assert(cairo_status(cr) == CAIRO_STATUS_SUCCESS);
     cairo_surface_flush(draw_buf->cairo_surface);
 
     TIMING_END(cairo_frame);
 
-    cairo_buffer_attach_to_surface(draw_buf, canvas->wl_surface);
+    buffer_attach_to_surface(draw_buf, canvas->wl_surface);
     // Finishing a frame with GL damages commits, so also do it here for
     // consistency.
     wl_surface_damage_buffer(
@@ -225,8 +336,11 @@ cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     wl_surface_commit(canvas->wl_surface);
 }
 
-// For the cairo backend, textures are cairo_pattern_t.
-static RenderTexture *cairo_texture_new_from_image(const Image *image) {
+static RenderTexture *
+renderer_cairo_texture_new_from_image(const Image *image) {
+    CairoTexture *result = calloc(1, sizeof(CairoTexture));
+    result->width = image->width;
+    result->height = image->height;
     cairo_surface_t *surface = cairo_image_surface_create_for_data(
         image->data,
         image_format_to_cairo(image->format),
@@ -234,23 +348,24 @@ static RenderTexture *cairo_texture_new_from_image(const Image *image) {
         image->height,
         image->stride
     );
-    cairo_pattern_t *pattern = cairo_pattern_create_for_surface(surface);
+    result->pattern = cairo_pattern_create_for_surface(surface);
     // The pattern takes a reference on the surface, and we don't need the
     // surface anymore, so we can relinquish our ownership.
     cairo_surface_destroy(surface);
-    return (RenderTexture *)pattern;
+    return (RenderTexture *)result;
 }
 
-static void cairo_texture_destroy(RenderTexture *render_texture) {
-    cairo_pattern_t *pattern = (cairo_pattern_t *)render_texture;
-    cairo_pattern_destroy(pattern);
+static void renderer_cairo_texture_destroy(RenderTexture *render_texture) {
+    CairoTexture *texture = (CairoTexture *)render_texture;
+    cairo_pattern_destroy(texture->pattern);
+    free(texture);
 }
 
 const Renderer renderer_cairo = {
-    .canvas_new = cairo_canvas_new,
-    .canvas_resize = cairo_canvas_resize,
-    .canvas_destroy = cairo_canvas_destroy,
-    .draw = cairo_draw,
-    .texture_new_from_image = cairo_texture_new_from_image,
-    .texture_destroy = cairo_texture_destroy,
+    .canvas_new = renderer_cairo_canvas_new,
+    .canvas_resize = renderer_cairo_canvas_resize,
+    .canvas_destroy = renderer_cairo_canvas_destroy,
+    .draw = renderer_cairo_draw,
+    .texture_new_from_image = renderer_cairo_texture_new_from_image,
+    .texture_destroy = renderer_cairo_texture_destroy,
 };

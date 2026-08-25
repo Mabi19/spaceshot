@@ -60,12 +60,16 @@ typedef struct {
     /** In device pixels. Anything outside the surface is clipped. */
     BBox bounds;
     /**
-     * If texture is unset, the color of the rectangle.
-     * Otherwise, a tint to apply to the rectangle.
+     * The color of the rectangle.
+     * If a texture is set and the color is non-white, it is tinted to this
+     * color; note that due to Cairo limitations tinting will only work properly
+     * on alpha-mask-like textures.
      * Must be set (unless you want to render nothing)
      */
     RenderColor color;
     RenderRectRadius border_radius;
+    /** The border is inset to the rectangle (like CSS box-sizing: border-box).
+     */
     RenderBorderWidth border_width;
     RenderColor border_color;
     RenderTexture *texture;
@@ -73,10 +77,10 @@ typedef struct {
     RenderUV uv;
 } RenderCommandRect;
 
-/** Note that a display list's commands MUST cover the whole surface to not
- * produce ghosting. */
-// TODO: make a "CLEAR" command? the toplevel picker will have a translucent
-// background
+/**
+ * Note that a display list's commands MUST cover the whole surface
+ * to not produce ghosting.
+ */
 typedef struct {
     LinkBuffer *arena;
     RenderCommand *first;
@@ -107,4 +111,6 @@ typedef struct {
         (dl).last = &cmd_rect->header;                                         \
     } while (0)
 
+// TODO: clearing the canvas, if you want a translucent background
+// TODO: text
 // TODO: push/pop clip rectangles
