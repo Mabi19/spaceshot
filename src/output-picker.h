@@ -22,7 +22,7 @@ typedef struct OutputPicker {
 
     LinkBuffer *command_arena;
 
-    const char *output_name;
+    char *output_name;
     RenderTextMetrics label_size;
     bool move_label_down;
 

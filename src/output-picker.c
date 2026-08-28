@@ -7,9 +7,9 @@
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
-#include <cairo.h>
 #include <cursor-shape-client.h>
 #include <stdlib.h>
+#include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 constexpr double LABEL_PADDING_X = 6;
@@ -69,9 +69,9 @@ static RenderDisplayList output_picker_draw(void *data) {
         dl,
         .x = text_x,
         .y = text_y,
-        picker->output_name,
-        -1,
-        scaled_style,
+        .content = picker->output_name,
+        .length = -1,
+        .style = scaled_style,
         .color = RENDER_COLOR_DEFAULT
     );
 
@@ -161,7 +161,7 @@ OutputPicker *output_picker_new(
         result
     );
 
-    result->output_name = output->name;
+    result->output_name = strdup(output->name);
     output_picker_recalculate_label_size(result, 120);
 
     result->background_image = background;
@@ -193,6 +193,7 @@ void output_picker_destroy(OutputPicker *picker) {
     seat_dispatcher_remove_listener(
         wayland_globals.seat_dispatcher, picker->surface
     );
+    free(picker->output_name);
     picker->surface->renderer->texture_destroy(picker->background_texture);
     link_buffer_destroy(picker->command_arena);
 

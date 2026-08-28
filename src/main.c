@@ -6,6 +6,7 @@
 #include "output-picker.h"
 #include "paths.h"
 #include "region-picker.h"
+#include "render/renderer.h"
 #include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
@@ -768,6 +769,9 @@ int main(int argc, char **argv) {
             break;
         }
     }
+
+    // By this point all of the pickers are done.
+    renderer_cleanup();
 
     if (should_clipboard_wait) {
         signal(SIGPIPE, SIG_IGN);

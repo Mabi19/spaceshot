@@ -12,7 +12,6 @@
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
-#include <cairo.h>
 #include <cursor-shape-client.h>
 #include <math.h>
 #include <stdlib.h>

@@ -1,14 +1,21 @@
 #include "render/renderer.h"
 
+static const Renderer *renderer;
+
 const Renderer *renderer_get_default() {
-    static const Renderer *result = NULL;
-    if (result == NULL) {
+    if (renderer == NULL) {
         // TODO: choose between renderers when there is more than one
-        result = &renderer_cairo;
+        renderer = &renderer_cairo;
         // The cairo renderer cannot fail to initialize.
         // Right now it's the only renderer, but will also be the fallback when
         // EGL fails to initialize
-        result->init();
+        renderer->init();
     }
-    return result;
+    return renderer;
+}
+
+void renderer_cleanup() {
+    if (renderer) {
+        renderer->cleanup();
+    }
 }

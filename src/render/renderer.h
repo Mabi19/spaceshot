@@ -53,3 +53,9 @@ extern const Renderer renderer_cairo;
  * If this is the first call to the function, a renderer is instantiated.
  */
 const Renderer *renderer_get_default();
+
+/**
+ * Clean up the currently active renderer if one was initialized.
+ * Call this when no more renderer usage is expected.
+ */
+void renderer_cleanup();

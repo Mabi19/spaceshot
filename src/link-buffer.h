@@ -39,7 +39,8 @@ typedef struct LinkBuffer {
 LinkBuffer *link_buffer_new(size_t block_size);
 
 /**
- * Append the data contiguously to the end of the buffer.
+ * Append the data to the end of the buffer. Note that it may be split across
+ * blocks.
  */
 void link_buffer_append(LinkBuffer *buffer, const void *data, size_t length);
 /**
