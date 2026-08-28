@@ -10,7 +10,6 @@
 #include <cairo.h>
 #include <cursor-shape-client.h>
 #include <stdlib.h>
-#include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 constexpr double LABEL_PADDING_X = 6;
@@ -155,7 +154,6 @@ OutputPicker *output_picker_new(
         background->format,
         (OverlaySurfaceHandlers){
             .draw = output_picker_draw,
-            .manual_render = NULL,
             .close = output_picker_handle_surface_close,
             .scale = output_picker_recalculate_label_size,
         },

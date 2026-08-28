@@ -699,7 +699,6 @@ RegionPicker *region_picker_new(
         background->format,
         (OverlaySurfaceHandlers){
             .draw = region_picker_draw,
-            .manual_render = NULL,
             .close = region_picker_handle_surface_close,
             .scale = region_picker_handle_scale,
         },

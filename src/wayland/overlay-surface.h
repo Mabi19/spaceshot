@@ -17,12 +17,6 @@ constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
 typedef RenderDisplayList (*OverlaySurfaceDrawCallback)(void *user_data);
 
 /**
- * Like @c OverlaySurfaceDrawCallback, except that you have to attach a buffer
- * yourself.
- */
-typedef void (*OverlaySurfaceManualRenderCallback)(void *user_data);
-
-/**
  * Called when the surface is closed. This should call overlay_surface_destroy.
  */
 typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
@@ -33,9 +27,7 @@ typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
 typedef void (*OverlaySurfaceScaleCallback)(void *user_data, uint32_t scale);
 
 typedef struct {
-    // Only one of {draw, manual_render} can be defined at once.
     OverlaySurfaceDrawCallback draw;
-    OverlaySurfaceManualRenderCallback manual_render;
     OverlaySurfaceCloseCallback close;
     OverlaySurfaceScaleCallback scale;
 } OverlaySurfaceHandlers;

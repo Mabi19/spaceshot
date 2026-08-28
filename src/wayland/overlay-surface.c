@@ -24,13 +24,8 @@ static void recompute_device_size(OverlaySurface *surface) {
  * This function calls wl_surface_commit.
  */
 static void overlay_surface_draw_immediate(OverlaySurface *surface) {
-    if (surface->handlers.draw) {
-        RenderDisplayList dl = surface->handlers.draw(surface->user_data);
-        surface->renderer->draw(surface->canvas, dl);
-    } else {
-        surface->handlers.manual_render(surface->user_data);
-        wl_surface_commit(surface->wl_surface);
-    }
+    RenderDisplayList dl = surface->handlers.draw(surface->user_data);
+    surface->renderer->draw(surface->canvas, dl);
 }
 
 static void overlay_surface_handle_configure(
@@ -57,20 +52,17 @@ static void overlay_surface_handle_configure(
         surface->viewport, surface->logical_width, surface->logical_height
     );
     recompute_device_size(surface);
-    // TODO: stop checking when manual_render is gone
-    if (surface->handlers.draw) {
-        if (!surface->canvas) {
-            surface->canvas = surface->renderer->canvas_new(
-                surface->wl_surface,
-                surface->device_width,
-                surface->device_height,
-                surface->pixel_format
-            );
-        } else {
-            surface->renderer->canvas_resize(
-                surface->canvas, surface->device_width, surface->device_height
-            );
-        }
+    if (!surface->canvas) {
+        surface->canvas = surface->renderer->canvas_new(
+            surface->wl_surface,
+            surface->device_width,
+            surface->device_height,
+            surface->pixel_format
+        );
+    } else {
+        surface->renderer->canvas_resize(
+            surface->canvas, surface->device_width, surface->device_height
+        );
     }
 
     overlay_surface_draw_immediate(surface);
@@ -228,7 +220,8 @@ void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
 }
 
 void overlay_surface_destroy(OverlaySurface *surface) {
-    // TODO: can be removed once manual_render is gone
+    // The canvas can be not created if the surface is destroyed before
+    // configure.
     if (surface->canvas) {
         surface->renderer->canvas_destroy(surface->canvas);
     }
