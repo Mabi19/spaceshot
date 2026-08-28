@@ -142,7 +142,6 @@ sources = files(
     'wayland/clipboard-core.c',
     'wayland/clipboard-ext.c',
     'wayland/globals.c',
-    # 'wayland/label-surface.c',
     'wayland/overlay-surface.c',
     'wayland/screen-capture-common.c',
     'wayland/screen-capture-ext.c',

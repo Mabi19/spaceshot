@@ -19,6 +19,7 @@ constexpr double LABEL_Y_OFFSET = 12;
 static RenderDisplayList output_picker_draw(void *data) {
     OutputPicker *picker = data;
     OverlaySurface *surface = picker->surface;
+    link_buffer_reset(picker->command_arena);
     RenderDisplayList dl = {.arena = picker->command_arena};
     BBox full_surface_box =
         (BBox){0, 0, surface->device_width, surface->device_height};
@@ -192,8 +193,8 @@ void output_picker_destroy(OutputPicker *picker) {
     seat_dispatcher_remove_listener(
         wayland_globals.seat_dispatcher, picker->surface
     );
-
     picker->surface->renderer->texture_destroy(picker->background_texture);
+    link_buffer_destroy(picker->command_arena);
 
     overlay_surface_destroy(picker->surface);
     free(picker);

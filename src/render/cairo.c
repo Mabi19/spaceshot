@@ -359,7 +359,8 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                     bwidth.right *= shrink_factor;
                 }
                 if (bwidth.top + bwidth.bottom > height) {
-                    double shrink_factor = width / (bwidth.top + bwidth.bottom);
+                    double shrink_factor =
+                        height / (bwidth.top + bwidth.bottom);
                     bwidth.top *= shrink_factor;
                     bwidth.bottom *= shrink_factor;
                 }

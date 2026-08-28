@@ -209,16 +209,6 @@ void overlay_surface_queue_draw(OverlaySurface *surface) {
     }
 }
 
-void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
-    wl_surface_damage_buffer(
-        surface->wl_surface,
-        damage_box.x,
-        damage_box.y,
-        damage_box.width,
-        damage_box.height
-    );
-}
-
 void overlay_surface_destroy(OverlaySurface *surface) {
     // The canvas can be not created if the surface is destroyed before
     // configure.

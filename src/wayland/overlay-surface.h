@@ -8,8 +8,6 @@
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>
 
-constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
-
 /**
  * Draw the current contents of the overlay surface, by returning a display list
  * of render commands.
@@ -74,9 +72,4 @@ OverlaySurface *overlay_surface_new(
 );
 /** Call the draw_callback sometime in the future and present the result. */
 void overlay_surface_queue_draw(OverlaySurface *surface);
-/**
- * Damage the surface in device coordinates. This should be called from the
- * draw callback.
- */
-void overlay_surface_damage(OverlaySurface *surface, BBox damage_box);
 void overlay_surface_destroy(OverlaySurface *surface);
