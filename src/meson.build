@@ -136,6 +136,8 @@ m_dep = cc.find_library('m', required: false)
 
 sources = files(
     'render/cairo.c',
+    'render/common.c',
+    'render/renderer.c',
     'wayland/clipboard-common.c',
     'wayland/clipboard-core.c',
     'wayland/clipboard-ext.c',

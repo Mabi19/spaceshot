@@ -100,18 +100,23 @@ typedef struct {
 typedef struct {
     const char *font_family;
     float font_size;
-    RenderColor text_color;
+    int weight;
+    bool italic;
 } RenderTextStyle;
+
+static const RenderTextStyle RENDER_TEXT_STYLE_DEFAULT = {
+    .font_family = "Sans", .font_size = 16.0, .weight = 400, .italic = false
+};
 
 typedef struct {
     RenderCommand header;
     float x;
     float y;
-    /** Not null-terminated. */
-    // TODO: explicitly support the Pango behavior of "-1 = null terminated"?
+    /** Not necessarily null-terminated: set length to -1 */
     const char *content;
-    size_t length;
+    int length;
     RenderTextStyle style;
+    RenderColor color;
 } RenderCommandText;
 
 /**

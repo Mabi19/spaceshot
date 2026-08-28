@@ -1,11 +1,14 @@
 #include "image.h"
 #include "log.h"
 #include "render/command.h"
+#include "render/common.h"
 #include "render/renderer.h"
 #include "render/texture.h"
 #include "wayland/shared-memory.h"
 #include <assert.h>
 #include <cairo.h>
+#include <pango/pango.h>
+#include <pango/pangocairo.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -115,6 +118,26 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
     log_debug("overwrote buffer #0 (last resort)\n");
 
     return canvas->buffers[0];
+}
+
+// internal state: Pango objects necessary for text rendering.
+static PangoContext *pango_context;
+static PangoLayout *pango_layout;
+static PangoFontDescription *pango_font_description;
+
+static bool renderer_cairo_init() {
+    PangoFontMap *fontmap = pango_cairo_font_map_get_default();
+    pango_context = pango_font_map_create_context(fontmap);
+    pango_layout = pango_layout_new(pango_context);
+    pango_font_description = pango_font_description_new();
+
+    return true;
+}
+
+static void renderer_cairo_cleanup() {
+    g_object_unref(pango_context);
+    g_object_unref(pango_layout);
+    pango_font_description_free(pango_font_description);
 }
 
 static RenderCanvas *renderer_cairo_canvas_new(
@@ -249,11 +272,22 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     // Necessary for borders to draw properly, and doesn't impact anything else.
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
 
+    int clip_nesting_level = 0;
+    bool has_updated_pango_context = false;
+
     TIMING_START(cairo_frame);
 
     RenderCommand *cmd = dl.first;
     while (cmd != NULL) {
         switch (cmd->type) {
+        case RENDER_COMMAND_CLEAR: {
+            RenderCommandClear *clear = (RenderCommandClear *)cmd;
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            set_source_render_color(cr, clear->color, canvas->pixel_format);
+            cairo_paint(cr);
+            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+            break;
+        }
         case RENDER_COMMAND_RECT: {
             RenderCommandRect *rect = (RenderCommandRect *)cmd;
             if (rect->color.a > 0) {
@@ -372,6 +406,49 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
 
             break;
         }
+        case RENDER_COMMAND_TEXT: {
+            RenderCommandText *text = (RenderCommandText *)cmd;
+
+            if (!has_updated_pango_context) {
+                // We don't change the transformation or font properties, so
+                // this is technically unnecessary, but what happens in Pango is
+                // an implementation detail, so do it anyway.
+                pango_cairo_update_context(cr, pango_context);
+                pango_layout_context_changed(pango_layout);
+                has_updated_pango_context = true;
+            }
+
+            renderer_update_pango_fontdesc(pango_font_description, text->style);
+            pango_layout_set_text(pango_layout, text->content, text->length);
+            pango_layout_set_font_description(
+                pango_layout, pango_font_description
+            );
+
+            set_source_render_color(cr, text->color, canvas->pixel_format);
+            cairo_move_to(cr, text->x, text->y);
+            pango_cairo_show_layout(cr, pango_layout);
+            break;
+        }
+        case RENDER_COMMAND_PUSH_CLIP: {
+            RenderCommandPushClip *push_clip = (RenderCommandPushClip *)cmd;
+            // pop clip will restore this
+            cairo_save(cr);
+            cairo_rectangle(
+                cr,
+                push_clip->bounds.x,
+                push_clip->bounds.y,
+                push_clip->bounds.width,
+                push_clip->bounds.height
+            );
+            cairo_clip(cr);
+            clip_nesting_level++;
+            break;
+        }
+        case RENDER_COMMAND_POP_CLIP: {
+            assert(clip_nesting_level > 0);
+            cairo_restore(cr);
+            break;
+        }
         default:
             REPORT_UNHANDLED("render command type", "%d", cmd->type);
         }
@@ -379,17 +456,33 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     }
 
     assert(cairo_status(cr) == CAIRO_STATUS_SUCCESS);
+    assert(clip_nesting_level == 0);
     cairo_surface_flush(draw_buf->cairo_surface);
 
     TIMING_END(cairo_frame);
 
     buffer_attach_to_surface(draw_buf, canvas->wl_surface);
-    // Finishing a frame with GL damages commits, so also do it here for
+    // Finishing a frame with GL damages & commits, so also do it here for
     // consistency.
     wl_surface_damage_buffer(
         canvas->wl_surface, 0, 0, canvas->device_width, canvas->device_height
     );
     wl_surface_commit(canvas->wl_surface);
+}
+
+static RenderTextMetrics renderer_cairo_measure_text(
+    const char *content, int length, RenderTextStyle style
+) {
+    renderer_update_pango_fontdesc(pango_font_description, style);
+    pango_layout_set_text(pango_layout, content, length);
+    pango_layout_set_font_description(pango_layout, pango_font_description);
+
+    PangoRectangle extents;
+    pango_layout_get_pixel_extents(pango_layout, NULL, &extents);
+    return (RenderTextMetrics){
+        .width = extents.width,
+        .height = extents.height,
+    };
 }
 
 static RenderTexture *
@@ -418,10 +511,13 @@ static void renderer_cairo_texture_destroy(RenderTexture *render_texture) {
 }
 
 const Renderer renderer_cairo = {
+    .init = renderer_cairo_init,
+    .cleanup = renderer_cairo_cleanup,
     .canvas_new = renderer_cairo_canvas_new,
     .canvas_resize = renderer_cairo_canvas_resize,
     .canvas_destroy = renderer_cairo_canvas_destroy,
     .draw = renderer_cairo_draw,
+    .measure_text = renderer_cairo_measure_text,
     .texture_new_from_image = renderer_cairo_texture_new_from_image,
     .texture_destroy = renderer_cairo_texture_destroy,
 };

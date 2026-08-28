@@ -1,5 +1,6 @@
 #include "overlay-surface.h"
 #include "log.h"
+#include "render/renderer.h"
 #include "wayland/globals.h"
 #include <assert.h>
 #include <cursor-shape-client.h>
@@ -142,8 +143,7 @@ OverlaySurface *overlay_surface_new(
             wayland_globals.fractional_scale_manager, result->wl_surface
         );
     result->cursor_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
-    // TODO: get this dynamically
-    result->renderer = &renderer_cairo;
+    result->renderer = renderer_get_default();
     result->handlers = handlers;
     result->user_data = user_data;
 
