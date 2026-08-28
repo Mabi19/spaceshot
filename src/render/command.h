@@ -54,12 +54,18 @@ typedef struct {
     float br;
 } RenderBorderRadius;
 
+#define RENDER_BORDER_RADIUS(r)                                                \
+    (RenderBorderRadius) { (r), (r), (r), (r) }
+
 typedef struct {
     float left;
     float right;
     float top;
     float bottom;
 } RenderBorderWidth;
+
+#define RENDER_BORDER_WIDTH(w)                                                 \
+    (RenderBorderWidth) { (w), (w), (w), (w) }
 
 /**
  * (u, v)0 = top left corner, (u, v)1 = bottom right corner.
@@ -89,7 +95,8 @@ typedef struct {
     RenderColor color;
     RenderTexture *texture;
     RenderBorderRadius border_radius;
-    /** The border is inset to the rectangle (like CSS box-sizing: border-box).
+    /**
+     * The border is inset to the rectangle (like CSS box-sizing: border-box).
      */
     RenderBorderWidth border_width;
     RenderColor border_color;
@@ -104,15 +111,22 @@ typedef struct {
     bool italic;
 } RenderTextStyle;
 
-static const RenderTextStyle RENDER_TEXT_STYLE_DEFAULT = {
-    .font_family = "Sans", .font_size = 16.0, .weight = 400, .italic = false
-};
+/** Create a RenderTextStyle object with the default values at the specified
+ * scale. */
+#define RENDER_TEXT_STYLE_DEFAULT(scale)                                       \
+    (RenderTextStyle) {                                                        \
+        .font_family = "Sans", .font_size = 16.0 * (scale) / 120.0,            \
+        .weight = 400, .italic = false                                         \
+    }
 
 typedef struct {
     RenderCommand header;
     float x;
     float y;
-    /** Not necessarily null-terminated: set length to -1 */
+    /**
+     * Not necessarily null-terminated: set length to -1 to determine length
+     * via strlen.
+     */
     const char *content;
     int length;
     RenderTextStyle style;
