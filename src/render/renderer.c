@@ -4,12 +4,15 @@ static const Renderer *renderer;
 
 const Renderer *renderer_get_default() {
     if (renderer == NULL) {
-        // TODO: choose between renderers when there is more than one
-        renderer = &renderer_cairo;
-        // The cairo renderer cannot fail to initialize.
-        // Right now it's the only renderer, but will also be the fallback when
-        // EGL fails to initialize
-        renderer->init();
+        // The GL renderer is preferred, but Cairo is a fallback for when EGL
+        // fails to initialize (e.g. no GPU or unsupported platform).
+        if (renderer_gl.init()) {
+            renderer = &renderer_gl;
+        } else {
+            renderer = &renderer_cairo;
+            // The cairo renderer cannot fail to initialize.
+            renderer->init();
+        }
     }
     return renderer;
 }

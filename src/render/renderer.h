@@ -47,6 +47,7 @@ typedef struct {
 } Renderer;
 
 extern const Renderer renderer_cairo;
+extern const Renderer renderer_gl;
 
 /**
  * Get the currently active renderer.

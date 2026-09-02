@@ -199,17 +199,6 @@ make_rounded_rect_path(cairo_t *cr, BBox bounds, RenderBorderRadius radii) {
     constexpr double PI = 3.141592653589793115997963468544185161590576171875;
     constexpr double DEG = PI / 180.0;
 
-    // Constrain border radii so the rounded corners don't become bigger than
-    // the box. Every corner is allowed to have a radius of at most half the
-    // shorter side length. You can definitely have a more precise way of doing
-    // this, but this is good enough.
-    double limit =
-        (bounds.width < bounds.height ? bounds.width : bounds.height) / 2.0;
-    radii.tl = fmin(radii.tl, limit);
-    radii.tr = fmin(radii.tr, limit);
-    radii.bl = fmin(radii.bl, limit);
-    radii.br = fmin(radii.br, limit);
-
     if (radii.tl > 0) {
         cairo_new_sub_path(cr);
         cairo_arc(
@@ -290,6 +279,8 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         }
         case RENDER_COMMAND_RECT: {
             RenderCommandRect *rect = (RenderCommandRect *)cmd;
+            renderer_sanitize_rect(rect);
+
             if (rect->color.a > 0) {
                 assert(rect->bounds.width > 0 && rect->bounds.height > 0);
                 make_rounded_rect_path(cr, rect->bounds, rect->border_radius);
@@ -348,22 +339,7 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                 // rectangle.
                 make_rounded_rect_path(cr, rect->bounds, rect->border_radius);
                 // The inner edge is inset.
-                // Limit the border width to the corresponding rectangle
-                // dimension
                 RenderBorderWidth bwidth = rect->border_width;
-                double width = rect->bounds.width;
-                double height = rect->bounds.height;
-                if (bwidth.left + bwidth.right > width) {
-                    double shrink_factor = width / (bwidth.left + bwidth.right);
-                    bwidth.left *= shrink_factor;
-                    bwidth.right *= shrink_factor;
-                }
-                if (bwidth.top + bwidth.bottom > height) {
-                    double shrink_factor =
-                        height / (bwidth.top + bwidth.bottom);
-                    bwidth.top *= shrink_factor;
-                    bwidth.bottom *= shrink_factor;
-                }
                 // Compute the inner rectangle, where the border isn't.
                 BBox inner_rect = rect->bounds;
                 inner_rect.x += bwidth.left;
@@ -372,7 +348,6 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                 inner_rect.y += bwidth.top;
                 inner_rect.height -= bwidth.top;
                 inner_rect.height -= bwidth.bottom;
-
                 // Only poke a hole if there is a hole to be poked.
                 // Float imprecision may have caused small errors that mean the
                 // width is slightly above zero when logically the border should

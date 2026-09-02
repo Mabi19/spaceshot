@@ -15,7 +15,12 @@ typedef struct {
     atomic_int ref_count;
 } SmartBorderContext;
 
-SmartBorderContext *smart_border_context_start(
-    const Renderer *renderer, const Image *base, uint32_t scale
-);
+/**
+ * Start computing the smart border image.
+ * When it's done, the is_done property of the context will be set to true,
+ * and result_image will contain the result.
+ * result_texture will be NULL, because textures can't be created off-thread.
+ */
+SmartBorderContext *
+smart_border_context_start(const Image *base, uint32_t scale);
 void smart_border_context_unref(SmartBorderContext *ctx);

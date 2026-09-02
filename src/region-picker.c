@@ -258,6 +258,14 @@ static RenderDisplayList region_picker_draw(void *data) {
                     &picker->smart_border->is_done, memory_order_acquire
                 )) {
                 border_color = (RenderColor){1, 1, 1, 1};
+                // The smart border code cannot create a texture itself, because
+                // it runs off-thread.
+                if (!picker->smart_border->result_texture) {
+                    picker->smart_border->result_texture =
+                        picker->surface->renderer->texture_new_from_image(
+                            picker->smart_border->result_image
+                        );
+                }
                 border_texture = picker->smart_border->result_texture;
             } else {
                 // fallback
@@ -681,9 +689,8 @@ static void region_picker_handle_scale(void *data, uint32_t scale) {
     if (!picker->smart_border &&
         config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-        picker->smart_border = smart_border_context_start(
-            picker->surface->renderer, picker->background_image, scale
-        );
+        picker->smart_border =
+            smart_border_context_start(picker->background_image, scale);
     }
 }
 
@@ -731,6 +738,11 @@ void region_picker_destroy(RegionPicker *picker) {
     );
 
     if (picker->smart_border) {
+        if (picker->smart_border->result_texture) {
+            picker->surface->renderer->texture_destroy(
+                picker->smart_border->result_texture
+            );
+        }
         smart_border_context_unref(picker->smart_border);
     }
 

@@ -105,6 +105,10 @@ typedef struct {
 } RenderCommandRect;
 
 typedef struct {
+    /**
+     * This is expected to outlive the renderer
+     * (either static string or config'd is fine)
+     */
     const char *font_family;
     float font_size;
     int weight;
@@ -130,8 +134,23 @@ typedef struct {
     const char *content;
     int length;
     RenderTextStyle style;
+    /**
+     * The color of the text.
+     * Due to how the GL renderer currently works, emoji will also be tinted
+     * this color; therefore, avoid emojis in non-white text.
+     */
     RenderColor color;
+    /** Used internally by the renderers, must be unset (set to NULL) */
+    void *renderer_data;
 } RenderCommandText;
+
+/** Different from BBox because clipping is always in device coordinates. */
+typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} RenderClipRect;
 
 /**
  * Intersect a box with the clipping region.
@@ -140,7 +159,7 @@ typedef struct {
  */
 typedef struct {
     RenderCommand header;
-    BBox bounds;
+    RenderClipRect bounds;
 } RenderCommandPushClip;
 
 /**
