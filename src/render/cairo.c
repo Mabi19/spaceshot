@@ -121,13 +121,14 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
 }
 
 // internal state: Pango objects necessary for text rendering.
+static PangoFontMap *pango_fontmap;
 static PangoContext *pango_context;
 static PangoLayout *pango_layout;
 static PangoFontDescription *pango_font_description;
 
 static bool renderer_cairo_init() {
-    PangoFontMap *fontmap = pango_cairo_font_map_get_default();
-    pango_context = pango_font_map_create_context(fontmap);
+    pango_fontmap = pango_cairo_font_map_new();
+    pango_context = pango_font_map_create_context(pango_fontmap);
     pango_layout = pango_layout_new(pango_context);
     pango_font_description = pango_font_description_new();
 
@@ -135,6 +136,7 @@ static bool renderer_cairo_init() {
 }
 
 static void renderer_cairo_cleanup() {
+    g_object_unref(pango_fontmap);
     g_object_unref(pango_context);
     g_object_unref(pango_layout);
     pango_font_description_free(pango_font_description);
