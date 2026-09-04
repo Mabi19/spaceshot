@@ -47,6 +47,8 @@ typedef struct {
     GLfloat border_width[4];
     GLfloat border_color[4];
     // TODO: should UVs instead be in a third VBO for per-vertex data?
+    // note that if transformed textures ever appear (possible under dmabufs for
+    // example) this representation is not enough
     GLfloat uv_tl[2];
     GLfloat uv_br[2];
 } GLRectData;
@@ -137,7 +139,7 @@ static bool renderer_gl_init() {
     // check for necessary extensions
     const char *exts = eglQueryString(egl_display, EGL_EXTENSIONS);
     if (exts == NULL) {
-        log_debug("Couldn't get EGL extensions");
+        log_debug("Couldn't get EGL extensions\n");
         renderer_gl_cleanup();
         return false;
     }
@@ -197,8 +199,13 @@ static bool renderer_gl_init() {
         renderer_gl_cleanup();
         return false;
     }
-    eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_context);
-    eglSwapInterval(egl_display, 0);
+    if (!eglMakeCurrent(
+            egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_context
+        )) {
+        log_debug("eglMakeCurrent failed\n");
+        renderer_gl_cleanup();
+        return false;
+    }
 
     // Set up common GL state and data
     log_debug(
@@ -225,6 +232,10 @@ static bool renderer_gl_init() {
         GL_UNSIGNED_BYTE,
         NONE_TEXTURE_DATA
     );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     glGenVertexArrays(1, &gl_vao);
     glBindVertexArray(gl_vao);
@@ -404,7 +415,6 @@ static RenderCanvas *renderer_gl_canvas_new(
     result->device_height = device_height;
     result->window =
         wl_egl_window_create(wl_surface, device_width, device_height);
-    assert(result->window);
 
     // The only thing we care about here is 10-bitness:
     // if pixel_format is 10-bit, that means we want to draw 10-bit textures.
@@ -470,6 +480,12 @@ static RenderCanvas *renderer_gl_canvas_new(
     if (result->surface == EGL_NO_SURFACE) {
         report_error_fatal("Couldn't create EGL window surface");
     }
+    if (!eglMakeCurrent(
+            egl_display, result->surface, result->surface, egl_context
+        )) {
+        report_error_fatal("eglMakeCurrent failed during canvas new");
+    };
+    eglSwapInterval(egl_display, 0);
 
     return (RenderCanvas *)result;
 }
@@ -490,7 +506,11 @@ static void renderer_gl_canvas_destroy(RenderCanvas *render_canvas) {
     free(canvas);
     // in case this was the active surface, revert to a no-surface configuration
     // (probably for deleting textures and whatnot)
-    eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_context);
+    if (!eglMakeCurrent(
+            egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, egl_context
+        )) {
+        report_error_fatal("eglMakeCurrent failed during canvas destroy");
+    };
 }
 
 static RenderTexture *renderer_gl_texture_new_from_image(const Image *image) {
@@ -802,7 +822,11 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
 
     TIMING_START(gl_frame);
 
-    eglMakeCurrent(egl_display, canvas->surface, canvas->surface, egl_context);
+    if (!eglMakeCurrent(
+            egl_display, canvas->surface, canvas->surface, egl_context
+        )) {
+        report_error_fatal("eglMakeCurrent failed during draw");
+    }
     glViewport(0, 0, canvas_width, canvas_height);
     glScissor(0, 0, canvas_width, canvas_height);
     glUniform2f(gl_uniform_screen_size, canvas_width, canvas_height);
@@ -918,12 +942,15 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     constexpr size_t MAX_CLIP_DEPTH = 16;
     RenderClipRect clip_rects[MAX_CLIP_DEPTH];
     clip_rects[0] = (RenderClipRect){0, 0, canvas_width, canvas_height};
-    size_t scissor_depth = 0;
+    size_t clip_depth = 0;
     cmd = dl.first;
     while (cmd != NULL) {
         switch (cmd->type) {
         case RENDER_COMMAND_CLEAR: {
             RenderCommandClear *clear = (RenderCommandClear *)cmd;
+            // I don't know why you'd clear after any geometry, but flush the
+            // batch properly anyway
+            flush_quad_batch(&batch_start, &batch_length);
             glClearColor(
                 clear->color.r, clear->color.g, clear->color.b, clear->color.a
             );
@@ -980,7 +1007,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                 push_clip->bounds.width,
                 push_clip->bounds.height
             };
-            RenderClipRect top = clip_rects[scissor_depth];
+            RenderClipRect top = clip_rects[clip_depth];
             int x1 = new.x > top.x ? new.x : top.x;
             int y1 = new.y > top.y ? new.y : top.y;
             int x2 = new.x + new.width < top.x + top.width ? new.x + new.width
@@ -991,17 +1018,17 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             RenderClipRect combined = {
                 x1, y1, x2 <= x1 ? 0 : x2 - x1, y2 <= y1 ? 0 : y2 - y1
             };
-            scissor_depth++;
-            assert(scissor_depth < MAX_CLIP_DEPTH);
-            clip_rects[scissor_depth] = combined;
+            clip_depth++;
+            assert(clip_depth < MAX_CLIP_DEPTH);
+            clip_rects[clip_depth] = combined;
             glScissor(combined.x, combined.y, combined.width, combined.height);
             break;
         }
         case RENDER_COMMAND_POP_CLIP: {
             flush_quad_batch(&batch_start, &batch_length);
-            assert(scissor_depth > 0);
-            scissor_depth--;
-            RenderClipRect rect = clip_rects[scissor_depth];
+            assert(clip_depth > 0);
+            clip_depth--;
+            RenderClipRect rect = clip_rects[clip_depth];
             glScissor(rect.x, rect.y, rect.width, rect.height);
             break;
         }

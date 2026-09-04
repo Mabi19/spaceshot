@@ -20,5 +20,6 @@ const Renderer *renderer_get_default() {
 void renderer_cleanup() {
     if (renderer) {
         renderer->cleanup();
+        renderer = NULL;
     }
 }
