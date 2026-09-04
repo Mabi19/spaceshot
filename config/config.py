@@ -8,6 +8,7 @@ config_c, config_h, config_vapi = sc.config({
     "move-to-background": sc.bool(),
     "copy-to-clipboard": sc.bool(),
     "output-capture-backends": sc.tokenlist("ext", "wlr"),
+    "renderer": sc.tokenlist("gl", "cairo"),
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),

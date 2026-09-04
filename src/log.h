@@ -41,8 +41,7 @@ report_error_fatal(const char *format, ...);
     report_error_fatal(                                                        \
         "internal error: " format "\nat " __FILE__                             \
         ":" XSTR(__LINE__) " (in function %s)",                                \
-        __VA_ARGS__,                                                           \
-        __func__                                                               \
+        __VA_ARGS__ __VA_OPT__(, ) __func__                                    \
     )
 
 /** Report that a value, like an enum entry, was unhandled.  */
