@@ -1,6 +1,7 @@
 #pragma once
 #include "image.h"
 #include "picker-common.h"
+#include "render/texture.h"
 #include "smart-border.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
@@ -26,9 +27,9 @@ typedef struct RegionPicker {
     OverlaySurface *surface;
     RegionPickerState state;
     const Image *background_image;
-    cairo_surface_t *background_surface;
-    cairo_pattern_t *background_pattern;
+    RenderTexture *background_texture;
     SmartBorderContext *smart_border;
+    LinkBuffer *command_arena;
 
     RegionPickerFinishCallback finish_callback;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.
@@ -50,13 +51,6 @@ typedef struct RegionPicker {
         double grab_offset_x;
         double grab_offset_y;
     } edit_data;
-    // These are kept for optimization purposes
-    bool dirty_after_state_change;
-    // This flag needs to be unset every time the selection is cleared.
-    bool can_compare_boxes;
-    BBox last_drawn_box;
-    uint32_t last_device_width;
-    uint32_t last_device_height;
 } RegionPicker;
 
 /**

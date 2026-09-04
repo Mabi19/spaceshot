@@ -427,6 +427,7 @@ bool find_wayland_globals(
 ) {
     // initialize wayland_globals object
     memset(&wayland_globals, 0, sizeof(WaylandGlobals));
+    wayland_globals.display = display;
     wl_list_init(&wayland_globals.outputs);
     wl_list_init(&wayland_globals.toplevels);
     wayland_globals.handle_output_create = create_output_callback;

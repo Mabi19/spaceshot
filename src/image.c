@@ -444,10 +444,7 @@ static void flush_png_data(png_structp /* png_data */) {
 }
 
 LinkBuffer *image_save_png(const Image *image) {
-    // Writing to a link buffer can change the current block, so the start needs
-    // to be saved
-    LinkBuffer *result = link_buffer_new();
-    LinkBuffer *curr_block = result;
+    LinkBuffer *result = link_buffer_new(LINK_BUFFER_DATA_SIZE);
 
     png_structp png_data =
         png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -468,7 +465,7 @@ LinkBuffer *image_save_png(const Image *image) {
     // results in about 33% faster encoding in my testing, with a not very
     // significant size hit.
     png_set_compression_level(png_data, config_get()->png_compression_level);
-    png_set_write_fn(png_data, &curr_block, write_png_data, flush_png_data);
+    png_set_write_fn(png_data, result, write_png_data, flush_png_data);
 
     // set up all the metadata
 

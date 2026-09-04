@@ -360,7 +360,7 @@ class enum(BaseType):
         return f"'{self.name}'"
 
 class tokenlist(BaseType):
-    '''A comma-delimited list of predefined tokens.'''
+    '''A comma-delimited list of predefined tokens, where each can appear at most once.'''
     tokens: list[str]
     def __init__(self, *members: str):
         super()
@@ -409,6 +409,12 @@ class tokenlist(BaseType):
         for token in self.tokens:
             token_enum_name = f"{array_item_prefix}_{token}".upper()
             if_chain.append(f"""if (strcmp(part_start, "{token}") == 0) {{
+{indent}        for (size_t j = 0; j < i; j++) {{
+{indent}            if (array.items[j] == {token_enum_name}) {{
+{indent}                config_warn("token '{token}' appeared twice in token list");
+{indent}                success = false;
+{indent}            }}
+{indent}        }}
 {indent}        array.items[i] = {token_enum_name};
 {indent}    }}""")
 

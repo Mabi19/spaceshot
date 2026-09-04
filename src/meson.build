@@ -125,8 +125,12 @@ foreach protocol : extra_protocols
 endforeach
 
 cairo_dep = dependency('cairo')
+egl_dep = dependency('egl')
+glesv2_dep = dependency('glesv2')
+wayland_egl_dep = dependency('wayland-egl')
 # TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
+libxxhash_dep = dependency('libxxhash')
 pango_dep = dependency('pango')
 pangocairo_dep = dependency('pangocairo')
 xkbcommon_dep = dependency('xkbcommon')
@@ -135,13 +139,15 @@ cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
 sources = files(
+    'render/cairo.c',
+    'render/common.c',
+    'render/gl.c',
+    'render/renderer.c',
     'wayland/clipboard-common.c',
     'wayland/clipboard-core.c',
     'wayland/clipboard-ext.c',
     'wayland/globals.c',
-    'wayland/label-surface.c',
     'wayland/overlay-surface.c',
-    'wayland/render.c',
     'wayland/screen-capture-common.c',
     'wayland/screen-capture-ext.c',
     'wayland/screen-capture-wlr.c',
@@ -166,7 +172,11 @@ executable(
     include_directories: build_conf_include,
     dependencies: [
         cairo_dep,
+        egl_dep,
+        glesv2_dep,
+        wayland_egl_dep,
         libpng_dep,
+        libxxhash_dep,
         pango_dep,
         pangocairo_dep,
         xkbcommon_dep,

@@ -1,61 +1,15 @@
 #include "overlay-surface.h"
 #include "log.h"
+#include "render/renderer.h"
 #include "wayland/globals.h"
-#include "wayland/render.h"
 #include <assert.h>
-#include <cairo.h>
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <memory.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <viewporter-client.h>
 #include <wayland-client-protocol.h>
 #include <wlr-layer-shell-client.h>
-
-static RenderBuffer *get_unused_buffer(OverlaySurface *surface) {
-    // first, try to get an existing buffer
-    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
-        if (!surface->buffers[i]) {
-            continue;
-        }
-        RenderBuffer *test_buf = surface->buffers[i];
-        if (!test_buf->is_busy &&
-            test_buf->shm->width == surface->device_width &&
-            test_buf->shm->height == surface->device_height) {
-            return test_buf;
-        }
-    }
-
-    // second, try to create a new one in an empty spot
-    // or overwrite one with the wrong size
-    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
-        if (surface->buffers[i]) {
-            if (surface->buffers[i]->shm->width == surface->device_width &&
-                surface->buffers[i]->shm->height == surface->device_height) {
-                continue;
-            }
-            log_debug("destroyed buffer #%zu\n", i);
-            render_buffer_destroy(surface->buffers[i]);
-        }
-        surface->buffers[i] = render_buffer_new(
-            surface->device_width, surface->device_height, surface->pixel_format
-        );
-        log_debug("created buffer #%zu\n", i);
-        return surface->buffers[i];
-    }
-
-    // last resort: overwrite the first one
-    if (surface->buffers[0]) {
-        render_buffer_destroy(surface->buffers[0]);
-    }
-    surface->buffers[0] = render_buffer_new(
-        surface->device_width, surface->device_height, surface->pixel_format
-    );
-    log_debug("overwrote buffer #0 (last resort)\n");
-
-    return surface->buffers[0];
-}
 
 static void recompute_device_size(OverlaySurface *surface) {
     surface->device_width =
@@ -67,21 +21,11 @@ static void recompute_device_size(OverlaySurface *surface) {
 /**
  * Call the draw_callback immediately. Prefer using
  * overlay_surface_queue_draw() over this if possible.
- * Note that this function does not call wl_surface_commit.
+ * This function calls wl_surface_commit.
  */
 static void overlay_surface_draw_immediate(OverlaySurface *surface) {
-    if (surface->handlers.draw) {
-        RenderBuffer *draw_buf = get_unused_buffer(surface);
-        bool did_update =
-            surface->handlers.draw(surface->user_data, draw_buf->cr);
-        if (!did_update) {
-            return;
-        }
-        cairo_surface_flush(draw_buf->cairo_surface);
-        render_buffer_attach_to_surface(draw_buf, surface->wl_surface);
-    } else {
-        surface->handlers.manual_render(surface->user_data);
-    }
+    RenderDisplayList dl = surface->handlers.draw(surface->user_data);
+    surface->renderer->draw(surface->canvas, dl);
 }
 
 static void overlay_surface_handle_configure(
@@ -108,9 +52,20 @@ static void overlay_surface_handle_configure(
         surface->viewport, surface->logical_width, surface->logical_height
     );
     recompute_device_size(surface);
+    if (!surface->canvas) {
+        surface->canvas = surface->renderer->canvas_new(
+            surface->wl_surface,
+            surface->device_width,
+            surface->device_height,
+            surface->pixel_format
+        );
+    } else {
+        surface->renderer->canvas_resize(
+            surface->canvas, surface->device_width, surface->device_height
+        );
+    }
 
     overlay_surface_draw_immediate(surface);
-    wl_surface_commit(surface->wl_surface);
 }
 
 static void overlay_surface_handle_closed(
@@ -138,12 +93,16 @@ static void preferred_scale_changed(
     );
     surface->scale = scale;
     recompute_device_size(surface);
+    if (surface->canvas) {
+        surface->renderer->canvas_resize(
+            surface->canvas, surface->device_width, surface->device_height
+        );
+    }
     if (surface->handlers.scale) {
         surface->handlers.scale(surface->user_data, scale);
     }
     if (surface->has_configured) {
         overlay_surface_draw_immediate(surface);
-        wl_surface_commit(surface->wl_surface);
     }
 }
 
@@ -175,8 +134,9 @@ OverlaySurface *overlay_surface_new(
         wp_fractional_scale_manager_v1_get_fractional_scale(
             wayland_globals.fractional_scale_manager, result->wl_surface
         );
-    result->handlers = handlers;
     result->cursor_shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
+    result->renderer = renderer_get_default();
+    result->handlers = handlers;
     result->user_data = user_data;
 
     wp_fractional_scale_v1_add_listener(
@@ -233,7 +193,6 @@ static void draw_immediate_and_request_frame(OverlaySurface *surface) {
         surface->frame_callback, &frame_callback_listener, surface
     );
     overlay_surface_draw_immediate(surface);
-    wl_surface_commit(surface->wl_surface);
 }
 
 void overlay_surface_queue_draw(OverlaySurface *surface) {
@@ -250,21 +209,11 @@ void overlay_surface_queue_draw(OverlaySurface *surface) {
     }
 }
 
-void overlay_surface_damage(OverlaySurface *surface, BBox damage_box) {
-    wl_surface_damage_buffer(
-        surface->wl_surface,
-        damage_box.x,
-        damage_box.y,
-        damage_box.width,
-        damage_box.height
-    );
-}
-
 void overlay_surface_destroy(OverlaySurface *surface) {
-    for (size_t i = 0; i < OVERLAY_SURFACE_BUFFER_COUNT; i++) {
-        if (surface->buffers[i]) {
-            render_buffer_destroy(surface->buffers[i]);
-        }
+    // The canvas can be not created if the surface is destroyed before
+    // configure.
+    if (surface->canvas) {
+        surface->renderer->canvas_destroy(surface->canvas);
     }
 
     wp_fractional_scale_v1_destroy(surface->fractional_scale);

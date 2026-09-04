@@ -17,6 +17,7 @@ typedef void (*OutputCallback)(WrappedOutput *);
 typedef void (*ToplevelCallback)(WrappedToplevel *);
 
 typedef struct {
+    struct wl_display *display;
     struct wl_compositor *compositor;
     struct wl_data_device_manager *data_device_manager;
     struct wl_data_device *data_device;

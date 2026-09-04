@@ -1,11 +1,12 @@
 #include "smart-border.h"
-#include "cairo.h"
 #include "log.h"
 #include <stdatomic.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define IMAGE_ROW(img, y) (img->data + (y) * img->stride)
+
+// TODO: When dmabuf capture lands, add a GPU backend.
 
 static int smart_border_context_thread_func(void *data) {
     SmartBorderContext *ctx = data;
@@ -78,8 +79,8 @@ static int smart_border_context_thread_func(void *data) {
 
     ctx->result_image = image_convert_format(work_buf_1, ctx->base->format);
     image_destroy(work_buf_1);
-    ctx->surface = image_make_cairo_surface(ctx->result_image);
-    ctx->pattern = cairo_pattern_create_for_surface(ctx->surface);
+    // Do not automatically create a texture, because GL textures can't be
+    // created off-thread.
 
     TIMING_END(smart_border);
     atomic_store_explicit(&ctx->is_done, true, memory_order_release);
@@ -104,8 +105,6 @@ smart_border_context_start(const Image *base, uint32_t scale) {
 
 void smart_border_context_unref(SmartBorderContext *ctx) {
     if (atomic_fetch_sub(&ctx->ref_count, 1) == 1) {
-        cairo_pattern_destroy(ctx->pattern);
-        cairo_surface_destroy(ctx->surface);
         image_destroy(ctx->result_image);
         free(ctx);
     }

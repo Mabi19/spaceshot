@@ -1,25 +1,18 @@
 #pragma once
+#include "image.h"
+#include "render/command.h"
+#include "render/renderer.h"
 #include "wayland/output.h"
-#include "wayland/render.h"
-#include <cairo.h>
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>
 
-constexpr size_t OVERLAY_SURFACE_BUFFER_COUNT = 2;
-
 /**
- * Returns whether the surface contents were actually updated. This should call
- * overlay_surface_damage() itself
+ * Draw the current contents of the overlay surface, by returning a display list
+ * of render commands.
  */
-typedef bool (*OverlaySurfaceDrawCallback)(void *user_data, cairo_t *cr);
-
-/**
- * Like @c OverlaySurfaceDrawCallback, except that you have to attach a buffer
- * yourself.
- */
-typedef void (*OverlaySurfaceManualRenderCallback)(void *user_data);
+typedef RenderDisplayList (*OverlaySurfaceDrawCallback)(void *user_data);
 
 /**
  * Called when the surface is closed. This should call overlay_surface_destroy.
@@ -32,9 +25,7 @@ typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
 typedef void (*OverlaySurfaceScaleCallback)(void *user_data, uint32_t scale);
 
 typedef struct {
-    // Only one of {draw, manual_render} can be defined at once.
     OverlaySurfaceDrawCallback draw;
-    OverlaySurfaceManualRenderCallback manual_render;
     OverlaySurfaceCloseCallback close;
     OverlaySurfaceScaleCallback scale;
 } OverlaySurfaceHandlers;
@@ -56,7 +47,8 @@ typedef struct {
     uint32_t device_height;
     /** The window's pixel format. */
     ImageFormat pixel_format;
-    RenderBuffer *buffers[OVERLAY_SURFACE_BUFFER_COUNT];
+    const Renderer *renderer;
+    RenderCanvas *canvas;
     // callback things
     OverlaySurfaceHandlers handlers;
     // technically also a callback thing.
@@ -80,9 +72,4 @@ OverlaySurface *overlay_surface_new(
 );
 /** Call the draw_callback sometime in the future and present the result. */
 void overlay_surface_queue_draw(OverlaySurface *surface);
-/**
- * Damage the surface in device coordinates. This should be called from the
- * draw callback.
- */
-void overlay_surface_damage(OverlaySurface *surface, BBox damage_box);
 void overlay_surface_destroy(OverlaySurface *surface);

@@ -6,6 +6,7 @@
 #include "output-picker.h"
 #include "paths.h"
 #include "region-picker.h"
+#include "render/renderer.h"
 #include "wayland/clipboard.h"
 #include "wayland/globals.h"
 #include "wayland/output.h"
@@ -13,6 +14,7 @@
 #include "wayland/toplevel.h"
 #include <assert.h>
 #include <config/config.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +23,6 @@
 #include <threads.h>
 #include <unistd.h>
 #include <wayland-client.h>
-#include <wayland-util.h>
 
 /** A capture entry's state ("what is it used for") */
 typedef enum {
@@ -768,6 +769,9 @@ int main(int argc, char **argv) {
             break;
         }
     }
+
+    // By this point all of the pickers are done.
+    renderer_cleanup();
 
     if (should_clipboard_wait) {
         signal(SIGPIPE, SIG_IGN);
