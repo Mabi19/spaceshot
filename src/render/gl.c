@@ -858,6 +858,9 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             }
             RenderCommandRect *rect = (RenderCommandRect *)cmd;
             renderer_sanitize_rect(rect);
+            if (rect->texture) {
+                assert(rect->uv.u1 > rect->uv.u0 && rect->uv.v1 > rect->uv.v0);
+            }
             rect_instance_buffer[i] = (GLRectData){
                 .position = {rect->bounds.x, rect->bounds.y},
                 .size = {rect->bounds.width, rect->bounds.height},
