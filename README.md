@@ -8,6 +8,7 @@ It takes a screenshot first and then allows selecting a region on it, which make
 
 ## Features
 - Proper (fractional) scaling support: snaps to device pixels and not logical pixels, which makes selections more precise
+- GPU-acceleration using OpenGL ES 3.0
 - 10-bit image format support (saved as 16-bit PNGs) (note that this may require compositor configuration)
 - Integrated copying to clipboard
 - Screenshots are only ever cropped (and never scaled)
@@ -17,7 +18,8 @@ It takes a screenshot first and then allows selecting a region on it, which make
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
 Planned:
-- Snapping to predefined aspect ratios (Shift?)
+- Zero-copy dmabuf-based capture
+- A more involved UI with extra options
 - More configuration options (mostly concerning appearance)
 - A toplevel picker
 
@@ -35,8 +37,12 @@ Output mode:
 ## Building
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
 Dependencies:
+- egl
+- glesv2
+- wayland-egl
 - cairo
 - libpng
+- libxxhash
 - pango
 - xkbcommon
 - wayland (incl. wlr-protocols and wayland-protocols)
