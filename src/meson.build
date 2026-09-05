@@ -3,13 +3,13 @@ wl_dep = dependency('wayland-client')
 # get extra protocols
 extra_protocols = [
     {
-        'provider': 'wlr',
+        'provider': 'vendor',
         'state': 'unstable',
         'name': 'wlr-layer-shell',
         'version': 1,
     },
     {
-        'provider': 'wlr',
+        'provider': 'vendor',
         'state': 'unstable',
         'name': 'wlr-screencopy',
         'version': 1,
@@ -77,8 +77,7 @@ extra_protocols = [
 ]
 
 wl_scanner = find_program('wayland-scanner')
-wlr_protocols_dep = dependency('wlr-protocols')
-wlr_protocols_dir = wlr_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
+vendor_protocols_dir = '../protocol'
 wayland_protocols_dep = dependency('wayland-protocols')
 wayland_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
 
@@ -101,8 +100,8 @@ foreach protocol : extra_protocols
         filename = f'@name@-@state@-v@version@.xml'
     endif
 
-    if provider == 'wlr'
-        xml_path = wlr_protocols_dir / state / filename
+    if provider == 'vendor'
+        xml_path = vendor_protocols_dir / filename
     elif provider == 'wp'
         xml_path = wayland_protocols_dir / state / name / filename
     endif

@@ -45,10 +45,8 @@ Dependencies:
 - libxxhash
 - pango
 - xkbcommon
-- wayland (incl. wlr-protocols and wayland-protocols)
-
-> [!NOTE]
-> All Wayland protocols are currently sourced from the system; the Arch Linux repos have them, but I don't know about other Linux distributions / OSes.
+- wayland
+- wayland-protocols
 
 If the `notifications` build option is enabled (it is on by default):
 - the Vala toolchain is required to build,
