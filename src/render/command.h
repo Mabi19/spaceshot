@@ -1,8 +1,8 @@
 #pragma once
 #include "bbox.h"
-#include "config/config.h"
 #include "link-buffer.h"
 #include "render/texture.h"
+#include <config/config.h>
 
 /** A 4-float color with premultiplied alpha (unlike ConfigColor) */
 typedef struct {

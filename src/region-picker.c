@@ -1,7 +1,6 @@
 #include "region-picker.h"
 #include "anchor.h"
 #include "bbox.h"
-#include "config/config.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -12,6 +11,7 @@
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
+#include <config/config.h>
 #include <cursor-shape-client.h>
 #include <math.h>
 #include <stdlib.h>

@@ -1,7 +1,7 @@
-#include "config/config.h"
 #include "log.h"
 #include "screen-capture.h"
 #include "wayland/toplevel.h"
+#include <config/config.h>
 
 void capture_output_ext(
     WrappedOutput *output, ImageCaptureCallback image_callback, void *data
