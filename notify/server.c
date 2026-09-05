@@ -12,6 +12,37 @@ typedef enum {
     NOTIFICATION_ACTION_DIRECTORY,
 } NotificationAction;
 
+/**
+ * The table mapping notification actions to their IDs and human-readable names.
+ */
+static const struct {
+    const char *key;
+    const char *label;
+} action_info[] = {
+    [NOTIFICATION_ACTION_OPEN] = {"open", "Open"},
+    [NOTIFICATION_ACTION_EDIT] = {"edit", "Edit"},
+    [NOTIFICATION_ACTION_DIRECTORY] = {"directory", "View in directory"},
+};
+
+/**
+ * Convert the config value to an action. CONFIG_NOTIFY_DEFAULT_ACTION_NONE
+ * has no matching action and must be handled by the caller.
+ */
+static NotificationAction
+default_action_to_action(ConfigNotifyDefaultAction default_action) {
+    switch (default_action) {
+    case CONFIG_NOTIFY_DEFAULT_ACTION_OPEN:
+        return NOTIFICATION_ACTION_OPEN;
+    case CONFIG_NOTIFY_DEFAULT_ACTION_EDIT:
+        return NOTIFICATION_ACTION_EDIT;
+    case CONFIG_NOTIFY_DEFAULT_ACTION_DIRECTORY:
+        return NOTIFICATION_ACTION_DIRECTORY;
+    case CONFIG_NOTIFY_DEFAULT_ACTION_NONE:
+    default:
+        g_assert_not_reached();
+    }
+}
+
 static guint dbus_registration_id = 0;
 static GDBusProxy *notification_service = NULL;
 // Maps notification IDs (as GUINT_TO_POINTER) to their paths (char *, owned).
@@ -163,31 +194,22 @@ static void handle_notification_action(guint id, const char *key) {
 
     if (strcmp(key, "default") == 0) {
         Config *conf = config_get();
-        switch (conf->notify.default_action) {
-        case CONFIG_NOTIFY_DEFAULT_ACTION_OPEN:
-            exec_action(NOTIFICATION_ACTION_OPEN, path);
-            break;
-        case CONFIG_NOTIFY_DEFAULT_ACTION_EDIT:
-            exec_action(NOTIFICATION_ACTION_EDIT, path);
-            break;
-        case CONFIG_NOTIFY_DEFAULT_ACTION_DIRECTORY:
-            exec_action(NOTIFICATION_ACTION_DIRECTORY, path);
-            break;
-        case CONFIG_NOTIFY_DEFAULT_ACTION_NONE:
-            // if an old notification invokes this, don't explode
-            break;
-        default:
-            g_assert_not_reached();
+        if (conf->notify.default_action != CONFIG_NOTIFY_DEFAULT_ACTION_NONE) {
+            exec_action(
+                default_action_to_action(conf->notify.default_action), path
+            );
         }
-    } else if (strcmp(key, "open") == 0) {
-        exec_action(NOTIFICATION_ACTION_OPEN, path);
-    } else if (strcmp(key, "edit") == 0) {
-        exec_action(NOTIFICATION_ACTION_EDIT, path);
-    } else if (strcmp(key, "directory") == 0) {
-        exec_action(NOTIFICATION_ACTION_DIRECTORY, path);
-    } else {
-        g_assert_not_reached();
+        // otherwise, this may be an old notification from before a config
+        // reload; don't explode
+        return;
     }
+    for (size_t i = 0; i < G_N_ELEMENTS(action_info); i++) {
+        if (strcmp(key, action_info[i].key) == 0) {
+            exec_action((NotificationAction)i, path);
+            return;
+        }
+    }
+    g_assert_not_reached();
 }
 
 static void on_notification_proxy_signal(
@@ -219,47 +241,40 @@ static bool notify_for_file(const char *path, bool did_copy, GError **error) {
     GVariantBuilder actions_builder;
     g_variant_builder_init(&actions_builder, G_VARIANT_TYPE("as"));
     if (has_default) {
+        NotificationAction default_action =
+            default_action_to_action(conf->notify.default_action);
         g_variant_builder_add(&actions_builder, "s", "default");
-        switch (conf->notify.default_action) {
-        case CONFIG_NOTIFY_DEFAULT_ACTION_OPEN:
-            g_variant_builder_add(&actions_builder, "s", "Open");
-            break;
-        case CONFIG_NOTIFY_DEFAULT_ACTION_EDIT:
-            g_variant_builder_add(&actions_builder, "s", "Edit");
-            break;
-        case CONFIG_NOTIFY_DEFAULT_ACTION_DIRECTORY:
-            g_variant_builder_add(&actions_builder, "s", "View in directory");
-            break;
-        default:
-            g_assert_not_reached();
-        }
+        g_variant_builder_add(
+            &actions_builder, "s", action_info[default_action].label
+        );
     }
     for (size_t i = 0; i < button_count; i++) {
+        NotificationAction action;
         switch (conf->notify.actions.items[i]) {
         case CONFIG_NOTIFY_ACTIONS_ITEM_OPEN:
-            g_variant_builder_add(&actions_builder, "s", "open");
-            g_variant_builder_add(&actions_builder, "s", "Open");
+            action = NOTIFICATION_ACTION_OPEN;
             break;
         case CONFIG_NOTIFY_ACTIONS_ITEM_EDIT:
-            g_variant_builder_add(&actions_builder, "s", "edit");
-            g_variant_builder_add(&actions_builder, "s", "Edit");
+            action = NOTIFICATION_ACTION_EDIT;
             break;
         case CONFIG_NOTIFY_ACTIONS_ITEM_DIRECTORY:
-            g_variant_builder_add(&actions_builder, "s", "directory");
-            g_variant_builder_add(&actions_builder, "s", "View in directory");
+            action = NOTIFICATION_ACTION_DIRECTORY;
             break;
         default:
             g_assert_not_reached();
         }
+        g_variant_builder_add(&actions_builder, "s", action_info[action].key);
+        g_variant_builder_add(&actions_builder, "s", action_info[action].label);
     }
     GVariant *actions = g_variant_builder_end(&actions_builder);
 
-        GVariantBuilder hints_builder;
+    GVariantBuilder hints_builder;
     g_variant_builder_init(&hints_builder, G_VARIANT_TYPE("a{sv}"));
     // The "{sv}" format consumes the variant as the v's contents, so the
     // string must not be wrapped in a variant here.
-    g_variant_builder_add(&hints_builder, "{sv}", "image-path",
-        g_variant_new_string(path));
+    g_variant_builder_add(
+        &hints_builder, "{sv}", "image-path", g_variant_new_string(path)
+    );
     GVariant *hints = g_variant_builder_end(&hints_builder);
 
     const char *body_template =
@@ -272,14 +287,14 @@ static bool notify_for_file(const char *path, bool did_copy, GError **error) {
         "Notify",
         g_variant_new(
             "(susss@as@a{sv}i)",
-            "Spaceshot",
-            (guint32)0,
-            "",
-            conf->notify.summary,
-            body->str,
-            actions,
-            hints,
-            (gint32)-1
+            "Spaceshot",          // app_name
+            (guint32)0,           // replaces_id
+            "",                   // app_icon
+            conf->notify.summary, // summary
+            body->str,            // body
+            actions,              // actions
+            hints,                // hints
+            (gint32)-1            // expire_timeout
         ),
         G_DBUS_CALL_FLAGS_NONE,
         -1,
