@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
             .description = "Indicate that the screenshot was copied",
             .arg_description = NULL,
         },
-        {NULL},
+        {},
     };
 
     GOptionContext *context =
