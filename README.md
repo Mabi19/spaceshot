@@ -49,7 +49,6 @@ Dependencies:
 - wayland-protocols
 
 If the `notifications` build option is enabled (it is on by default):
-- the Vala toolchain is required to build,
 - xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime,
 - [satty](https://github.com/gabm/satty) is invoked by the edit button, though this is configurable
 

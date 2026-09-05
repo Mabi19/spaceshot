@@ -1,5 +1,3 @@
-add_languages('vala', native: false)
-
 service_data = configuration_data()
 service_data.set('bindir', get_option('prefix') / get_option('bindir'))
 configure_file(
@@ -10,25 +8,22 @@ configure_file(
 )
 
 dependencies = [
-    dependency('gio-2.0'),
+    dependency('gio-2.0', version: '>= 2.68'),
     dependency('glib-2.0'),
     dependency('gobject-2.0'),
-    meson.get_compiler('vala').find_library('posix'),
-    config_dep_vala,
+    config_dep,
 ]
 
 sources = files(
-    'file-manager.vala',
-    'main.vala',
-    'notification.vala',
-    'server.vala',
+    'main.c',
+    'server.c',
 )
 
 executable(
     'spaceshot-notify',
     sources,
+    include_directories: build_conf_include,
     dependencies: dependencies,
-    c_args: ['-w'], # disable C warnings
     install: true,
 )
 
