@@ -742,7 +742,7 @@ void region_picker_destroy(RegionPicker *picker) {
         }
         smart_border_context_unref(picker->smart_border);
     }
-
+    link_buffer_destroy(picker->command_arena);
     overlay_surface_destroy(picker->surface);
 
     free(picker);
