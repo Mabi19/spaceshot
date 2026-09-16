@@ -20,14 +20,20 @@ typedef struct {
     SharedBuffer *buffer;
     // callback
     WrappedOutput *output;
-    ImageCaptureCallback image_callback;
+    FrameCaptureCallback image_callback;
     void *user_data;
 } FrameContext;
 
 static void frame_context_finalize(
     FrameContext *context, struct zwlr_screencopy_frame_v1 *frame, Image *result
 ) {
-    context->image_callback(result, context->user_data);
+    CaptureFrame *capture_frame = NULL;
+    if (result) {
+        capture_frame = calloc(1, sizeof(CaptureFrame));
+        capture_frame->image = result;
+        capture_frame->pixel_format = result->format;
+    }
+    context->image_callback(capture_frame, context->user_data);
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
@@ -57,8 +63,9 @@ static void frame_handle_buffer(
     if (format == WL_SHM_FORMAT_XRGB2101010 ||
         format == WL_SHM_FORMAT_XBGR2101010) {
         goto accept_format;
-    } else if (format == WL_SHM_FORMAT_XRGB8888 &&
-               !context->has_selected_format) {
+    } else if (
+        format == WL_SHM_FORMAT_XRGB8888 && !context->has_selected_format
+    ) {
         goto accept_format;
     }
     log_debug("skipping\n");
@@ -158,7 +165,7 @@ static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 };
 
 void capture_output_wlr(
-    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
+    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 ) {
     struct zwlr_screencopy_frame_v1 *frame =
         zwlr_screencopy_manager_v1_capture_output(

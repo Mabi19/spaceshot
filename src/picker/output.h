@@ -1,6 +1,7 @@
 #pragma once
 #include "picker/common.h"
 #include "wayland/overlay-surface.h"
+#include "wayland/screen-capture.h"
 
 struct OutputPicker;
 
@@ -26,17 +27,16 @@ typedef struct OutputPicker {
     RenderTextMetrics label_size;
     bool move_label_down;
 
-    const Image *background_image;
-    RenderTexture *background_texture;
+    CaptureFrame *background;
 } OutputPicker;
 
 /**
- * Note that the image is _not_ owned by the @c OutputPicker, and needs to stay
+ * Note that the frame is _not_ owned by the @c OutputPicker, and needs to stay
  * alive for as long as the RegionPicker does.
  */
 OutputPicker *output_picker_new(
     WrappedOutput *output,
-    Image *background,
+    CaptureFrame *background,
     OutputPickerFinishCallback finish_callback
 );
 void output_picker_destroy(OutputPicker *picker);

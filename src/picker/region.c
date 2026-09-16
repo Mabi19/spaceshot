@@ -1,7 +1,6 @@
 #include "region.h"
 #include "anchor.h"
 #include "bbox.h"
-#include "image.h"
 #include "link-buffer.h"
 #include "log.h"
 #include "picker/smart-border.h"
@@ -221,7 +220,7 @@ static RenderDisplayList region_picker_draw(void *data) {
         dl,
         .bounds = full_surface_box,
         .color = RENDER_COLOR_DEFAULT,
-        .texture = picker->background_texture,
+        .texture = capture_frame_get_texture(picker->background),
         .uv = RENDER_UV_DEFAULT,
     );
 
@@ -690,19 +689,19 @@ static void region_picker_handle_scale(void *data, uint32_t scale) {
         config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
         picker->smart_border =
-            smart_border_context_start(picker->background_image, scale);
+            smart_border_context_start(picker->background, scale);
     }
 }
 
 RegionPicker *region_picker_new(
     WrappedOutput *output,
-    Image *background,
+    CaptureFrame *background,
     RegionPickerFinishCallback finish_callback
 ) {
     RegionPicker *result = calloc(1, sizeof(RegionPicker));
     result->surface = overlay_surface_new(
         output,
-        background->format,
+        background->pixel_format,
         (OverlaySurfaceHandlers){
             .draw = region_picker_draw,
             .close = region_picker_handle_surface_close,
@@ -711,9 +710,7 @@ RegionPicker *region_picker_new(
         result
     );
     result->state = REGION_PICKER_EMPTY;
-    result->background_image = background;
-    result->background_texture =
-        result->surface->renderer->texture_new_from_image(background);
+    result->background = background;
 
     result->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
 
@@ -746,7 +743,6 @@ void region_picker_destroy(RegionPicker *picker) {
         smart_border_context_unref(picker->smart_border);
     }
 
-    picker->surface->renderer->texture_destroy(picker->background_texture);
     overlay_surface_destroy(picker->surface);
 
     free(picker);

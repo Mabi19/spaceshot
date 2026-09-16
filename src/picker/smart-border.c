@@ -1,5 +1,6 @@
 #include "smart-border.h"
 #include "log.h"
+#include "wayland/screen-capture.h"
 #include <stdatomic.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -90,9 +91,9 @@ static int smart_border_context_thread_func(void *data) {
 }
 
 SmartBorderContext *
-smart_border_context_start(const Image *base, uint32_t scale) {
+smart_border_context_start(CaptureFrame *base, uint32_t scale) {
     SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
-    ctx->base = base;
+    ctx->base = capture_frame_get_image(base);
     ctx->scale = scale;
     ctx->ref_count = 2;
     thrd_t thread;

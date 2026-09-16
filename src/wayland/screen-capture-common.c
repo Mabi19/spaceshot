@@ -1,16 +1,40 @@
 #include "log.h"
+#include "render/renderer.h"
 #include "screen-capture.h"
 #include "wayland/toplevel.h"
 #include <config/config.h>
 
+Image *capture_frame_get_image(CaptureFrame *frame) {
+    // TODO: when image downloading exists, use it
+    return frame->image;
+}
+
+RenderTexture *capture_frame_get_texture(CaptureFrame *frame) {
+    if (!frame->texture) {
+        frame->texture =
+            renderer_get_default()->texture_new_from_image(frame->image);
+    }
+    return frame->texture;
+}
+
+void capture_frame_destroy(CaptureFrame *frame) {
+    if (frame->texture) {
+        renderer_get_default()->texture_destroy(frame->texture);
+    }
+    if (frame->image) {
+        image_destroy(frame->image);
+    }
+    free(frame);
+}
+
 void capture_output_ext(
-    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
+    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 );
 
 bool capture_output_ext_is_available();
 
 void capture_output_wlr(
-    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
+    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 );
 
 bool capture_output_wlr_is_available();
@@ -22,7 +46,7 @@ typedef enum {
 } OutputCaptureBackend;
 
 void capture_output(
-    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
+    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 ) {
     static bool has_selected_backend = false;
     static OutputCaptureBackend backend;
@@ -71,7 +95,7 @@ void capture_output(
 }
 
 void capture_toplevel_ext(
-    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
 );
 
 bool capture_toplevel_ext_is_available();
@@ -82,7 +106,7 @@ typedef enum {
 } ToplevelCaptureBackend;
 
 void capture_toplevel(
-    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
 ) {
     static bool has_selected_backend = false;
     static ToplevelCaptureBackend backend;

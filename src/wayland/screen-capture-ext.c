@@ -21,7 +21,7 @@ typedef struct {
     struct ext_image_capture_source_v1 *source;
     struct ext_image_copy_capture_session_v1 *session;
     SharedBuffer *buffer;
-    ImageCaptureCallback image_callback;
+    FrameCaptureCallback image_callback;
     void *user_data;
     // this context is passed as user data to two different listeners
     // so refcounting is necessary
@@ -33,7 +33,13 @@ static void frame_context_unref(FrameContext *context) {
     assert(context->ref_count > 0);
     context->ref_count--;
     if (context->ref_count == 0) {
-        context->image_callback(context->result, context->user_data);
+        CaptureFrame *frame = NULL;
+        if (context->result) {
+            frame = calloc(1, sizeof(CaptureFrame));
+            frame->image = context->result;
+            frame->pixel_format = context->result->format;
+        }
+        context->image_callback(frame, context->user_data);
 
         if (context->buffer) {
             shared_buffer_destroy(context->buffer);
@@ -170,9 +176,11 @@ static void session_handle_shm_format(
     if (format == WL_SHM_FORMAT_XRGB2101010 ||
         format == WL_SHM_FORMAT_XBGR2101010) {
         goto accept_format;
-    } else if ((format == WL_SHM_FORMAT_XRGB8888 ||
-                format == WL_SHM_FORMAT_XBGR8888) &&
-               !context->has_selected_format) {
+    } else if (
+        (format == WL_SHM_FORMAT_XRGB8888 ||
+         format == WL_SHM_FORMAT_XBGR8888) &&
+        !context->has_selected_format
+    ) {
         goto accept_format;
     }
     log_debug("skipping\n");
@@ -233,7 +241,7 @@ static const struct ext_image_copy_capture_session_v1_listener
 };
 
 void capture_output_ext(
-    WrappedOutput *output, ImageCaptureCallback image_callback, void *data
+    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 ) {
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->image_callback = image_callback;
@@ -254,7 +262,7 @@ void capture_output_ext(
 }
 
 void capture_toplevel_ext(
-    WrappedToplevel *toplevel, ImageCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
 ) {
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->image_callback = image_callback;

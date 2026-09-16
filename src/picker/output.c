@@ -28,7 +28,7 @@ static RenderDisplayList output_picker_draw(void *data) {
         dl,
         .bounds = full_surface_box,
         .color = RENDER_COLOR_DEFAULT,
-        .texture = picker->background_texture,
+        .texture = capture_frame_get_texture(picker->background),
         .uv = RENDER_UV_DEFAULT
     );
 
@@ -146,13 +146,13 @@ static void output_picker_recalculate_label_size(void *data, uint32_t scale) {
 
 OutputPicker *output_picker_new(
     WrappedOutput *output,
-    Image *background,
+    CaptureFrame *background,
     OutputPickerFinishCallback finish_callback
 ) {
     OutputPicker *result = calloc(1, sizeof(OutputPicker));
     result->surface = overlay_surface_new(
         output,
-        background->format,
+        background->pixel_format,
         (OverlaySurfaceHandlers){
             .draw = output_picker_draw,
             .close = output_picker_handle_surface_close,
@@ -164,9 +164,7 @@ OutputPicker *output_picker_new(
     result->output_name = strdup(output->name);
     output_picker_recalculate_label_size(result, 120);
 
-    result->background_image = background;
-    result->background_texture =
-        result->surface->renderer->texture_new_from_image(background);
+    result->background = background;
     result->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
 
     seat_dispatcher_add_listener(
@@ -194,7 +192,6 @@ void output_picker_destroy(OutputPicker *picker) {
         wayland_globals.seat_dispatcher, picker->surface
     );
     free(picker->output_name);
-    picker->surface->renderer->texture_destroy(picker->background_texture);
     link_buffer_destroy(picker->command_arena);
 
     overlay_surface_destroy(picker->surface);

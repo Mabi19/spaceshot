@@ -2,6 +2,7 @@
 #include "image.h"
 #include "render/renderer.h"
 #include "render/texture.h"
+#include "wayland/screen-capture.h"
 #include <stdatomic.h>
 #include <threads.h>
 
@@ -22,5 +23,5 @@ typedef struct {
  * result_texture will be NULL, because textures can't be created off-thread.
  */
 SmartBorderContext *
-smart_border_context_start(const Image *base, uint32_t scale);
+smart_border_context_start(CaptureFrame *base, uint32_t scale);
 void smart_border_context_unref(SmartBorderContext *ctx);

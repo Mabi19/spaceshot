@@ -1,10 +1,9 @@
 #pragma once
-#include "image.h"
 #include "picker/common.h"
-#include "render/texture.h"
 #include "smart-border.h"
 #include "wayland/output.h"
 #include "wayland/overlay-surface.h"
+#include "wayland/screen-capture.h"
 #include <threads.h>
 #include <wayland-client.h>
 
@@ -26,8 +25,7 @@ typedef void (*RegionPickerFinishCallback)(
 typedef struct RegionPicker {
     OverlaySurface *surface;
     RegionPickerState state;
-    const Image *background_image;
-    RenderTexture *background_texture;
+    CaptureFrame *background;
     SmartBorderContext *smart_border;
     LinkBuffer *command_arena;
 
@@ -54,12 +52,12 @@ typedef struct RegionPicker {
 } RegionPicker;
 
 /**
- * Note that the image is _not_ owned by the RegionPicker, and needs to stay
+ * Note that the frame is _not_ owned by the RegionPicker, and needs to stay
  * alive for as long as the RegionPicker does.
  */
 RegionPicker *region_picker_new(
     WrappedOutput *output,
-    Image *background,
+    CaptureFrame *background,
     RegionPickerFinishCallback finish_callback
 );
 /** Destroy the region picker. Note that this function does NOT call the

@@ -46,12 +46,12 @@ typedef enum {
 typedef struct {
     void *picker;
     CaptureEntryState state;
-    CaptureEntryType image_type;
+    CaptureEntryType frame_type;
     union {
         WrappedOutput *output;
         WrappedToplevel *toplevel;
     };
-    Image *image;
+    CaptureFrame *frame;
     struct wl_list link;
 } CaptureEntry;
 
@@ -241,7 +241,7 @@ static void capture_entry_destroy(CaptureEntry *entry) {
             REPORT_UNHANDLED("picker entry type", "%d", entry->state);
         }
     }
-    image_destroy(entry->image);
+    capture_frame_destroy(entry->frame);
     wl_list_remove(&entry->link);
     free(entry);
 }
@@ -327,7 +327,7 @@ static void picker_finish_generic(
 static Image *region_picker_finish_get_image(CaptureEntry *entry, void *data) {
     BBox result_region = *(BBox *)data;
     return image_crop(
-        entry->image,
+        capture_frame_get_image(entry->frame),
         result_region.x,
         result_region.y,
         result_region.width,
@@ -345,7 +345,7 @@ static void region_picker_finish(
 
 static Image *output_picker_finish_get_image(CaptureEntry *entry, void *) {
     // picker_finish_generic frees this separately from the source image
-    return image_copy(entry->image);
+    return image_copy(capture_frame_get_image(entry->frame));
 }
 
 static void
@@ -404,7 +404,7 @@ static bool is_toplevel_matching(WrappedToplevel *toplevel) {
     return false;
 }
 
-static void handle_captured_output(Image *image, void *data) {
+static void handle_captured_output(CaptureFrame *frame, void *data) {
     CaptureEntry *entry = data;
 
     if (!is_output_valid(entry->output)) {
@@ -413,8 +413,8 @@ static void handle_captured_output(Image *image, void *data) {
         return;
     }
 
-    entry->image = image;
-    if (!entry->image) {
+    entry->frame = frame;
+    if (!entry->frame) {
         report_error_fatal("capturing output %s failed\n", entry->output->name);
     }
     entry->state = CAPTURE_ENTRY_STATE_READY;
@@ -449,13 +449,13 @@ static void add_new_output(WrappedOutput *output) {
 
     CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
     entry->state = CAPTURE_ENTRY_STATE_EMPTY;
-    entry->image_type = CAPTURE_ENTRY_TYPE_OUTPUT;
+    entry->frame_type = CAPTURE_ENTRY_TYPE_OUTPUT;
     entry->output = output;
     wl_list_insert(&active_captures, &entry->link);
     capture_output(output, handle_captured_output, entry);
 }
 
-static void handle_captured_toplevel(Image *image, void *data) {
+static void handle_captured_toplevel(CaptureFrame *frame, void *data) {
     CaptureEntry *entry = data;
 
     if (!is_toplevel_valid(entry->toplevel)) {
@@ -464,8 +464,8 @@ static void handle_captured_toplevel(Image *image, void *data) {
         return;
     }
 
-    entry->image = image;
-    if (!entry->image) {
+    entry->frame = frame;
+    if (!entry->frame) {
         report_error_fatal(
             "capturing toplevel %s failed\n", entry->toplevel->identifier
         );
@@ -491,7 +491,7 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
 
     CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
     entry->state = CAPTURE_ENTRY_STATE_EMPTY;
-    entry->image_type = CAPTURE_ENTRY_TYPE_TOPLEVEL;
+    entry->frame_type = CAPTURE_ENTRY_TYPE_TOPLEVEL;
     entry->toplevel = toplevel;
     wl_list_insert(&active_captures, &entry->link);
     capture_toplevel(toplevel, handle_captured_toplevel, entry);
@@ -572,7 +572,7 @@ static void dispatch_capture_entries() {
     {
         CaptureEntry *entry, *tmp;
         wl_list_for_each_safe(entry, tmp, &active_captures, link) {
-            switch (entry->image_type) {
+            switch (entry->frame_type) {
             case CAPTURE_ENTRY_TYPE_OUTPUT:
                 if (!is_output_valid(entry->output)) {
                     capture_entry_destroy(entry);
@@ -584,7 +584,7 @@ static void dispatch_capture_entries() {
                 }
                 break;
             default:
-                REPORT_UNHANDLED("capture entry type", "%d", entry->image_type);
+                REPORT_UNHANDLED("capture entry type", "%d", entry->frame_type);
             }
         }
     }
@@ -594,10 +594,12 @@ static void dispatch_capture_entries() {
             CaptureEntry *entry;
             bool found = false;
             wl_list_for_each(entry, &active_captures, link) {
-                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
+                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
                     is_output_matching(entry->output)) {
                     finish_predefined_region_screenshot(
-                        entry->output, entry->image, args.region_params.region
+                        entry->output,
+                        capture_frame_get_image(entry->frame),
+                        args.region_params.region
                     );
                     found = true;
                     break;
@@ -611,12 +613,12 @@ static void dispatch_capture_entries() {
         } else {
             CaptureEntry *entry;
             wl_list_for_each(entry, &active_captures, link) {
-                if (entry->image_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
+                if (entry->frame_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
                     continue;
                 }
 
                 entry->picker = region_picker_new(
-                    entry->output, entry->image, region_picker_finish
+                    entry->output, entry->frame, region_picker_finish
                 );
                 entry->state = CAPTURE_ENTRY_STATE_REGION_PICKER;
             }
@@ -626,9 +628,11 @@ static void dispatch_capture_entries() {
             CaptureEntry *entry;
             bool found = false;
             wl_list_for_each(entry, &active_captures, link) {
-                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
+                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
                     is_output_matching(entry->output)) {
-                    finish_noninteractive_screenshot(entry->image);
+                    finish_noninteractive_screenshot(
+                        capture_frame_get_image(entry->frame)
+                    );
                     found = true;
                     break;
                 }
@@ -642,14 +646,16 @@ static void dispatch_capture_entries() {
             int output_count = 0;
             CaptureEntry *entry;
             wl_list_for_each(entry, &active_captures, link) {
-                if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
                     output_count++;
                 }
             }
             if (output_count == 1) {
                 wl_list_for_each(entry, &active_captures, link) {
-                    if (entry->image_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
-                        finish_noninteractive_screenshot(entry->image);
+                    if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+                        finish_noninteractive_screenshot(
+                            capture_frame_get_image(entry->frame)
+                        );
                         capture_entry_destroy(entry);
                         break;
                     }
@@ -657,12 +663,12 @@ static void dispatch_capture_entries() {
             } else if (output_count > 1) {
                 CaptureEntry *entry;
                 wl_list_for_each(entry, &active_captures, link) {
-                    if (entry->image_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
+                    if (entry->frame_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
                         continue;
                     }
 
                     entry->picker = output_picker_new(
-                        entry->output, entry->image, output_picker_finish
+                        entry->output, entry->frame, output_picker_finish
                     );
                     entry->state = CAPTURE_ENTRY_STATE_OUTPUT_PICKER;
                 }
@@ -675,9 +681,11 @@ static void dispatch_capture_entries() {
             CaptureEntry *entry;
             bool found = false;
             wl_list_for_each(entry, &active_captures, link) {
-                if (entry->image_type == CAPTURE_ENTRY_TYPE_TOPLEVEL &&
+                if (entry->frame_type == CAPTURE_ENTRY_TYPE_TOPLEVEL &&
                     is_toplevel_matching(entry->toplevel)) {
-                    finish_noninteractive_screenshot(entry->image);
+                    finish_noninteractive_screenshot(
+                        capture_frame_get_image(entry->frame)
+                    );
                     found = true;
                     break;
                 }
