@@ -1,6 +1,6 @@
 #pragma once
 #include "image.h"
-#include "picker-common.h"
+#include "picker/common.h"
 #include "render/texture.h"
 #include "smart-border.h"
 #include "wayland/output.h"

@@ -1,5 +1,5 @@
 #pragma once
-#include "picker-common.h"
+#include "picker/common.h"
 #include "wayland/overlay-surface.h"
 
 struct OutputPicker;

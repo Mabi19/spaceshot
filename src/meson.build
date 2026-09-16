@@ -138,6 +138,9 @@ cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required: false)
 
 sources = files(
+    'picker/output.c',
+    'picker/region.c',
+    'picker/smart-border.c',
     'render/cairo.c',
     'render/common.c',
     'render/gl.c',
@@ -159,10 +162,7 @@ sources = files(
     'link-buffer.c',
     'log.c',
     'main.c',
-    'output-picker.c',
     'paths.c',
-    'region-picker.c',
-    'smart-border.c',
 )
 
 executable(
