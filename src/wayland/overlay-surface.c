@@ -1,4 +1,5 @@
 #include "overlay-surface.h"
+#include "debug.h"
 #include "log.h"
 #include "render/renderer.h"
 #include "wayland/globals.h"
@@ -152,7 +153,9 @@ OverlaySurface *overlay_surface_new(
     zwlr_layer_surface_v1_set_anchor(result->layer_surface, ANCHOR);
     zwlr_layer_surface_v1_set_keyboard_interactivity(
         result->layer_surface,
-        ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
+        debug_mode == DEBUG_MODE_NO_EXCLUSIVE_KEYBOARD
+            ? ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND
+            : ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE
     );
     // do not honor other surfaces' exclusive zones
     zwlr_layer_surface_v1_set_exclusive_zone(result->layer_surface, -1);

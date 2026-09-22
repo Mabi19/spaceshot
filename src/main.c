@@ -1,6 +1,5 @@
 #include "args.h"
 #include "bbox.h"
-#include "debug.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
