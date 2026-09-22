@@ -13,7 +13,7 @@
 #include <cursor-shape-client.h>
 #include <math.h>
 #include <string.h>
-#include <xkbcommon/xkbcommon-keysyms.h>
+#include <xkbcommon/xkbcommon.h>
 
 // The maximum area below which a click will cancel the selection.
 static const double CANCEL_THRESHOLD = 2.0;
@@ -649,7 +649,7 @@ void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
         break;
     case XKB_KEY_Return:
         // In edit mode, an explicit confirmation is necessary
-        if (event.type == KEYBOARD_EVENT_RELEASE &&
+        if (event.type == KEYBOARD_EVENT_PRESS &&
             region->state == REGION_PICKER_EDITING &&
             picker->surface->wl_surface == event.focus) {
             confirm_selection(picker);

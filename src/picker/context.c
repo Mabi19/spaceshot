@@ -6,7 +6,6 @@
 #include "wayland/globals.h"
 #include "wayland/screen-capture.h"
 #include "wayland/seat.h"
-#include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 
 static RenderDisplayList picker_surface_draw(void *data) {
@@ -83,7 +82,7 @@ static void picker_surface_mouse(void *data, MouseEvent ev) {
 static void picker_surface_keyboard(void *data, KeyboardEvent ev) {
     PickerSurface *picker = data;
 
-    if (ev.keysym == XKB_KEY_Escape && ev.type == KEYBOARD_EVENT_RELEASE &&
+    if (ev.keysym == XKB_KEY_Escape && ev.type == KEYBOARD_EVENT_PRESS &&
         picker->surface->wl_surface == ev.focus) {
         picker_context_finish(picker, PICKER_FINISH_REASON_CANCELLED, (BBox){});
         return;
