@@ -1,7 +1,6 @@
 #include "region.h"
 #include "anchor.h"
 #include "bbox.h"
-#include "link-buffer.h"
 #include "log.h"
 #include "picker/context.h"
 #include "picker/smart-border.h"
@@ -196,11 +195,9 @@ static int decompose_holey_bbox(BBox outer, BBox inner, BBox out[4]) {
     return i;
 }
 
-RenderDisplayList region_picker_draw(PickerSurface *picker) {
+void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     RegionPicker *region = &picker->region;
     OverlaySurface *surface = picker->surface;
-    link_buffer_reset(picker->command_arena);
-    RenderDisplayList dl = {.arena = picker->command_arena};
 
     // The full surface.
     BBox full_surface_box = {
@@ -218,21 +215,13 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
     border_box.width += 2.0 * border_width_pixels;
     border_box.height += 2.0 * border_width_pixels;
 
-    RENDER_RECT(
-        dl,
-        .bounds = full_surface_box,
-        .color = RENDER_COLOR_DEFAULT,
-        .texture = capture_frame_get_texture(picker->background),
-        .uv = RENDER_UV_DEFAULT,
-    );
-
     // dark overlay
     if (selection_box.width > 0 && selection_box.height > 0) {
         BBox rects[4];
         int count = decompose_holey_bbox(full_surface_box, border_box, rects);
         for (int i = 0; i < count; i++) {
             RENDER_RECT(
-                dl,
+                *dl,
                 .bounds = rects[i],
                 .color = config_color_to_render_color(
                     config_get()->region.background
@@ -241,7 +230,7 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
         }
     } else {
         RENDER_RECT(
-            dl,
+            *dl,
             .bounds = full_surface_box,
             .color =
                 config_color_to_render_color(config_get()->region.background),
@@ -293,7 +282,7 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
             };
 
             RENDER_RECT(
-                dl,
+                *dl,
                 .bounds = border_rect,
                 .color = border_color,
                 .texture = border_texture,
@@ -341,7 +330,7 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
                 double x = x_positions[i];
                 double y = y_positions[i];
                 RENDER_RECT(
-                    dl,
+                    *dl,
                     .bounds =
                         (BBox){
                             x - outer_half_size,
@@ -370,7 +359,7 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
                 double x = x_positions[i];
                 double y = y_positions[i];
                 RENDER_RECT(
-                    dl,
+                    *dl,
                     .bounds =
                         (BBox){
                             x - inner_half_size,
@@ -383,8 +372,6 @@ RenderDisplayList region_picker_draw(PickerSurface *picker) {
             }
         }
     }
-
-    return dl;
 }
 
 static void update_cursor_shape(PickerSurface *picker) {
@@ -465,8 +452,7 @@ static void confirm_selection(PickerSurface *picker) {
     picker_context_finish(picker, reason, result_box);
 }
 
-void region_picker_handle_mouse(void *data, MouseEvent event) {
-    PickerSurface *picker = data;
+void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     RegionPicker *region = &picker->region;
 
     RegionPickerState prev_state = region->state;
@@ -638,20 +624,10 @@ void region_picker_handle_mouse(void *data, MouseEvent event) {
     }
 }
 
-void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
-    PickerSurface *picker = data;
+void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
     RegionPicker *region = &picker->region;
 
     switch (event.keysym) {
-    case XKB_KEY_Escape:
-        // only cancel once, on the focused surface
-        if (event.type == KEYBOARD_EVENT_RELEASE &&
-            picker->surface->wl_surface == event.focus) {
-            picker_context_finish(
-                picker, PICKER_FINISH_REASON_CANCELLED, (BBox){}
-            );
-        }
-        break;
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
         // moving the selection only makes sense if a selection exists

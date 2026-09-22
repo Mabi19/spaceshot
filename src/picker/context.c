@@ -2,6 +2,7 @@
 #include "link-buffer.h"
 #include "log.h"
 #include "picker/common.h"
+#include "picker/output.h"
 #include "wayland/globals.h"
 #include "wayland/screen-capture.h"
 #include "wayland/seat.h"
@@ -10,13 +11,34 @@
 
 static RenderDisplayList picker_surface_draw(void *data) {
     PickerSurface *picker = data;
+
+    link_buffer_reset(picker->command_arena);
+    RenderDisplayList dl = {.arena = picker->command_arena};
+
+    RENDER_RECT(
+        dl,
+        .bounds =
+            {0,
+             0,
+             picker->surface->device_width,
+             picker->surface->device_height},
+        .color = RENDER_COLOR_DEFAULT,
+        .texture = capture_frame_get_texture(picker->background),
+        .uv = RENDER_UV_DEFAULT
+    );
+
     switch (picker->type) {
     case PICKER_TYPE_REGION:
-        return region_picker_draw(picker);
-    // TODO
+        region_picker_draw(picker, &dl);
+        break;
+    case PICKER_TYPE_OUTPUT:
+        output_picker_draw(picker, &dl);
+        break;
     default:
         REPORT_UNHANDLED("picker type", "%d", picker->type);
     }
+
+    return dl;
 }
 
 static void picker_surface_close(void *data) {
@@ -35,7 +57,9 @@ static void picker_surface_scale(void *data, uint32_t scale) {
                 smart_border_context_start(picker->background, scale);
         }
         break;
-    // TODO
+    case PICKER_TYPE_OUTPUT:
+        output_picker_recalculate_label_size(picker, scale);
+        break;
     default:
         REPORT_UNHANDLED("picker type", "%d", picker->type);
     }
@@ -48,7 +72,9 @@ static void picker_surface_mouse(void *data, MouseEvent ev) {
     case PICKER_TYPE_REGION:
         region_picker_handle_mouse(picker, ev);
         break;
-    // TODO
+    case PICKER_TYPE_OUTPUT:
+        output_picker_handle_mouse(picker, ev);
+        break;
     default:
         REPORT_UNHANDLED("picker type", "%d", picker->type);
     }
@@ -57,22 +83,19 @@ static void picker_surface_mouse(void *data, MouseEvent ev) {
 static void picker_surface_keyboard(void *data, KeyboardEvent ev) {
     PickerSurface *picker = data;
 
-    if (xkb_state_mod_name_is_active(
-            wayland_globals.seat_dispatcher->keyboard_data.state,
-            XKB_MOD_NAME_CTRL,
-            XKB_STATE_MODS_EFFECTIVE
-        ) > 0 &&
-        ev.keysym == XKB_KEY_Escape) {
-        // TODO: remove this once I can be reasonably sure that exiting works
-        // TODO: also ew we need an easier way to check mods
-        exit(0);
+    if (ev.keysym == XKB_KEY_Escape && ev.type == KEYBOARD_EVENT_RELEASE &&
+        picker->surface->wl_surface == ev.focus) {
+        picker_context_finish(picker, PICKER_FINISH_REASON_CANCELLED, (BBox){});
+        return;
     }
 
     switch (picker->type) {
     case PICKER_TYPE_REGION:
         region_picker_handle_keyboard(picker, ev);
         break;
-    // TODO
+    case PICKER_TYPE_OUTPUT:
+        // no picker-specific keyboard actions
+        break;
     default:
         REPORT_UNHANDLED("picker type", "%d", picker->type);
     }
@@ -127,6 +150,8 @@ static void picker_surface_destroy(PickerSurface *picker) {
         }
         smart_border_context_unref(picker->smart_border);
     }
+    output_picker_destroy(picker);
+
     link_buffer_destroy(picker->command_arena);
     overlay_surface_destroy(picker->surface);
     capture_frame_destroy(picker->background);
@@ -146,11 +171,14 @@ void picker_context_init(
         if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT) {
             PickerSurface *picker =
                 picker_surface_new(ctx, frame->output, frame);
+            picker->type = type;
             switch (type) {
             case PICKER_TYPE_REGION:
                 region_picker_init(picker);
                 break;
-            // TODO
+            case PICKER_TYPE_OUTPUT:
+                output_picker_init(picker);
+                break;
             default:
                 REPORT_UNHANDLED("picker type", "%d", type);
             }
@@ -182,10 +210,14 @@ void picker_context_finish(
         case PICKER_FINISH_REASON_SELECTED: {
             finalize_picker_setup();
             Image *img = capture_frame_get_image(picker->background);
-            // with a full-image BBox, this is essentially just a copy
-            Image *cropped = image_crop(
-                img, crop_box.x, crop_box.y, crop_box.width, crop_box.height
-            );
+            Image *cropped;
+            if (crop_box.width > 0 && crop_box.height > 0) {
+                cropped = image_crop(
+                    img, crop_box.x, crop_box.y, crop_box.width, crop_box.height
+                );
+            } else {
+                cropped = image_copy(img);
+            }
             // img is destroyed here and cropped is destroyed by the finalize
             picker_surface_destroy(picker);
             finalize_picker_finish(cropped);

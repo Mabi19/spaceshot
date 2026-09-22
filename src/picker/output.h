@@ -1,44 +1,27 @@
 #pragma once
-#include "picker/common.h"
-#include "wayland/overlay-surface.h"
-#include "wayland/screen-capture.h"
+#include "wayland/seat.h"
 
 typedef struct PickerSurface PickerSurface;
 
 struct OutputPicker;
 
-typedef void (*OutputPickerFinishCallback)(
-    struct OutputPicker *picker, PickerFinishReason reason
-);
-
 typedef enum {
     OUTPUT_PICKER_INACTIVE,
     OUTPUT_PICKER_ACTIVE,
-    OUTPUT_PICKER_UNINITIALIZED,
 } OutputPickerState;
 
 typedef struct OutputPicker {
-    OverlaySurface *surface;
-
     OutputPickerState state;
-    OutputPickerFinishCallback finish_callback;
-
-    LinkBuffer *command_arena;
-
     char *output_name;
     RenderTextMetrics label_size;
     bool move_label_down;
-
-    CaptureFrame *background;
 } OutputPicker;
 
-/**
- * Note that the frame is _not_ owned by the @c OutputPicker, and needs to stay
- * alive for as long as the RegionPicker does.
- */
-OutputPicker *output_picker_new(
-    WrappedOutput *output,
-    CaptureFrame *background,
-    OutputPickerFinishCallback finish_callback
+void output_picker_init(PickerSurface *picker);
+void output_picker_destroy(PickerSurface *picker);
+void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl);
+void output_picker_handle_mouse(PickerSurface *picker, MouseEvent event);
+void output_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event);
+void output_picker_recalculate_label_size(
+    PickerSurface *picker, uint32_t scale
 );
-void output_picker_destroy(OutputPicker *picker);

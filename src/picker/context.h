@@ -22,10 +22,8 @@ typedef struct PickerSurface {
     SmartBorderContext *smart_border;
 
     PickerType type;
-    union {
-        RegionPicker region;
-        OutputPicker output;
-    };
+    RegionPicker region;
+    OutputPicker output;
     struct wl_list link;
 } PickerSurface;
 
@@ -41,6 +39,8 @@ void picker_context_init(
 /**
  * Call this from within the picker when the screenshot is finished or
  * cancelled.
+ * crop_box only matters when the reason is SELECTED;
+ * use <=0 width and height if you don't want cropping.
  */
 void picker_context_finish(
     PickerSurface *surface, PickerFinishReason reason, BBox crop_box

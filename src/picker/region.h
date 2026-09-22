@@ -1,15 +1,13 @@
 #pragma once
 #include "render/command.h"
 #include "wayland/seat.h"
-#include <threads.h>
-#include <wayland-client.h>
 
 typedef struct PickerSurface PickerSurface;
 
 typedef enum {
     REGION_PICKER_EMPTY,
     REGION_PICKER_DRAGGING,
-    REGION_PICKER_EDITING
+    REGION_PICKER_EDITING,
 } RegionPickerState;
 
 typedef struct {
@@ -36,6 +34,6 @@ typedef struct {
 } RegionPicker;
 
 void region_picker_init(PickerSurface *picker);
-RenderDisplayList region_picker_draw(PickerSurface *picker);
-void region_picker_handle_mouse(void *data, MouseEvent event);
-void region_picker_handle_keyboard(void *data, KeyboardEvent event);
+void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl);
+void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event);
+void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event);
