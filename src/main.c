@@ -4,8 +4,7 @@
 #include "link-buffer.h"
 #include "log.h"
 #include "paths.h"
-#include "picker/output.h"
-#include "picker/region.h"
+#include "picker/context.h"
 #include "render/renderer.h"
 #include "wayland/clipboard.h"
 #include "wayland/globals.h"
@@ -24,37 +23,6 @@
 #include <unistd.h>
 #include <wayland-client.h>
 
-/** A capture entry's state ("what is it used for") */
-typedef enum {
-    /* Hasn't yet received its image. */
-    CAPTURE_ENTRY_STATE_EMPTY = 0,
-    /* Has a region picker active. */
-    CAPTURE_ENTRY_STATE_REGION_PICKER,
-    /* Has an output picker active. */
-    CAPTURE_ENTRY_STATE_OUTPUT_PICKER,
-    /* Has an image saved, and will eventually be transformed into one of the
-       other types. */
-    CAPTURE_ENTRY_STATE_READY,
-} CaptureEntryState;
-
-/** The type of image this entry stores. */
-typedef enum {
-    CAPTURE_ENTRY_TYPE_OUTPUT,
-    CAPTURE_ENTRY_TYPE_TOPLEVEL,
-} CaptureEntryType;
-
-typedef struct {
-    void *picker;
-    CaptureEntryState state;
-    CaptureEntryType frame_type;
-    union {
-        WrappedOutput *output;
-        WrappedToplevel *toplevel;
-    };
-    CaptureFrame *frame;
-    struct wl_list link;
-} CaptureEntry;
-
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
@@ -63,7 +31,9 @@ static bool should_clipboard_wait = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
 static Arguments args;
+/** list of CaptureEntry */
 static struct wl_list active_captures;
+static PickerContext pickers;
 static struct wl_display *display;
 
 /**
@@ -228,129 +198,50 @@ static void finish_predefined_region_screenshot(
     image_destroy(cropped);
 }
 
-static void capture_entry_destroy(CaptureEntry *entry) {
-    if (entry->picker) {
-        switch (entry->state) {
-        case CAPTURE_ENTRY_STATE_REGION_PICKER:
-            region_picker_destroy(entry->picker);
-            break;
-        case CAPTURE_ENTRY_STATE_OUTPUT_PICKER:
-            output_picker_destroy(entry->picker);
-            break;
-        default:
-            REPORT_UNHANDLED("picker entry type", "%d", entry->state);
-        }
-    }
-    capture_frame_destroy(entry->frame);
-    wl_list_remove(&entry->link);
-    free(entry);
-}
-
-static void capture_entry_destroy_all() {
-    CaptureEntry *entry, *tmp;
-    wl_list_for_each_safe(entry, tmp, &active_captures, link) {
-        capture_entry_destroy(entry);
-    }
-}
-
-static void picker_finish_generic(
-    void *picker,
-    PickerFinishReason reason,
-    Image *(*result_image_callback)(CaptureEntry *entry, void *data),
-    void *data
-) {
-    CaptureEntry *entry, *tmp;
-    Image *to_save = NULL;
+// This function is not static because it is called by the picker context.
+ClipboardCopyOffer *finalize_picker_setup() {
     ClipboardCopy *copy_source = NULL;
     ClipboardCopyOffer *image_png_offer = NULL;
-    bool should_copy = config_get()->copy_to_clipboard;
-    wl_list_for_each_safe(entry, tmp, &active_captures, link) {
-        if (entry->picker != picker) {
-            continue;
-        }
-
-        if (reason == PICKER_FINISH_REASON_SELECTED) {
-            if (should_copy) {
-                // Set up the copy while the picker's still alive
-                copy_source = clipboard_copy_setup(true);
-                assert(copy_source);
-                copy_source->finished = clipboard_copy_finish;
-                image_png_offer =
-                    clipboard_copy_offer_mime(copy_source, "image/png");
-                clipboard_copy_activate(copy_source);
-            }
-
-            to_save = result_image_callback(entry, data);
-            // should_active_wait is unset later
-        } else if (reason == PICKER_FINISH_REASON_CANCELLED) {
-            printf("selection cancelled\n");
-            was_cancelled = true;
-            should_active_wait = false;
-        }
-
-        capture_entry_destroy(entry);
+    if (config_get()->copy_to_clipboard) {
+        // Set up the copy while the picker's still alive
+        copy_source = clipboard_copy_setup(true);
+        assert(copy_source);
+        copy_source->finished = clipboard_copy_finish;
+        image_png_offer = clipboard_copy_offer_mime(copy_source, "image/png");
+        clipboard_copy_activate(copy_source);
     }
-
-    // The DESTROYED reason is the only one that isn't user-initiated,
-    // and shouldn't destroy all the others.
-    if (reason != PICKER_FINISH_REASON_DESTROYED) {
-        capture_entry_destroy_all();
-    }
-
-    if (to_save) {
-        // saving is an expensive operation - flush the display first so that
-        // the region picker is properly closed before we block
-        // TODO: properly poll the display fd if EAGAIN
-        if (wl_display_flush(display) == -1) {
-            report_warning(
-                "flushing Wayland display failed before encoding image"
-            );
-        }
-
-        LinkBuffer *out_data = image_save_png(to_save);
-        image_destroy(to_save);
-        if (should_copy) {
-            image_png_offer->buffer = out_data;
-            clipboard_copy_run(copy_source);
-            should_clipboard_wait = true;
-        }
-
-        char *output_filename = get_output_filename();
-        save_screenshot(out_data, output_filename);
-        send_notification(output_filename, should_copy);
-
-        free(output_filename);
-        should_active_wait = false;
-    }
+    return image_png_offer;
 }
 
-static Image *region_picker_finish_get_image(CaptureEntry *entry, void *data) {
-    BBox result_region = *(BBox *)data;
-    return image_crop(
-        capture_frame_get_image(entry->frame),
-        result_region.x,
-        result_region.y,
-        result_region.width,
-        result_region.height
-    );
-}
-
-static void region_picker_finish(
-    RegionPicker *picker, PickerFinishReason reason, BBox result_region
-) {
-    picker_finish_generic(
-        picker, reason, region_picker_finish_get_image, &result_region
-    );
-}
-
-static Image *output_picker_finish_get_image(CaptureEntry *entry, void *) {
-    // picker_finish_generic frees this separately from the source image
-    return image_copy(capture_frame_get_image(entry->frame));
+void finalize_picker_cancel() {
+    printf("selection cancelled\n");
+    was_cancelled = true;
+    should_active_wait = false;
 }
 
 static void
-output_picker_finish(OutputPicker *picker, PickerFinishReason reason) {
-    picker_finish_generic(picker, reason, output_picker_finish_get_image, NULL);
+finalize_picker_finish(Image *result, ClipboardCopyOffer *copy_offer) {
+    // saving is an expensive operation - flush the display first so that
+    // the pickers are properly closed before we block
+    // TODO: properly poll the display fd if EAGAIN
+    if (wl_display_flush(display) == -1) {
+        report_warning("flushing Wayland display failed before encoding image");
+    }
+
+    LinkBuffer *out_data = image_save_png(result);
+    image_destroy(result);
+    if (copy_offer) {
+        copy_offer->buffer = out_data;
+        clipboard_copy_run(copy_source);
+        should_clipboard_wait = true;
+    }
+
+    char *output_filename = get_output_filename();
+    save_screenshot(out_data, output_filename);
+    send_notification(output_filename, copy_offer != NULL);
+
+    free(output_filename);
+    should_active_wait = false;
 }
 
 static bool is_output_matching(WrappedOutput *output) {
@@ -417,7 +308,6 @@ static void handle_captured_output(CaptureFrame *frame, void *data) {
     if (!entry->frame) {
         report_error_fatal("capturing output %s failed\n", entry->output->name);
     }
-    entry->state = CAPTURE_ENTRY_STATE_READY;
 }
 
 static void add_new_output(WrappedOutput *output) {
@@ -448,7 +338,6 @@ static void add_new_output(WrappedOutput *output) {
     }
 
     CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
-    entry->state = CAPTURE_ENTRY_STATE_EMPTY;
     entry->frame_type = CAPTURE_ENTRY_TYPE_OUTPUT;
     entry->output = output;
     wl_list_insert(&active_captures, &entry->link);
@@ -470,7 +359,6 @@ static void handle_captured_toplevel(CaptureFrame *frame, void *data) {
             "capturing toplevel %s failed\n", entry->toplevel->identifier
         );
     }
-    entry->state = CAPTURE_ENTRY_STATE_READY;
 }
 
 static void add_new_toplevel(WrappedToplevel *toplevel) {
@@ -490,7 +378,6 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
     }
 
     CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
-    entry->state = CAPTURE_ENTRY_STATE_EMPTY;
     entry->frame_type = CAPTURE_ENTRY_TYPE_TOPLEVEL;
     entry->toplevel = toplevel;
     wl_list_insert(&active_captures, &entry->link);
@@ -606,22 +493,12 @@ static void dispatch_capture_entries() {
                 }
             }
             if (found) {
-                capture_entry_destroy_all();
+                capture_entry_destroy_all(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching output");
             }
         } else {
-            CaptureEntry *entry;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->frame_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
-                    continue;
-                }
-
-                entry->picker = region_picker_new(
-                    entry->output, entry->frame, region_picker_finish
-                );
-                entry->state = CAPTURE_ENTRY_STATE_REGION_PICKER;
-            }
+            picker_context_init(&pickers, PICKER_TYPE_REGION, &active_captures);
         }
     } else if (args.mode == CAPTURE_OUTPUT) {
         if (args.output_params.output_name) {
@@ -638,7 +515,7 @@ static void dispatch_capture_entries() {
                 }
             }
             if (found) {
-                capture_entry_destroy_all();
+                capture_entry_destroy_all(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching output");
             }
@@ -661,17 +538,9 @@ static void dispatch_capture_entries() {
                     }
                 }
             } else if (output_count > 1) {
-                CaptureEntry *entry;
-                wl_list_for_each(entry, &active_captures, link) {
-                    if (entry->frame_type != CAPTURE_ENTRY_TYPE_OUTPUT) {
-                        continue;
-                    }
-
-                    entry->picker = output_picker_new(
-                        entry->output, entry->frame, output_picker_finish
-                    );
-                    entry->state = CAPTURE_ENTRY_STATE_OUTPUT_PICKER;
-                }
+                picker_context_init(
+                    &pickers, PICKER_TYPE_OUTPUT, &active_captures
+                );
             } else {
                 report_error_fatal("no outputs captured");
             }
@@ -691,7 +560,7 @@ static void dispatch_capture_entries() {
                 }
             }
             if (found) {
-                capture_entry_destroy_all();
+                capture_entry_destroy_all(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching toplevel");
             }
@@ -756,7 +625,7 @@ int main(int argc, char **argv) {
         CaptureEntry *entry;
         bool is_waiting = false;
         wl_list_for_each(entry, &active_captures, link) {
-            if (entry->state == CAPTURE_ENTRY_STATE_EMPTY) {
+            if (!entry->frame) {
                 log_debug("waiting for picker entry %p\n", (void *)entry);
                 is_waiting = true;
                 break;

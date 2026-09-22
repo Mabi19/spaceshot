@@ -1,5 +1,4 @@
 #pragma once
-
 #include "image.h"
 #include "render/texture.h"
 #include "wayland/output.h"

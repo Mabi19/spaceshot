@@ -1,6 +1,11 @@
 #pragma once
 
 typedef enum {
+    PICKER_TYPE_REGION,
+    PICKER_TYPE_OUTPUT,
+} PickerType;
+
+typedef enum {
     /** Selected successfully */
     PICKER_FINISH_REASON_SELECTED,
     /** The selection was cancelled (e.g. via the Escape key)  */

@@ -3,32 +3,32 @@
 #include "bbox.h"
 #include "link-buffer.h"
 #include "log.h"
+#include "picker/context.h"
 #include "picker/smart-border.h"
 #include "render/command.h"
 #include "render/texture.h"
 #include "wayland/globals.h"
-#include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/seat.h"
 #include <config/config.h>
 #include <cursor-shape-client.h>
 #include <math.h>
-#include <stdlib.h>
 #include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 // The maximum area below which a click will cancel the selection.
 static const double CANCEL_THRESHOLD = 2.0;
 
-static BBox get_bbox_containing_selection(RegionPicker *picker) {
-    if (picker->state == REGION_PICKER_EMPTY) {
+static BBox get_bbox_containing_selection(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
+    if (region->state == REGION_PICKER_EMPTY) {
         return (BBox){.x = 0, .y = 0, .width = 0, .height = 0};
     }
 
-    double left = fmin(picker->x1, picker->x2);
-    double top = fmin(picker->y1, picker->y2);
-    double right = fmax(picker->x1, picker->x2);
-    double bottom = fmax(picker->y1, picker->y2);
+    double left = fmin(region->x1, region->x2);
+    double top = fmin(region->y1, region->y2);
+    double right = fmax(region->x1, region->x2);
+    double bottom = fmax(region->y1, region->y2);
 
     BBox result = {
         .x = left,
@@ -52,30 +52,33 @@ static BBox get_bbox_containing_selection(RegionPicker *picker) {
  * Adjust the first corner's coordinates so that the selection stays the same
  * size, but doesn't change size upon sub-pixel moving.
  */
-static void adjust_opposite_corner_for_movement(RegionPicker *picker) {
+static void adjust_opposite_corner_for_movement(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
     double scale = picker->surface->scale / 120.0;
-    double x1 = picker->x1 * scale;
-    double y1 = picker->y1 * scale;
-    double x2 = picker->x2 * scale;
-    double y2 = picker->y2 * scale;
+    double x1 = region->x1 * scale;
+    double y1 = region->y1 * scale;
+    double x2 = region->x2 * scale;
+    double y2 = region->y2 * scale;
     double x_offset = x2 - floor(x2);
     double y_offset = y2 - floor(y2);
     x1 = floor(x1) + x_offset;
     y1 = floor(y1) + y_offset;
-    picker->x1 = x1 / scale;
-    picker->y1 = y1 / scale;
+    region->x1 = x1 / scale;
+    region->y1 = y1 / scale;
 }
 
-static bool
-hit_test_at_position(RegionPicker *picker, double x, double y, Anchor *anchor) {
-    const double NEAR_THRESHOLD = 12;
+static bool hit_test_at_position(
+    PickerSurface *picker, double x, double y, Anchor *anchor
+) {
+    RegionPicker *region = &picker->region;
+    constexpr double NEAR_THRESHOLD = 12;
 
-    double left = fmax(fmin(picker->x1, picker->x2), 0);
+    double left = fmax(fmin(region->x1, region->x2), 0);
     double right =
-        fmin(fmax(picker->x1, picker->x2), picker->surface->logical_width);
-    double top = fmax(fmin(picker->y1, picker->y2), 0);
+        fmin(fmax(region->x1, region->x2), picker->surface->logical_width);
+    double top = fmax(fmin(region->y1, region->y2), 0);
     double bottom =
-        fmin(fmax(picker->y1, picker->y2), picker->surface->logical_height);
+        fmin(fmax(region->y1, region->y2), picker->surface->logical_height);
 
     double dist_left = fabs(left - x);
     double dist_right = fabs(right - x);
@@ -193,10 +196,9 @@ static int decompose_holey_bbox(BBox outer, BBox inner, BBox out[4]) {
     return i;
 }
 
-static RenderDisplayList region_picker_draw(void *data) {
-    RegionPicker *picker = data;
+RenderDisplayList region_picker_draw(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
     OverlaySurface *surface = picker->surface;
-
     link_buffer_reset(picker->command_arena);
     RenderDisplayList dl = {.arena = picker->command_arena};
 
@@ -246,8 +248,8 @@ static RenderDisplayList region_picker_draw(void *data) {
         );
     }
 
-    if (picker->state != REGION_PICKER_EMPTY &&
-        !(picker->x1 == picker->x2 && picker->y1 == picker->y2)) {
+    if (region->state != REGION_PICKER_EMPTY &&
+        !(region->x1 == region->x2 && region->y1 == region->y2)) {
         RenderColor border_color;
         RenderTexture *border_texture = NULL;
         if (config_get()->region.selection_border_color.type ==
@@ -299,7 +301,7 @@ static RenderDisplayList region_picker_draw(void *data) {
             );
         }
 
-        if (picker->state == REGION_PICKER_EDITING) {
+        if (region->state == REGION_PICKER_EDITING) {
             double border_center_offset = border_width_pixels / 2.0;
             double x_positions[] = {
                 selection_box.x - border_center_offset,
@@ -385,20 +387,22 @@ static RenderDisplayList region_picker_draw(void *data) {
     return dl;
 }
 
-static void update_cursor_shape(RegionPicker *picker) {
+static void update_cursor_shape(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
+
     enum wp_cursor_shape_device_v1_shape shape;
-    switch (picker->state) {
+    switch (region->state) {
     case REGION_PICKER_EMPTY:
         shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
         break;
     case REGION_PICKER_DRAGGING:
-        shape = picker->move_flag ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
+        shape = region->move_flag ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING
                                   : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
         break;
     case REGION_PICKER_EDITING:
         if (wayland_globals.seat_dispatcher->pointer_data.focus ==
             picker->surface->wl_surface) {
-            if (picker->edit_data.is_move) {
+            if (region->edit_data.is_move) {
                 shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING;
             } else {
                 Anchor anchor;
@@ -418,54 +422,59 @@ static void update_cursor_shape(RegionPicker *picker) {
         }
         break;
     default:
-        REPORT_UNHANDLED("region picker state", "%d", picker->state);
+        REPORT_UNHANDLED("region picker state", "%d", region->state);
     }
     seat_dispatcher_set_cursor_for_surface(
         wayland_globals.seat_dispatcher, picker->surface, shape
     );
 }
 
-static void change_state(RegionPicker *picker, RegionPickerState new_state) {
+static void change_state(PickerSurface *picker, RegionPickerState new_state) {
+    RegionPicker *region = &picker->region;
+
     switch (new_state) {
     case REGION_PICKER_EMPTY:
         break;
     case REGION_PICKER_DRAGGING:
-        picker->move_flag = false;
+        region->move_flag = false;
         break;
     case REGION_PICKER_EDITING:
-        memset(&picker->edit_data, 0, sizeof(picker->edit_data));
+        memset(&region->edit_data, 0, sizeof(region->edit_data));
         break;
     }
-    picker->state = new_state;
+    region->state = new_state;
     update_cursor_shape(picker);
 }
 
-static void confirm_selection(RegionPicker *picker) {
+static void confirm_selection(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
+
     BBox result_box = get_bbox_containing_selection(picker);
     double selected_region_area = result_box.width * result_box.height;
     log_debug(
         "area: %f; %f %f %f %f\n",
         selected_region_area,
-        picker->x1,
-        picker->y1,
-        picker->x2,
-        picker->y2
+        region->x1,
+        region->y1,
+        region->x2,
+        region->y2
     );
     PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
                                     ? PICKER_FINISH_REASON_SELECTED
                                     : PICKER_FINISH_REASON_CANCELLED;
-
-    picker->finish_callback(picker, reason, result_box);
+    // TODO: result box
+    picker_context_finish(picker, reason);
 }
 
-static void region_picker_handle_mouse(void *data, MouseEvent event) {
-    RegionPicker *picker = data;
+void region_picker_handle_mouse(void *data, MouseEvent event) {
+    PickerSurface *picker = data;
+    RegionPicker *region = &picker->region;
 
-    RegionPickerState prev_state = picker->state;
-    double prev_x1 = picker->x1;
-    double prev_y1 = picker->y1;
-    double prev_x2 = picker->x2;
-    double prev_y2 = picker->y2;
+    RegionPickerState prev_state = region->state;
+    double prev_x1 = region->x1;
+    double prev_y1 = region->y1;
+    double prev_x2 = region->x2;
+    double prev_y2 = region->y2;
 
     // constrain the selection into the bounds of the picker
     double surface_x =
@@ -473,21 +482,21 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
     double surface_y =
         fmax(0.0, fmin(event.surface_y, picker->surface->logical_height));
 
-    switch (picker->state) {
+    switch (region->state) {
     case REGION_PICKER_EMPTY: {
         if (event.buttons_pressed & POINTER_BUTTON_LEFT &&
             picker->surface->wl_surface == event.focus) {
-            picker->x1 = surface_x;
-            picker->y1 = surface_y;
-            picker->x2 = surface_x;
-            picker->y2 = surface_y;
+            region->x1 = surface_x;
+            region->y1 = surface_y;
+            region->x2 = surface_x;
+            region->y2 = surface_y;
             change_state(picker, REGION_PICKER_DRAGGING);
         }
         break;
     }
     case REGION_PICKER_DRAGGING: {
         if (event.buttons_released & POINTER_BUTTON_LEFT) {
-            if (picker->edit_flag) {
+            if (region->edit_flag) {
                 change_state(picker, REGION_PICKER_EDITING);
             } else {
                 confirm_selection(picker);
@@ -495,62 +504,62 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
             }
         } else if (event.buttons_held & POINTER_BUTTON_LEFT) {
             if (picker->surface->wl_surface == event.focus) {
-                if (picker->move_flag) {
-                    double dx = surface_x - picker->x2;
-                    double dy = surface_y - picker->y2;
-                    picker->x1 += dx;
-                    picker->y1 += dy;
-                    picker->x2 += dx;
-                    picker->y2 += dy;
+                if (region->move_flag) {
+                    double dx = surface_x - region->x2;
+                    double dy = surface_y - region->y2;
+                    region->x1 += dx;
+                    region->y1 += dy;
+                    region->x2 += dx;
+                    region->y2 += dy;
                 } else {
-                    picker->x2 = surface_x;
-                    picker->y2 = surface_y;
+                    region->x2 = surface_x;
+                    region->y2 = surface_y;
                 }
             }
         }
         break;
     }
     case REGION_PICKER_EDITING: {
-        if (picker->edit_data.is_move) {
+        if (region->edit_data.is_move) {
             // This constrains it so that the box is always fully on the screen.
-            double new_x1 = surface_x - picker->edit_data.grab_offset_x;
-            double new_y1 = surface_y - picker->edit_data.grab_offset_y;
-            if (picker->x1 < picker->x2) {
+            double new_x1 = surface_x - region->edit_data.grab_offset_x;
+            double new_y1 = surface_y - region->edit_data.grab_offset_y;
+            if (region->x1 < region->x2) {
                 new_x1 = fmin(
                     fmax(new_x1, 0),
-                    picker->surface->logical_width - (picker->x2 - picker->x1)
+                    picker->surface->logical_width - (region->x2 - region->x1)
                 );
             } else {
                 new_x1 = fmax(
                     fmin(new_x1, picker->surface->logical_width),
-                    picker->x1 - picker->x2
+                    region->x1 - region->x2
                 );
             }
 
-            if (picker->y1 < picker->y2) {
+            if (region->y1 < region->y2) {
                 new_y1 = fmin(
                     fmax(new_y1, 0),
-                    picker->surface->logical_height - (picker->y2 - picker->y1)
+                    picker->surface->logical_height - (region->y2 - region->y1)
                 );
             } else {
                 new_y1 = fmax(
                     fmin(new_y1, picker->surface->logical_height),
-                    picker->y1 - picker->y2
+                    region->y1 - region->y2
                 );
             }
 
-            picker->x2 += new_x1 - picker->x1;
-            picker->y2 += new_y1 - picker->y1;
-            picker->x1 = new_x1;
-            picker->y1 = new_y1;
+            region->x2 += new_x1 - region->x1;
+            region->y2 += new_y1 - region->y1;
+            region->x1 = new_x1;
+            region->y1 = new_y1;
         } else {
-            if (picker->edit_data.modify_x) {
-                *picker->edit_data.modify_x =
-                    surface_x - picker->edit_data.grab_offset_x;
+            if (region->edit_data.modify_x) {
+                *region->edit_data.modify_x =
+                    surface_x - region->edit_data.grab_offset_x;
             }
-            if (picker->edit_data.modify_y) {
-                *picker->edit_data.modify_y =
-                    surface_y - picker->edit_data.grab_offset_y;
+            if (region->edit_data.modify_y) {
+                *region->edit_data.modify_y =
+                    surface_y - region->edit_data.grab_offset_y;
             }
         }
 
@@ -563,93 +572,96 @@ static void region_picker_handle_mouse(void *data, MouseEvent event) {
                         picker, surface_x, surface_y, &anchor
                     )) {
                     double *left =
-                        picker->x1 < picker->x2 ? &picker->x1 : &picker->x2;
+                        region->x1 < region->x2 ? &region->x1 : &region->x2;
                     double *right =
-                        picker->x1 < picker->x2 ? &picker->x2 : &picker->x1;
+                        region->x1 < region->x2 ? &region->x2 : &region->x1;
                     double *top =
-                        picker->y1 < picker->y2 ? &picker->y1 : &picker->y2;
+                        region->y1 < region->y2 ? &region->y1 : &region->y2;
                     double *bottom =
-                        picker->y1 < picker->y2 ? &picker->y2 : &picker->y1;
+                        region->y1 < region->y2 ? &region->y2 : &region->y1;
 
                     if (anchor == ANCHOR_CENTER) {
                         // we're not forced into fixing any specific corner in
                         // place here, so this function also works
                         adjust_opposite_corner_for_movement(picker);
 
-                        picker->edit_data.is_move = true;
-                        picker->edit_data.grab_offset_x =
-                            surface_x - picker->x1;
-                        picker->edit_data.grab_offset_y =
-                            surface_y - picker->y1;
+                        region->edit_data.is_move = true;
+                        region->edit_data.grab_offset_x =
+                            surface_x - region->x1;
+                        region->edit_data.grab_offset_y =
+                            surface_y - region->y1;
                     } else {
-                        picker->edit_data.is_move = false;
+                        region->edit_data.is_move = false;
                         if (anchor & ANCHOR_LEFT) {
-                            picker->edit_data.modify_x = left;
-                            picker->edit_data.grab_offset_x = surface_x - *left;
+                            region->edit_data.modify_x = left;
+                            region->edit_data.grab_offset_x = surface_x - *left;
                         } else if (anchor & ANCHOR_RIGHT) {
-                            picker->edit_data.modify_x = right;
-                            picker->edit_data.grab_offset_x =
+                            region->edit_data.modify_x = right;
+                            region->edit_data.grab_offset_x =
                                 surface_x - *right;
                         }
 
                         if (anchor & ANCHOR_TOP) {
-                            picker->edit_data.modify_y = top;
-                            picker->edit_data.grab_offset_y = surface_y - *top;
+                            region->edit_data.modify_y = top;
+                            region->edit_data.grab_offset_y = surface_y - *top;
                         } else if (anchor & ANCHOR_BOTTOM) {
-                            picker->edit_data.modify_y = bottom;
-                            picker->edit_data.grab_offset_y =
+                            region->edit_data.modify_y = bottom;
+                            region->edit_data.grab_offset_y =
                                 surface_y - *bottom;
                         }
                     }
                 } else {
                     // click outside
-                    picker->x1 = surface_x;
-                    picker->y1 = surface_y;
-                    picker->x2 = surface_x;
-                    picker->y2 = surface_y;
+                    region->x1 = surface_x;
+                    region->y1 = surface_y;
+                    region->x2 = surface_x;
+                    region->y2 = surface_y;
                     change_state(picker, REGION_PICKER_DRAGGING);
                 }
             }
         } else if (event.buttons_released & POINTER_BUTTON_LEFT) {
-            picker->edit_data.is_move = false;
-            picker->edit_data.modify_x = NULL;
-            picker->edit_data.modify_y = NULL;
+            region->edit_data.is_move = false;
+            region->edit_data.modify_x = NULL;
+            region->edit_data.modify_y = NULL;
         }
 
         update_cursor_shape(picker);
         break;
     }
     default:
-        REPORT_UNHANDLED("region picker state", "%d", picker->state);
+        REPORT_UNHANDLED("region picker state", "%d", region->state);
     }
 
-    if (prev_state != picker->state || prev_x1 != picker->x1 ||
-        prev_y1 != picker->y1 || prev_x2 != picker->x2 ||
-        prev_y2 != picker->y2) {
+    if (prev_state != region->state || prev_x1 != region->x1 ||
+        prev_y1 != region->y1 || prev_x2 != region->x2 ||
+        prev_y2 != region->y2) {
         overlay_surface_queue_draw(picker->surface);
     }
 }
 
-static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
-    RegionPicker *picker = data;
+void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
+    PickerSurface *picker = data;
+    RegionPicker *region = &picker->region;
+
     switch (event.keysym) {
     case XKB_KEY_Escape:
         // only cancel once, on the focused surface
         if (event.type == KEYBOARD_EVENT_RELEASE &&
             picker->surface->wl_surface == event.focus) {
-            picker->finish_callback(
-                picker, PICKER_FINISH_REASON_CANCELLED, (BBox){}
+            // TODO: result box
+            picker_context_finish(
+                picker, PICKER_FINISH_REASON_CANCELLED //, (BBox){}
             );
         }
         break;
     case XKB_KEY_space:
     case XKB_KEY_Alt_L:
         // moving the selection only makes sense if a selection exists
-        if (picker->state != REGION_PICKER_EMPTY) {
-            picker->move_flag =
+        if (region->state != REGION_PICKER_EMPTY) {
+            region->move_flag =
                 event.type == KEYBOARD_EVENT_PRESS ? true : false;
         }
-        if (picker->state == REGION_PICKER_DRAGGING) {
+        if (region->state == REGION_PICKER_DRAGGING) {
             if (event.type == KEYBOARD_EVENT_PRESS) {
                 adjust_opposite_corner_for_movement(picker);
             }
@@ -659,12 +671,12 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
     case XKB_KEY_Control_L:
         // keep track of ctrl key state
         // so that it can be used when released
-        picker->edit_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
+        region->edit_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;
         break;
     case XKB_KEY_Return:
         // In edit mode, an explicit confirmation is necessary
         if (event.type == KEYBOARD_EVENT_RELEASE &&
-            picker->state == REGION_PICKER_EDITING &&
+            region->state == REGION_PICKER_EDITING &&
             picker->surface->wl_surface == event.focus) {
             confirm_selection(picker);
         }
@@ -673,77 +685,11 @@ static void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
     // TODO: Hold Shift to lock aspect ratio
 }
 
-static SeatListener region_picker_seat_listener = {
-    .mouse = region_picker_handle_mouse,
-    .keyboard = region_picker_handle_keyboard
-};
-
-static void region_picker_handle_surface_close(void *data) {
-    RegionPicker *picker = data;
-    picker->finish_callback(picker, PICKER_FINISH_REASON_DESTROYED, (BBox){});
-}
-
-static void region_picker_handle_scale(void *data, uint32_t scale) {
-    RegionPicker *picker = data;
-    if (!picker->smart_border &&
-        config_get()->region.selection_border_color.type ==
-            CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-        picker->smart_border =
-            smart_border_context_start(picker->background, scale);
-    }
-}
-
-RegionPicker *region_picker_new(
-    WrappedOutput *output,
-    CaptureFrame *background,
-    RegionPickerFinishCallback finish_callback
-) {
-    RegionPicker *result = calloc(1, sizeof(RegionPicker));
-    result->surface = overlay_surface_new(
-        output,
-        background->pixel_format,
-        (OverlaySurfaceHandlers){
-            .draw = region_picker_draw,
-            .close = region_picker_handle_surface_close,
-            .scale = region_picker_handle_scale,
-        },
-        result
-    );
-    result->state = REGION_PICKER_EMPTY;
-    result->background = background;
-
-    result->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
-
-    seat_dispatcher_add_listener(
-        wayland_globals.seat_dispatcher,
-        result->surface,
-        &region_picker_seat_listener,
-        result
-    );
-    update_cursor_shape(result);
-
-    result->finish_callback = finish_callback;
-
-    return result;
-}
-
-void region_picker_destroy(RegionPicker *picker) {
-    log_debug("destroying region picker %p\n", (void *)picker);
-
-    seat_dispatcher_remove_listener(
-        wayland_globals.seat_dispatcher, picker->surface
-    );
-
-    if (picker->smart_border) {
-        if (picker->smart_border->result_texture) {
-            picker->surface->renderer->texture_destroy(
-                picker->smart_border->result_texture
-            );
-        }
-        smart_border_context_unref(picker->smart_border);
-    }
-    link_buffer_destroy(picker->command_arena);
-    overlay_surface_destroy(picker->surface);
-
-    free(picker);
+void region_picker_init(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
+    region->state = REGION_PICKER_EMPTY;
+    region->move_flag = false;
+    region->edit_flag = false;
+    // edit_data is reset when switching to edit mode
+    update_cursor_shape(picker);
 }

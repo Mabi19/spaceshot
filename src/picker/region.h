@@ -1,11 +1,10 @@
 #pragma once
-#include "picker/common.h"
-#include "smart-border.h"
-#include "wayland/output.h"
-#include "wayland/overlay-surface.h"
-#include "wayland/screen-capture.h"
+#include "render/command.h"
+#include "wayland/seat.h"
 #include <threads.h>
 #include <wayland-client.h>
+
+typedef struct PickerSurface PickerSurface;
 
 typedef enum {
     REGION_PICKER_EMPTY,
@@ -13,23 +12,8 @@ typedef enum {
     REGION_PICKER_EDITING
 } RegionPickerState;
 
-struct RegionPicker;
-/**
- * A function to be called when the picker is done doing stuff, and is about to
- * be destroyed. It should always call `region_picker_destroy`.
- */
-typedef void (*RegionPickerFinishCallback)(
-    struct RegionPicker *picker, PickerFinishReason reason, BBox region
-);
-
-typedef struct RegionPicker {
-    OverlaySurface *surface;
+typedef struct {
     RegionPickerState state;
-    CaptureFrame *background;
-    SmartBorderContext *smart_border;
-    LinkBuffer *command_arena;
-
-    RegionPickerFinishCallback finish_callback;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.
     // In logical coordinates
     double x1, y1;
@@ -51,15 +35,7 @@ typedef struct RegionPicker {
     } edit_data;
 } RegionPicker;
 
-/**
- * Note that the frame is _not_ owned by the RegionPicker, and needs to stay
- * alive for as long as the RegionPicker does.
- */
-RegionPicker *region_picker_new(
-    WrappedOutput *output,
-    CaptureFrame *background,
-    RegionPickerFinishCallback finish_callback
-);
-/** Destroy the region picker. Note that this function does NOT call the
- * finish_callback. */
-void region_picker_destroy(RegionPicker *picker);
+void region_picker_init(PickerSurface *picker);
+RenderDisplayList region_picker_draw(PickerSurface *picker);
+void region_picker_handle_mouse(void *data, MouseEvent event);
+void region_picker_handle_keyboard(void *data, KeyboardEvent event);

@@ -3,6 +3,8 @@
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
 
+typedef struct PickerSurface PickerSurface;
+
 struct OutputPicker;
 
 typedef void (*OutputPickerFinishCallback)(
