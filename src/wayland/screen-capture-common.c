@@ -18,25 +18,31 @@ RenderTexture *capture_frame_get_texture(CaptureFrame *frame) {
 }
 
 void capture_frame_destroy(CaptureFrame *frame) {
+    log_debug("destroying capture frame %p\n", (void *)frame);
     if (frame->texture) {
         renderer_get_default()->texture_destroy(frame->texture);
     }
     if (frame->image) {
         image_destroy(frame->image);
     }
+    wl_list_remove(&frame->link);
     free(frame);
+}
+
+void capture_frame_destroy_list(struct wl_list *captures) {
+    CaptureFrame *frame, *tmp;
+    wl_list_for_each_safe(frame, tmp, captures, link) {
+        capture_frame_destroy(frame);
+    }
 }
 
 void capture_output_ext(
     WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 );
-
 bool capture_output_ext_is_available();
-
 void capture_output_wlr(
     WrappedOutput *output, FrameCaptureCallback image_callback, void *data
 );
-
 bool capture_output_wlr_is_available();
 
 typedef enum {

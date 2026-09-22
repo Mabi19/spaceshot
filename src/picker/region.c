@@ -462,8 +462,7 @@ static void confirm_selection(PickerSurface *picker) {
     PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
                                     ? PICKER_FINISH_REASON_SELECTED
                                     : PICKER_FINISH_REASON_CANCELLED;
-    // TODO: result box
-    picker_context_finish(picker, reason);
+    picker_context_finish(picker, reason, result_box);
 }
 
 void region_picker_handle_mouse(void *data, MouseEvent event) {
@@ -648,9 +647,8 @@ void region_picker_handle_keyboard(void *data, KeyboardEvent event) {
         // only cancel once, on the focused surface
         if (event.type == KEYBOARD_EVENT_RELEASE &&
             picker->surface->wl_surface == event.focus) {
-            // TODO: result box
             picker_context_finish(
-                picker, PICKER_FINISH_REASON_CANCELLED //, (BBox){}
+                picker, PICKER_FINISH_REASON_CANCELLED, (BBox){}
             );
         }
         break;

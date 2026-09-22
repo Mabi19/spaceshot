@@ -3,32 +3,19 @@
 #include "picker/output.h"
 #include "picker/region.h"
 #include "picker/smart-border.h"
-#include "wayland/output.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
-#include "wayland/toplevel.h"
 #include <wayland-client.h>
 
-/** The type of image this entry stores. */
-typedef enum {
-    CAPTURE_ENTRY_TYPE_OUTPUT,
-    CAPTURE_ENTRY_TYPE_TOPLEVEL,
-} CaptureEntryType;
-
 typedef struct {
-    CaptureEntryType frame_type;
-    union {
-        WrappedOutput *output;
-        WrappedToplevel *toplevel;
-    };
-    CaptureFrame *frame;
-    struct wl_list link;
-} CaptureEntry;
-
-void capture_entry_destroy(CaptureEntry *entry);
-void capture_entry_destroy_all(struct wl_list *captures);
+    /** list of CaptureEntry */
+    struct wl_list *captures;
+    /** list of PickerSurface */
+    struct wl_list pickers;
+} PickerContext;
 
 typedef struct PickerSurface {
+    PickerContext *ctx;
     OverlaySurface *surface;
     CaptureFrame *background;
     LinkBuffer *command_arena;
@@ -41,13 +28,6 @@ typedef struct PickerSurface {
     };
     struct wl_list link;
 } PickerSurface;
-
-typedef struct {
-    /** list of CaptureEntry */
-    struct wl_list *captures;
-    /** list of PickerSurface */
-    struct wl_list surfaces;
-} PickerContext;
 
 /**
  * @param captures list of CaptureEntry
@@ -62,4 +42,6 @@ void picker_context_init(
  * Call this from within the picker when the screenshot is finished or
  * cancelled.
  */
-void picker_context_finish(PickerSurface *surface, PickerFinishReason reason);
+void picker_context_finish(
+    PickerSurface *surface, PickerFinishReason reason, BBox crop_box
+);

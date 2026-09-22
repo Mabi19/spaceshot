@@ -22,6 +22,8 @@ typedef struct {
     struct ext_image_copy_capture_session_v1 *session;
     SharedBuffer *buffer;
     FrameCaptureCallback image_callback;
+    WrappedOutput *output;
+    WrappedToplevel *toplevel;
     void *user_data;
     // this context is passed as user data to two different listeners
     // so refcounting is necessary
@@ -38,6 +40,14 @@ static void frame_context_unref(FrameContext *context) {
             frame = calloc(1, sizeof(CaptureFrame));
             frame->image = context->result;
             frame->pixel_format = context->result->format;
+            if (context->output) {
+                frame->type = CAPTURE_FRAME_TYPE_OUTPUT;
+                frame->output = context->output;
+            } else {
+                frame->type = CAPTURE_FRAME_TYPE_TOPLEVEL;
+                frame->toplevel = context->toplevel;
+            }
+            wl_list_init(&frame->link);
         }
         context->image_callback(frame, context->user_data);
 
@@ -245,6 +255,7 @@ void capture_output_ext(
 ) {
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->image_callback = image_callback;
+    context->output = output;
     context->user_data = data;
 
     context->source = ext_output_image_capture_source_manager_v1_create_source(
@@ -266,6 +277,7 @@ void capture_toplevel_ext(
 ) {
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->image_callback = image_callback;
+    context->toplevel = toplevel;
     context->user_data = data;
 
     context->source =

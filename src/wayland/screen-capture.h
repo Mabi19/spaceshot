@@ -5,14 +5,19 @@
 #include "wayland/toplevel.h"
 #include <wayland-client.h>
 
+typedef enum {
+    CAPTURE_FRAME_TYPE_OUTPUT,
+    CAPTURE_FRAME_TYPE_TOPLEVEL,
+} CaptureFrameType;
+
 /**
  * A helper struct to assist with using captured frames.
- * At least one of the fields will be set;
+ * At least one of the image or texture fields will be set;
  * the getter for the other one will create it on demand.
  * This is because with dmabuf-based capture (not implemented yet),
  * an Image will not exist, only a texture created from the dmabuf.
  */
-typedef struct {
+typedef struct CaptureFrame {
     Image *image;
     RenderTexture *texture;
     /**
@@ -21,11 +26,24 @@ typedef struct {
      * Used to create drawing canvases.
      */
     ImageFormat pixel_format;
+    CaptureFrameType type;
+    union {
+        /** Valid if type is OUTPUT. */
+        WrappedOutput *output;
+        /** Valid if type is TOPLEVEL. */
+        WrappedToplevel *toplevel;
+    };
+    /** main.c stores these in a linked list */
+    struct wl_list link;
 } CaptureFrame;
 
 Image *capture_frame_get_image(CaptureFrame *frame);
 RenderTexture *capture_frame_get_texture(CaptureFrame *frame);
 void capture_frame_destroy(CaptureFrame *frame);
+/**
+ * Convenience function to destroy all of the CaptureFrames in a list.
+ */
+void capture_frame_destroy_list(struct wl_list *captures);
 
 /**
  * The image may be NULL if an error occurred while screenshotting.

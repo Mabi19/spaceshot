@@ -1,5 +1,6 @@
 #include "args.h"
 #include "bbox.h"
+#include "debug.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -31,8 +32,15 @@ static bool should_clipboard_wait = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
 static Arguments args;
-/** list of CaptureEntry */
+// image data is obtained some time after publishing the copy,
+// so these need to be kept at a higher level
+ClipboardCopy *copy_source = NULL;
+ClipboardCopyOffer *image_png_offer = NULL;
+/** list of CaptureFrame */
 static struct wl_list active_captures;
+// Captures only appear in the list when ready.
+// This counter helps with waiting until everything's captured.
+static int pending_captures = 0;
 static PickerContext pickers;
 static struct wl_display *display;
 
@@ -198,10 +206,10 @@ static void finish_predefined_region_screenshot(
     image_destroy(cropped);
 }
 
-// This function is not static because it is called by the picker context.
-ClipboardCopyOffer *finalize_picker_setup() {
-    ClipboardCopy *copy_source = NULL;
-    ClipboardCopyOffer *image_png_offer = NULL;
+// The finalize_? functions are not static,
+// because they are called by the picker context.
+
+void finalize_picker_setup() {
     if (config_get()->copy_to_clipboard) {
         // Set up the copy while the picker's still alive
         copy_source = clipboard_copy_setup(true);
@@ -210,7 +218,6 @@ ClipboardCopyOffer *finalize_picker_setup() {
         image_png_offer = clipboard_copy_offer_mime(copy_source, "image/png");
         clipboard_copy_activate(copy_source);
     }
-    return image_png_offer;
 }
 
 void finalize_picker_cancel() {
@@ -219,8 +226,7 @@ void finalize_picker_cancel() {
     should_active_wait = false;
 }
 
-static void
-finalize_picker_finish(Image *result, ClipboardCopyOffer *copy_offer) {
+void finalize_picker_finish(Image *result) {
     // saving is an expensive operation - flush the display first so that
     // the pickers are properly closed before we block
     // TODO: properly poll the display fd if EAGAIN
@@ -230,15 +236,15 @@ finalize_picker_finish(Image *result, ClipboardCopyOffer *copy_offer) {
 
     LinkBuffer *out_data = image_save_png(result);
     image_destroy(result);
-    if (copy_offer) {
-        copy_offer->buffer = out_data;
+    if (image_png_offer) {
+        image_png_offer->buffer = out_data;
         clipboard_copy_run(copy_source);
         should_clipboard_wait = true;
     }
 
     char *output_filename = get_output_filename();
     save_screenshot(out_data, output_filename);
-    send_notification(output_filename, copy_offer != NULL);
+    send_notification(output_filename, copy_source != NULL);
 
     free(output_filename);
     should_active_wait = false;
@@ -296,18 +302,22 @@ static bool is_toplevel_matching(WrappedToplevel *toplevel) {
 }
 
 static void handle_captured_output(CaptureFrame *frame, void *data) {
-    CaptureEntry *entry = data;
+    WrappedOutput *output = data;
+    pending_captures--;
 
-    if (!is_output_valid(entry->output)) {
+    if (!is_output_valid(output)) {
         report_error("output disappeared while screenshotting");
-        capture_entry_destroy(entry);
+        if (frame) {
+            capture_frame_destroy(frame);
+        }
         return;
     }
 
-    entry->frame = frame;
-    if (!entry->frame) {
-        report_error_fatal("capturing output %s failed\n", entry->output->name);
+    if (!frame) {
+        report_error_fatal("capturing output %s failed", output->name);
     }
+
+    wl_list_insert(&active_captures, &frame->link);
 }
 
 static void add_new_output(WrappedOutput *output) {
@@ -322,9 +332,17 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    const char *only_output_name = getenv("SPACESHOT_OUTPUT_ONLY");
-    if (only_output_name && strcmp(output->name, only_output_name) != 0) {
-        return;
+    const char *output_filter_name = getenv("SPACESHOT_OUTPUT_FILTER");
+    if (output_filter_name) {
+        bool invert = false;
+        if (output_filter_name[0] == '!') {
+            output_filter_name++;
+            invert = true;
+        }
+        bool name_matches = strcmp(output->name, output_filter_name) == 0;
+        if (name_matches == invert) {
+            return;
+        }
     }
 
     if (!is_output_valid(output)) {
@@ -337,31 +355,35 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
-    entry->frame_type = CAPTURE_ENTRY_TYPE_OUTPUT;
-    entry->output = output;
-    wl_list_insert(&active_captures, &entry->link);
-    capture_output(output, handle_captured_output, entry);
+    // We use the output as user data here because if capturing fails,
+    // we can use it to print out the error message without the frame object
+    pending_captures++;
+    capture_output(output, handle_captured_output, output);
 }
 
 static void handle_captured_toplevel(CaptureFrame *frame, void *data) {
-    CaptureEntry *entry = data;
+    WrappedToplevel *toplevel = data;
+    pending_captures--;
 
-    if (!is_toplevel_valid(entry->toplevel)) {
+    if (!is_toplevel_valid(toplevel)) {
         report_error("toplevel disappeared while screenshotting");
-        capture_entry_destroy(entry);
+        if (frame) {
+            capture_frame_destroy(frame);
+        }
         return;
     }
 
-    entry->frame = frame;
-    if (!entry->frame) {
+    if (!frame) {
         report_error_fatal(
-            "capturing toplevel %s failed\n", entry->toplevel->identifier
+            "capturing toplevel %s failed\n", toplevel->identifier
         );
     }
+
+    wl_list_insert(&active_captures, &frame->link);
 }
 
 static void add_new_toplevel(WrappedToplevel *toplevel) {
+    // See add_new_output for comments on this function.
     log_debug(
         "Got toplevel %p with id %s and title %s\n",
         (void *)toplevel->handle,
@@ -377,11 +399,8 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
         return;
     }
 
-    CaptureEntry *entry = calloc(1, sizeof(CaptureEntry));
-    entry->frame_type = CAPTURE_ENTRY_TYPE_TOPLEVEL;
-    entry->toplevel = toplevel;
-    wl_list_insert(&active_captures, &entry->link);
-    capture_toplevel(toplevel, handle_captured_toplevel, entry);
+    pending_captures++;
+    capture_toplevel(toplevel, handle_captured_toplevel, toplevel);
 }
 
 static void get_required_capture_types(bool *output, bool *toplevel) {
@@ -450,42 +469,42 @@ static void read_deferred_args() {
 }
 
 /**
- * Act on the capture entries,
+ * Act on the captured frames,
  * based on the selected mode and its parameters.
  */
-static void dispatch_capture_entries() {
+static void dispatch_captures() {
     // Get rid of any potential invalidated entries first
     // so we don't have to check everywhere
     {
-        CaptureEntry *entry, *tmp;
-        wl_list_for_each_safe(entry, tmp, &active_captures, link) {
-            switch (entry->frame_type) {
-            case CAPTURE_ENTRY_TYPE_OUTPUT:
-                if (!is_output_valid(entry->output)) {
-                    capture_entry_destroy(entry);
+        CaptureFrame *frame, *tmp;
+        wl_list_for_each_safe(frame, tmp, &active_captures, link) {
+            switch (frame->type) {
+            case CAPTURE_FRAME_TYPE_OUTPUT:
+                if (!is_output_valid(frame->output)) {
+                    capture_frame_destroy(frame);
                 }
                 break;
-            case CAPTURE_ENTRY_TYPE_TOPLEVEL:
-                if (!is_toplevel_valid(entry->toplevel)) {
-                    capture_entry_destroy(entry);
+            case CAPTURE_FRAME_TYPE_TOPLEVEL:
+                if (!is_toplevel_valid(frame->toplevel)) {
+                    capture_frame_destroy(frame);
                 }
                 break;
             default:
-                REPORT_UNHANDLED("capture entry type", "%d", entry->frame_type);
+                REPORT_UNHANDLED("capture entry type", "%d", frame->type);
             }
         }
     }
 
     if (args.mode == CAPTURE_REGION) {
         if (args.region_params.has_region) {
-            CaptureEntry *entry;
+            CaptureFrame *frame;
             bool found = false;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
-                    is_output_matching(entry->output)) {
+            wl_list_for_each(frame, &active_captures, link) {
+                if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT &&
+                    is_output_matching(frame->output)) {
                     finish_predefined_region_screenshot(
-                        entry->output,
-                        capture_frame_get_image(entry->frame),
+                        frame->output,
+                        capture_frame_get_image(frame),
                         args.region_params.region
                     );
                     found = true;
@@ -493,7 +512,7 @@ static void dispatch_capture_entries() {
                 }
             }
             if (found) {
-                capture_entry_destroy_all(&active_captures);
+                capture_frame_destroy_list(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching output");
             }
@@ -502,38 +521,38 @@ static void dispatch_capture_entries() {
         }
     } else if (args.mode == CAPTURE_OUTPUT) {
         if (args.output_params.output_name) {
-            CaptureEntry *entry;
+            CaptureFrame *frame;
             bool found = false;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT &&
-                    is_output_matching(entry->output)) {
+            wl_list_for_each(frame, &active_captures, link) {
+                if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT &&
+                    is_output_matching(frame->output)) {
                     finish_noninteractive_screenshot(
-                        capture_frame_get_image(entry->frame)
+                        capture_frame_get_image(frame)
                     );
                     found = true;
                     break;
                 }
             }
             if (found) {
-                capture_entry_destroy_all(&active_captures);
+                capture_frame_destroy_list(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching output");
             }
         } else {
             int output_count = 0;
-            CaptureEntry *entry;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+            CaptureFrame *frame;
+            wl_list_for_each(frame, &active_captures, link) {
+                if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT) {
                     output_count++;
                 }
             }
             if (output_count == 1) {
-                wl_list_for_each(entry, &active_captures, link) {
-                    if (entry->frame_type == CAPTURE_ENTRY_TYPE_OUTPUT) {
+                wl_list_for_each(frame, &active_captures, link) {
+                    if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT) {
                         finish_noninteractive_screenshot(
-                            capture_frame_get_image(entry->frame)
+                            capture_frame_get_image(frame)
                         );
-                        capture_entry_destroy(entry);
+                        capture_frame_destroy(frame);
                         break;
                     }
                 }
@@ -547,20 +566,20 @@ static void dispatch_capture_entries() {
         }
     } else if (args.mode == CAPTURE_TOPLEVEL) {
         if (args.toplevel_params.toplevel_id) {
-            CaptureEntry *entry;
+            CaptureFrame *frame;
             bool found = false;
-            wl_list_for_each(entry, &active_captures, link) {
-                if (entry->frame_type == CAPTURE_ENTRY_TYPE_TOPLEVEL &&
-                    is_toplevel_matching(entry->toplevel)) {
+            wl_list_for_each(frame, &active_captures, link) {
+                if (frame->type == CAPTURE_FRAME_TYPE_TOPLEVEL &&
+                    is_toplevel_matching(frame->toplevel)) {
                     finish_noninteractive_screenshot(
-                        capture_frame_get_image(entry->frame)
+                        capture_frame_get_image(frame)
                     );
                     found = true;
                     break;
                 }
             }
             if (found) {
-                capture_entry_destroy_all(&active_captures);
+                capture_frame_destroy_list(&active_captures);
             } else {
                 report_error_fatal("couldn't find matching toplevel");
             }
@@ -578,7 +597,7 @@ static void dispatch_capture_entries() {
 
         // This function will error out and exit the program if it can't find
         // matching capture targets
-        dispatch_capture_entries();
+        dispatch_captures();
     }
 }
 
@@ -614,32 +633,20 @@ int main(int argc, char **argv) {
     }
 
     wl_display_roundtrip(display);
-    // Non-matching outputs/toplevels are gonna be excluded from this list.
-    if (wl_list_empty(&active_captures)) {
+    // Non-matching outputs/toplevels are gonna be excluded from this count.
+    if (pending_captures == 0) {
         report_error_fatal("couldn't find matching capture target");
     }
 
     // Wait for all the captured outputs to be ready.
     TIMING_START(capture);
-    while (true) {
-        CaptureEntry *entry;
-        bool is_waiting = false;
-        wl_list_for_each(entry, &active_captures, link) {
-            if (!entry->frame) {
-                log_debug("waiting for picker entry %p\n", (void *)entry);
-                is_waiting = true;
-                break;
-            }
-        }
-        if (is_waiting) {
-            wl_display_dispatch(display);
-        } else {
-            break;
-        }
+    while (pending_captures > 0) {
+        log_debug("waiting for %d pending captures\n", pending_captures);
+        wl_display_dispatch(display);
     }
     TIMING_END(capture);
 
-    dispatch_capture_entries();
+    dispatch_captures();
 
     while (wl_display_dispatch(display) != -1) {
         if (!should_active_wait) {

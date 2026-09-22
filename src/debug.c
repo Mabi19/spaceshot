@@ -7,6 +7,7 @@ DebugMode debug_mode;
 
 static const char *const MODE_NAMES[] = {
     [DEBUG_MODE_NONE] = "none",
+    [DEBUG_MODE_NO_EXCLUSIVE_KEYBOARD] = "no-exclusive-keyboard"
 };
 static const int MODE_COUNT = sizeof(MODE_NAMES) / sizeof(MODE_NAMES[0]);
 
