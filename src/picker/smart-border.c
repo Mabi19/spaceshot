@@ -2,6 +2,7 @@
 #include "log.h"
 #include "wayland/screen-capture.h"
 #include <stdatomic.h>
+#include <threads.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -16,7 +17,13 @@ static int smart_border_context_thread_func(void *data) {
 
     int width = ctx->base->width;
     int height = ctx->base->height;
+    ImageFormat format = ctx->base->format;
     Image *work_buf_1 = image_convert_format(ctx->base, IMAGE_FORMAT_GRAY8);
+    // By this point, ctx->base is not used anymore, and can be freed!
+    mtx_lock(&ctx->base_mtx);
+    ctx->base_released = true;
+    cnd_signal(&ctx->base_cnd);
+    mtx_unlock(&ctx->base_mtx);
 
     // box blur
     Image *work_buf_2 = image_new(width, height, IMAGE_FORMAT_GRAY8);
@@ -78,7 +85,7 @@ static int smart_border_context_thread_func(void *data) {
 
     image_destroy(work_buf_2);
 
-    ctx->result_image = image_convert_format(work_buf_1, ctx->base->format);
+    ctx->result_image = image_convert_format(work_buf_1, format);
     image_destroy(work_buf_1);
     // Do not automatically create a texture, because GL textures can't be
     // created off-thread.
@@ -95,18 +102,34 @@ smart_border_context_start(CaptureFrame *base, uint32_t scale) {
     SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
     ctx->base = capture_frame_get_image(base);
     ctx->scale = scale;
+    mtx_init(&ctx->base_mtx, mtx_plain);
+    cnd_init(&ctx->base_cnd);
+    ctx->is_done = false;
     ctx->ref_count = 2;
     thrd_t thread;
     if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
         thrd_success) {
         thrd_detach(thread);
+    } else {
+        ctx->ref_count = 1;
+        ctx->base_released = true;
     }
     return ctx;
+}
+
+void smart_border_context_ensure_safe_delete(SmartBorderContext *ctx) {
+    mtx_lock(&ctx->base_mtx);
+    while (!ctx->base_released) {
+        cnd_wait(&ctx->base_cnd, &ctx->base_mtx);
+    }
+    mtx_unlock(&ctx->base_mtx);
 }
 
 void smart_border_context_unref(SmartBorderContext *ctx) {
     if (atomic_fetch_sub(&ctx->ref_count, 1) == 1) {
         image_destroy(ctx->result_image);
+        mtx_destroy(&ctx->base_mtx);
+        cnd_destroy(&ctx->base_cnd);
         free(ctx);
     }
 }

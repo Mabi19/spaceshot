@@ -1,7 +1,6 @@
 #include "context.h"
 #include "link-buffer.h"
 #include "log.h"
-#include "picker/common.h"
 #include "picker/output.h"
 #include "wayland/globals.h"
 #include "wayland/screen-capture.h"
@@ -40,24 +39,30 @@ static RenderDisplayList picker_surface_draw(void *data) {
     return dl;
 }
 
+static void picker_surface_destroy(PickerSurface *picker);
 static void picker_surface_close(void *data) {
     PickerSurface *picker = data;
-    picker_context_finish(picker, PICKER_FINISH_REASON_DESTROYED, (BBox){});
+    PickerContext *ctx = picker->ctx;
+    // this also destroys the capture frame
+    picker_surface_destroy(picker);
+    // If this is the final picker, we should clean up.
+    if (wl_list_empty(&ctx->pickers)) {
+        capture_frame_destroy_list(ctx->captures);
+        report_error_fatal("all pickers closed unexpectedly");
+    }
 }
 
 static void picker_surface_scale(void *data, uint32_t scale) {
     PickerSurface *picker = data;
+
+    // TODO: if switching is possible, we want to notify ALL picker types
+    // so they don't miss out on scale updates.
     switch (picker->type) {
     case PICKER_TYPE_REGION:
-        if (!picker->smart_border &&
-            config_get()->region.selection_border_color.type ==
-                CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-            picker->smart_border =
-                smart_border_context_start(picker->background, scale);
-        }
+        region_picker_handle_scale(picker, scale);
         break;
     case PICKER_TYPE_OUTPUT:
-        output_picker_recalculate_label_size(picker, scale);
+        output_picker_handle_scale(picker, scale);
         break;
     default:
         REPORT_UNHANDLED("picker type", "%d", picker->type);
@@ -84,7 +89,7 @@ static void picker_surface_keyboard(void *data, KeyboardEvent ev) {
 
     if (ev.keysym == XKB_KEY_Escape && ev.type == KEYBOARD_EVENT_PRESS &&
         picker->surface->wl_surface == ev.focus) {
-        picker_context_finish(picker, PICKER_FINISH_REASON_CANCELLED, (BBox){});
+        picker_context_finish(picker, PICKER_FINISH_REASON_CANCELLED, NULL);
         return;
     }
 
@@ -141,14 +146,7 @@ static void picker_surface_destroy(PickerSurface *picker) {
         wayland_globals.seat_dispatcher, picker->surface
     );
 
-    if (picker->smart_border) {
-        if (picker->smart_border->result_texture) {
-            picker->surface->renderer->texture_destroy(
-                picker->smart_border->result_texture
-            );
-        }
-        smart_border_context_unref(picker->smart_border);
-    }
+    region_picker_destroy(picker);
     output_picker_destroy(picker);
 
     link_buffer_destroy(picker->command_arena);
@@ -160,9 +158,13 @@ static void picker_surface_destroy(PickerSurface *picker) {
 }
 
 void picker_context_init(
-    PickerContext *ctx, PickerType type, struct wl_list *captures
+    PickerContext *ctx,
+    PickerType type,
+    struct wl_list *captures,
+    const PickerHost *host
 ) {
     ctx->captures = captures;
+    ctx->host = host;
     wl_list_init(&ctx->pickers);
 
     CaptureFrame *frame;
@@ -173,10 +175,13 @@ void picker_context_init(
             picker->type = type;
             switch (type) {
             case PICKER_TYPE_REGION:
-                region_picker_init(picker);
+                // region picker state (the smart border)
+                // is initialized later, once the scale is available
+                region_picker_enter(picker);
                 break;
             case PICKER_TYPE_OUTPUT:
-                output_picker_init(picker);
+                output_picker_init(picker, frame->output);
+                output_picker_enter(picker);
                 break;
             default:
                 REPORT_UNHANDLED("picker type", "%d", type);
@@ -185,56 +190,40 @@ void picker_context_init(
             wl_list_insert(&ctx->pickers, &picker->link);
         }
     }
+
+    if (wl_list_empty(&ctx->pickers)) {
+        report_error_fatal("no output captures to spawn pickers from");
+    }
 }
 
-void finalize_picker_setup();
-void finalize_picker_cancel();
-void finalize_picker_finish(Image *result);
-
 void picker_context_finish(
-    PickerSurface *picker, PickerFinishReason reason, BBox crop_box
+    PickerSurface *picker, PickerFinishReason reason, Image *result
 ) {
     PickerContext *ctx = picker->ctx;
 
-    if (reason == PICKER_FINISH_REASON_DESTROYED) {
-        // this also destroys the entry
-        picker_surface_destroy(picker);
-        // If this is the final picker, we should clean up.
-        if (wl_list_empty(&ctx->pickers)) {
-            capture_frame_destroy_list(ctx->captures);
-            report_error_fatal("all pickers closed unexpectedly");
+    switch (reason) {
+    case PICKER_FINISH_REASON_SELECTED: {
+        ctx->host->finalize_prepare();
+        PickerSurface *surface, *tmp;
+        wl_list_for_each_safe(surface, tmp, &ctx->pickers, link) {
+            picker_surface_destroy(surface);
         }
-    } else {
-        switch (reason) {
-        case PICKER_FINISH_REASON_SELECTED: {
-            finalize_picker_setup();
-            Image *img = capture_frame_get_image(picker->background);
-            Image *cropped;
-            if (crop_box.width > 0 && crop_box.height > 0) {
-                cropped = image_crop(
-                    img, crop_box.x, crop_box.y, crop_box.width, crop_box.height
-                );
-            } else {
-                cropped = image_copy(img);
-            }
-            // img is destroyed here and cropped is destroyed by the finalize
-            picker_surface_destroy(picker);
-            finalize_picker_finish(cropped);
-            break;
-        }
-        case PICKER_FINISH_REASON_CANCELLED:
-            picker_surface_destroy(picker);
-            finalize_picker_cancel();
-            break;
-        default:
-            REPORT_UNHANDLED("picker finish reason", "%d", reason);
-        }
-
-        // destroy the rest
-        PickerSurface *picker, *tmp;
-        wl_list_for_each_safe(picker, tmp, &ctx->pickers, link) {
-            picker_surface_destroy(picker);
-        }
-        capture_frame_destroy_list(ctx->captures);
+        // this takes ownership of result
+        ctx->host->finalize_finish(result);
+        break;
     }
+    case PICKER_FINISH_REASON_CANCELLED: {
+        PickerSurface *surface, *tmp;
+        wl_list_for_each_safe(surface, tmp, &ctx->pickers, link) {
+            picker_surface_destroy(surface);
+        }
+        ctx->host->finalize_cancel();
+        break;
+    }
+    default:
+        REPORT_UNHANDLED("picker finish reason", "%d", reason);
+    }
+
+    // destroy any unused captures
+    capture_frame_destroy_list(ctx->captures);
 }

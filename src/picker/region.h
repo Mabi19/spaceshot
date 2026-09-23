@@ -1,4 +1,5 @@
 #pragma once
+#include "picker/smart-border.h"
 #include "render/command.h"
 #include "wayland/seat.h"
 
@@ -11,6 +12,8 @@ typedef enum {
 } RegionPickerState;
 
 typedef struct {
+    SmartBorderContext *smart_border;
+
     RegionPickerState state;
     // Note that these values are only valid when state != REGION_PICKER_EMPTY.
     // In logical coordinates
@@ -33,7 +36,9 @@ typedef struct {
     } edit_data;
 } RegionPicker;
 
-void region_picker_init(PickerSurface *picker);
+void region_picker_enter(PickerSurface *picker);
+void region_picker_destroy(PickerSurface *picker);
 void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl);
 void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event);
 void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event);
+void region_picker_handle_scale(PickerSurface *picker, uint32_t scale);

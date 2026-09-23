@@ -967,7 +967,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             RenderCommandRect *rect = (RenderCommandRect *)cmd;
             GLuint texture = rect->texture == NULL
                                  ? gl_texture_none
-                                 : ((GLTexture *)rect->texture)->gl;
+                                 : ((const GLTexture *)rect->texture)->gl;
             if (last_texture == 0) {
                 last_texture = texture;
                 glBindTexture(GL_TEXTURE_2D, texture);

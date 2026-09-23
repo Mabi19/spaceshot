@@ -37,8 +37,16 @@ typedef struct CaptureFrame {
     struct wl_list link;
 } CaptureFrame;
 
-Image *capture_frame_get_image(CaptureFrame *frame);
-RenderTexture *capture_frame_get_texture(CaptureFrame *frame);
+/** The image is owned by the frame. */
+const Image *capture_frame_get_image(CaptureFrame *frame);
+/** The texture is owned by the frame. */
+const RenderTexture *capture_frame_get_texture(CaptureFrame *frame);
+/**
+ * Take ownership of the capture frame's image.
+ * After this, the capture frame is left in an invalid state.
+ */
+Image *capture_frame_steal_image(CaptureFrame *frame);
+
 void capture_frame_destroy(CaptureFrame *frame);
 /**
  * Convenience function to destroy all of the CaptureFrames in a list.
@@ -46,7 +54,7 @@ void capture_frame_destroy(CaptureFrame *frame);
 void capture_frame_destroy_list(struct wl_list *captures);
 
 /**
- * The image may be NULL if an error occurred while screenshotting.
+ * The frame may be NULL if an error occurred while screenshotting.
  * Note that the output isn't guaranteed to exist when this function is called.
  */
 typedef void (*FrameCaptureCallback)(CaptureFrame *frame, void *data);

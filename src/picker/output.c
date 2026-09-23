@@ -1,6 +1,5 @@
 #include "output.h"
 #include "bbox.h"
-#include "picker/common.h"
 #include "picker/context.h"
 #include "render/command.h"
 #include "wayland/globals.h"
@@ -96,29 +95,28 @@ void output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     if (output->state == OUTPUT_PICKER_ACTIVE &&
         event.buttons_released & POINTER_BUTTON_LEFT) {
         picker_context_finish(
-            picker, PICKER_FINISH_REASON_SELECTED, (BBox){0, 0, -1, -1}
+            picker,
+            PICKER_FINISH_REASON_SELECTED,
+            capture_frame_steal_image(picker->background)
         );
     }
 }
 
-void output_picker_recalculate_label_size(
-    PickerSurface *picker, uint32_t scale
-) {
+void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
     RenderTextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
     picker->output.label_size = picker->surface->renderer->measure_text(
         picker->output.output_name, -1, scaled_style
     );
 }
 
-void output_picker_init(PickerSurface *picker) {
+void output_picker_init(PickerSurface *picker, WrappedOutput *output) {
+    picker->output.output_name = strdup(output->name);
+    output_picker_handle_scale(picker, picker->surface->scale);
+}
+
+void output_picker_enter(PickerSurface *picker) {
     OutputPicker *output = &picker->output;
-    if (!output->output_name) {
-        // TODO: this should probably be better
-        // future pick mode may run this without the background image,
-        // and if the output somehow disappeared that pointer would be dangling
-        output->output_name = strdup(picker->background->output->name);
-        output_picker_recalculate_label_size(picker, picker->surface->scale);
-    }
+
     if (wayland_globals.seat_dispatcher->pointer_data.focus ==
         picker->surface->wl_surface) {
         output->state = OUTPUT_PICKER_ACTIVE;
@@ -134,5 +132,7 @@ void output_picker_init(PickerSurface *picker) {
 }
 
 void output_picker_destroy(PickerSurface *picker) {
-    free(picker->output.output_name);
+    if (picker->output.output_name) {
+        free(picker->output.output_name);
+    }
 }

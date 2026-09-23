@@ -8,6 +8,7 @@
 #include "render/texture.h"
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
+#include "wayland/screen-capture.h"
 #include "wayland/seat.h"
 #include <config/config.h>
 #include <cursor-shape-client.h>
@@ -243,20 +244,20 @@ void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
         RenderTexture *border_texture = NULL;
         if (config_get()->region.selection_border_color.type ==
             CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
-            if (picker->smart_border &&
+            if (region->smart_border &&
                 atomic_load_explicit(
-                    &picker->smart_border->is_done, memory_order_acquire
+                    &region->smart_border->is_done, memory_order_acquire
                 )) {
                 border_color = (RenderColor){1, 1, 1, 1};
                 // The smart border code cannot create a texture itself, because
                 // it runs off-thread.
-                if (!picker->smart_border->result_texture) {
-                    picker->smart_border->result_texture =
+                if (!region->smart_border->result_texture) {
+                    region->smart_border->result_texture =
                         picker->surface->renderer->texture_new_from_image(
-                            picker->smart_border->result_image
+                            region->smart_border->result_image
                         );
                 }
-                border_texture = picker->smart_border->result_texture;
+                border_texture = region->smart_border->result_texture;
             } else {
                 // fallback
                 border_color = (RenderColor){1, 1, 1, 1};
@@ -446,10 +447,18 @@ static void confirm_selection(PickerSurface *picker) {
         region->x2,
         region->y2
     );
-    PickerFinishReason reason = selected_region_area > CANCEL_THRESHOLD
-                                    ? PICKER_FINISH_REASON_SELECTED
-                                    : PICKER_FINISH_REASON_CANCELLED;
-    picker_context_finish(picker, reason, result_box);
+    if (selected_region_area > CANCEL_THRESHOLD) {
+        Image *cropped = image_crop(
+            capture_frame_get_image(picker->background),
+            result_box.x,
+            result_box.y,
+            result_box.width,
+            result_box.height
+        );
+        picker_context_finish(picker, PICKER_FINISH_REASON_SELECTED, cropped);
+    } else {
+        picker_context_finish(picker, PICKER_FINISH_REASON_CANCELLED, NULL);
+    }
 }
 
 void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
@@ -659,11 +668,34 @@ void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
     // TODO: Hold Shift to lock aspect ratio
 }
 
-void region_picker_init(PickerSurface *picker) {
+void region_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
+    RegionPicker *region = &picker->region;
+    if (!region->smart_border &&
+        config_get()->region.selection_border_color.type ==
+            CONFIG_REGION_SELECTION_BORDER_COLOR_SMART) {
+        region->smart_border =
+            smart_border_context_start(picker->background, scale);
+    }
+}
+
+void region_picker_enter(PickerSurface *picker) {
     RegionPicker *region = &picker->region;
     region->state = REGION_PICKER_EMPTY;
     region->move_flag = false;
     region->edit_flag = false;
     // edit_data is reset when switching to edit mode
     update_cursor_shape(picker);
+}
+
+void region_picker_destroy(PickerSurface *picker) {
+    RegionPicker *region = &picker->region;
+    if (region->smart_border) {
+        if (region->smart_border->result_texture) {
+            picker->surface->renderer->texture_destroy(
+                region->smart_border->result_texture
+            );
+        }
+        smart_border_context_ensure_safe_delete(region->smart_border);
+        smart_border_context_unref(region->smart_border);
+    }
 }

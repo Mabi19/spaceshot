@@ -33,8 +33,8 @@ static bool was_cancelled = false;
 static Arguments args;
 // image data is obtained some time after publishing the copy,
 // so these need to be kept at a higher level
-ClipboardCopy *copy_source = NULL;
-ClipboardCopyOffer *image_png_offer = NULL;
+static ClipboardCopy *copy_source = NULL;
+static ClipboardCopyOffer *image_png_offer = NULL;
 /** list of CaptureFrame */
 static struct wl_list active_captures;
 // Captures only appear in the list when ready.
@@ -137,7 +137,7 @@ static void clipboard_copy_finish(ClipboardCopy *source) {
     should_clipboard_wait = false;
 }
 
-static void finish_noninteractive_screenshot(Image *image) {
+static void finish_noninteractive_screenshot(const Image *image) {
     LinkBuffer *out_data = image_save_png(image);
 
     ClipboardCopy *copy_source = NULL;
@@ -171,7 +171,7 @@ static void finish_noninteractive_screenshot(Image *image) {
 
 // This function uses logical coordinates
 static void finish_predefined_region_screenshot(
-    WrappedOutput *output, Image *image, BBox crop_bounds
+    WrappedOutput *output, const Image *image, BBox crop_bounds
 ) {
     if (!is_output_valid(output)) {
         report_error("output disappeared while screenshotting");
@@ -201,14 +201,11 @@ static void finish_predefined_region_screenshot(
         crop_bounds.height
     );
 
-    finish_noninteractive_screenshot(image);
+    finish_noninteractive_screenshot(cropped);
     image_destroy(cropped);
 }
 
-// The finalize_? functions are not static,
-// because they are called by the picker context.
-
-void finalize_picker_setup() {
+static void finalize_picker_prepare() {
     if (config_get()->copy_to_clipboard) {
         // Set up the copy while the picker's still alive
         copy_source = clipboard_copy_setup(true);
@@ -219,13 +216,13 @@ void finalize_picker_setup() {
     }
 }
 
-void finalize_picker_cancel() {
+static void finalize_picker_cancel() {
     printf("selection cancelled\n");
     was_cancelled = true;
     should_active_wait = false;
 }
 
-void finalize_picker_finish(Image *result) {
+static void finalize_picker_finish(Image *result) {
     // saving is an expensive operation - flush the display first so that
     // the pickers are properly closed before we block
     // TODO: properly poll the display fd if EAGAIN
@@ -248,6 +245,12 @@ void finalize_picker_finish(Image *result) {
     free(output_filename);
     should_active_wait = false;
 }
+
+static const PickerHost picker_host = {
+    .finalize_prepare = finalize_picker_prepare,
+    .finalize_finish = finalize_picker_finish,
+    .finalize_cancel = finalize_picker_cancel,
+};
 
 static bool is_output_matching(WrappedOutput *output) {
     if (args.mode == CAPTURE_OUTPUT) {
@@ -516,7 +519,9 @@ static void dispatch_captures() {
                 report_error_fatal("couldn't find matching output");
             }
         } else {
-            picker_context_init(&pickers, PICKER_TYPE_REGION, &active_captures);
+            picker_context_init(
+                &pickers, PICKER_TYPE_REGION, &active_captures, &picker_host
+            );
         }
     } else if (args.mode == CAPTURE_OUTPUT) {
         if (args.output_params.output_name) {
@@ -551,13 +556,13 @@ static void dispatch_captures() {
                         finish_noninteractive_screenshot(
                             capture_frame_get_image(frame)
                         );
-                        capture_frame_destroy(frame);
+                        capture_frame_destroy_list(&active_captures);
                         break;
                     }
                 }
             } else if (output_count > 1) {
                 picker_context_init(
-                    &pickers, PICKER_TYPE_OUTPUT, &active_captures
+                    &pickers, PICKER_TYPE_OUTPUT, &active_captures, &picker_host
                 );
             } else {
                 report_error_fatal("no outputs captured");

@@ -2,19 +2,34 @@
 #include "render/renderer.h"
 #include "screen-capture.h"
 #include "wayland/toplevel.h"
+#include <assert.h>
 #include <config/config.h>
 
-Image *capture_frame_get_image(CaptureFrame *frame) {
+const Image *capture_frame_get_image(CaptureFrame *frame) {
     // TODO: when image downloading exists, use it
     return frame->image;
 }
 
-RenderTexture *capture_frame_get_texture(CaptureFrame *frame) {
+const RenderTexture *capture_frame_get_texture(CaptureFrame *frame) {
     if (!frame->texture) {
+        assert(frame->image);
         frame->texture =
             renderer_get_default()->texture_new_from_image(frame->image);
     }
     return frame->texture;
+}
+
+Image *capture_frame_steal_image(CaptureFrame *frame) {
+    // TODO: when image downloading exists, use it like capture_frame_get_image
+    Image *result = frame->image;
+    // Renderer textures may borrow from the image's data,
+    // so they have to be destroyed as well.
+    if (frame->texture) {
+        renderer_get_default()->texture_destroy(frame->texture);
+        frame->texture = NULL;
+    }
+    frame->image = NULL;
+    return result;
 }
 
 void capture_frame_destroy(CaptureFrame *frame) {

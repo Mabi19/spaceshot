@@ -93,7 +93,7 @@ typedef struct {
      * Must be set (unless you want to render nothing)
      */
     RenderColor color;
-    RenderTexture *texture;
+    const RenderTexture *texture;
     RenderBorderRadius border_radius;
     /**
      * The border is inset to the rectangle (like CSS box-sizing: border-box).

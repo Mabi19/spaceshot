@@ -292,7 +292,8 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                     assert(
                         rect->uv.u1 > rect->uv.u0 && rect->uv.v1 > rect->uv.v0
                     );
-                    CairoTexture *tex = (CairoTexture *)rect->texture;
+                    const CairoTexture *tex =
+                        (const CairoTexture *)rect->texture;
                     double sx = (rect->uv.u1 - rect->uv.u0) * tex->width /
                                 rect->bounds.width;
                     double sy = (rect->uv.v1 - rect->uv.v0) * tex->height /
