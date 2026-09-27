@@ -20,12 +20,14 @@ typedef enum {
 typedef struct CaptureFrame {
     Image *image;
     RenderTexture *texture;
+    uint32_t width;
+    uint32_t height;
     /**
      * A pixel format which can store the frame,
      * not necessarily the image data's format.
      * Used to create drawing canvases.
      */
-    ImageFormat pixel_format;
+    ImageFormat compatible_format;
     CaptureFrameType type;
     union {
         /** Valid if type is OUTPUT. */

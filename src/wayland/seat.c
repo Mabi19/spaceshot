@@ -288,7 +288,8 @@ static void keyboard_handle_key(
         break;
     default:
         // As of writing, there's a new state (REPEATED) merged into wayland but
-        // not in a tagged version. So explicitly do nothing here.
+        // not emitted by compositors yet. So explicitly do nothing here;
+        // TODO: when we need key repeat, use the REPEATED key state
         return;
     }
 
@@ -297,7 +298,8 @@ static void keyboard_handle_key(
         .keysym = xkb_state_key_get_one_sym(
             dispatcher->keyboard_data.state, keycode + 8
         ),
-        .type = type
+        .type = type,
+        .state = dispatcher->keyboard_data.state,
     };
 
     SeatListenerListEntry *entry;

@@ -588,7 +588,9 @@ static void dispatch_captures() {
                 report_error_fatal("couldn't find matching toplevel");
             }
         } else {
-            report_error_fatal("there is no toplevel picker");
+            picker_context_init(
+                &pickers, PICKER_TYPE_TOPLEVEL, &active_captures, &picker_host
+            );
         }
     } else if (args.mode == CAPTURE_DEFER) {
         printf("ready\n");

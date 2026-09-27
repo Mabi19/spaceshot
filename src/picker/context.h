@@ -1,6 +1,7 @@
 #pragma once
 #include "picker/output.h"
 #include "picker/region.h"
+#include "picker/toplevel.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
 #include <wayland-client.h>
@@ -8,6 +9,7 @@
 typedef enum {
     PICKER_TYPE_REGION,
     PICKER_TYPE_OUTPUT,
+    PICKER_TYPE_TOPLEVEL,
 } PickerType;
 
 typedef enum {
@@ -45,6 +47,7 @@ typedef struct PickerSurface {
     PickerType type;
     RegionPicker region;
     OutputPicker output;
+    ToplevelPicker toplevel;
     struct wl_list link;
 } PickerSurface;
 

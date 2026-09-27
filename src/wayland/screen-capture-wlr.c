@@ -31,7 +31,9 @@ static void frame_context_finalize(
     if (result) {
         capture_frame = calloc(1, sizeof(CaptureFrame));
         capture_frame->image = result;
-        capture_frame->pixel_format = result->format;
+        capture_frame->width = result->width;
+        capture_frame->height = result->height;
+        capture_frame->compatible_format = result->format;
         capture_frame->type = CAPTURE_FRAME_TYPE_OUTPUT;
         capture_frame->output = context->output;
         wl_list_init(&capture_frame->link);

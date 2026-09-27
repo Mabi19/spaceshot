@@ -25,6 +25,8 @@ typedef struct {
     struct wl_surface *focus;
     KeyboardEventType type;
     xkb_keysym_t keysym;
+    /** The keyboard state, for convenience. */
+    struct xkb_state *state;
 } KeyboardEvent;
 
 /**

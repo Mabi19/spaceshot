@@ -142,6 +142,7 @@ sources = files(
     'picker/output.c',
     'picker/region.c',
     'picker/smart-border.c',
+    'picker/toplevel.c',
     'render/cairo.c',
     'render/common.c',
     'render/gl.c',

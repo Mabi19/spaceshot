@@ -20,8 +20,10 @@ static void print_help(const char *program_name) {
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
         "    note that the region must be fully contained within one output\n"
-        "  - toplevel <identifier>: screenshot a toplevel (window)\n"
+        "  - toplevel [identifier]: screenshot a toplevel (window)\n"
         "    pass in an ext-foreign-toplevel-list-v1 identifier\n"
+        "    if toplevel is not specified, opens the toplevel picker to let "
+        "the user choose\n"
         "  - defer <targets>: prepare a screenshot for later\n"
         "    at least one of the keywords 'output' or 'toplevel' must be "
         "passed in as targets to be captured for later usage\n"
@@ -252,9 +254,9 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         (ToplevelCaptureParams){.toplevel_id = NULL};
                 } else if (strcmp(mode, "defer") == 0) {
                     result->mode = CAPTURE_DEFER;
-                    result->defer_params =
-                        (DeferParams){.needs_output = false,
-                                      .needs_toplevel = false};
+                    result->defer_params = (DeferParams){
+                        .needs_output = false, .needs_toplevel = false
+                    };
                 } else {
                     report_error(
                         "invalid mode %s\n"
@@ -324,15 +326,6 @@ void parse_argv(Arguments *result, int argc, char **argv) {
     if (result->captured_mode_params == 0) {
         report_error(
             "a mode is required\ntry %s --help for more information",
-            result->executable_name
-        );
-        goto error;
-    }
-
-    if (result->mode == CAPTURE_TOPLEVEL &&
-        !result->toplevel_params.toplevel_id) {
-        report_error(
-            "a toplevel id is required\ntry %s --help for more information",
             result->executable_name
         );
         goto error;

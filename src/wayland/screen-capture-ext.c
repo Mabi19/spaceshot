@@ -39,7 +39,9 @@ static void frame_context_unref(FrameContext *context) {
         if (context->result) {
             frame = calloc(1, sizeof(CaptureFrame));
             frame->image = context->result;
-            frame->pixel_format = context->result->format;
+            frame->width = frame->image->width;
+            frame->height = frame->image->height;
+            frame->compatible_format = context->result->format;
             if (context->output) {
                 frame->type = CAPTURE_FRAME_TYPE_OUTPUT;
                 frame->output = context->output;

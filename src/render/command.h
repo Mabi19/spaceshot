@@ -111,6 +111,11 @@ typedef struct {
      */
     const char *font_family;
     float font_size;
+    /**
+     * 0 or negative = no limit.
+     * Past this width the string is ellipsized
+     */
+    float max_width;
     int weight;
     bool italic;
 } RenderTextStyle;
@@ -120,7 +125,7 @@ typedef struct {
 #define RENDER_TEXT_STYLE_DEFAULT(scale)                                       \
     (RenderTextStyle) {                                                        \
         .font_family = "Sans", .font_size = 16.0 * (scale) / 120.0,            \
-        .weight = 400, .italic = false                                         \
+        .max_width = -1, .weight = 400, .italic = false                        \
     }
 
 typedef struct {

@@ -336,6 +336,7 @@ static bool renderer_gl_init() {
     pango_fontmap = pango_cairo_font_map_new();
     pango_context = pango_font_map_create_context(pango_fontmap);
     pango_layout = pango_layout_new(pango_context);
+    renderer_init_pango_layout(pango_layout);
     pango_font_description = pango_font_description_new();
     text_cache_hash_state = XXH3_createState();
     text_cache_item_count = 0;
@@ -698,7 +699,8 @@ static GLTextCacheEntry *text_cache_ensure_entry(
     new_entry->key_hash = hash;
     new_entry->last_used_frame = frame_no;
     // compute extents: this is always needed, so we may as well do it here
-    renderer_update_pango_fontdesc(pango_font_description, style);
+    renderer_update_pango_fontdesc(pango_font_description, &style);
+    renderer_update_pango_layout(pango_layout, &style);
     pango_layout_set_text(pango_layout, content, length);
     pango_layout_set_font_description(pango_layout, pango_font_description);
     pango_layout_get_pixel_extents(
@@ -741,7 +743,8 @@ static void text_cache_ensure_rendered(GLTextCacheEntry *entry) {
     cairo_surface_t *surface = image_make_cairo_surface(image);
     cairo_t *cr = cairo_create(surface);
 
-    renderer_update_pango_fontdesc(pango_font_description, entry->style);
+    renderer_update_pango_fontdesc(pango_font_description, &entry->style);
+    renderer_update_pango_layout(pango_layout, &entry->style);
     pango_layout_set_text(pango_layout, entry->content, entry->length);
     pango_layout_set_font_description(pango_layout, pango_font_description);
     // Color is applied on the GPU.
