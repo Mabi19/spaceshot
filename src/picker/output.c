@@ -14,7 +14,7 @@ constexpr double LABEL_PADDING_X = 6;
 constexpr double LABEL_PADDING_Y = 4;
 constexpr double LABEL_Y_OFFSET = 12;
 
-void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
+static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     OutputPicker *output = &picker->output;
     OverlaySurface *surface = picker->surface;
     BBox full_surface_box =
@@ -62,7 +62,8 @@ void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     );
 }
 
-void output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
+static void
+output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     OutputPicker *output = &picker->output;
     bool should_redraw = false;
     OutputPickerState new_state = event.focus == picker->surface->wl_surface
@@ -102,19 +103,20 @@ void output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     }
 }
 
-void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
+static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
     RenderTextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
     picker->output.label_size = picker->surface->renderer->measure_text(
         picker->output.output_name, -1, scaled_style
     );
 }
 
-void output_picker_init(PickerSurface *picker, WrappedOutput *output) {
+static void output_picker_init(PickerSurface *picker) {
+    WrappedOutput *output = picker->background->output;
     picker->output.output_name = strdup(output->name);
     output_picker_handle_scale(picker, picker->surface->scale);
 }
 
-void output_picker_enter(PickerSurface *picker) {
+static void output_picker_enter(PickerSurface *picker) {
     OutputPicker *output = &picker->output;
 
     if (wayland_globals.seat_dispatcher->pointer_data.focus ==
@@ -136,3 +138,12 @@ void output_picker_destroy(PickerSurface *picker) {
         free(picker->output.output_name);
     }
 }
+
+const PickerVTable output_picker_vtable = {
+    .per_output = true,
+    .init = output_picker_init,
+    .enter = output_picker_enter,
+    .draw = output_picker_draw,
+    .mouse = output_picker_handle_mouse,
+    .scale = output_picker_handle_scale,
+};

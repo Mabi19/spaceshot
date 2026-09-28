@@ -14,6 +14,13 @@ typedef struct {
     struct wl_surface *focus;
     double surface_x;
     double surface_y;
+    /**
+     * The scroll amounts accumulated since the last mouse event,
+     * in logical pixels.
+     * Positive values mean scrolling down/right.
+     */
+    double scroll_x;
+    double scroll_y;
     PointerButtons buttons_pressed;
     PointerButtons buttons_held;
     PointerButtons buttons_released;
@@ -46,10 +53,16 @@ typedef struct {
         double surface_x;
         double surface_y;
         PointerButtons pressed_buttons;
-        /** Used internally to decide when pressed/released events should be
-         * sent. */
+        // The following values are used internally to construct events.
         PointerButtons pending_buttons;
-        /** Used internally to decide what events should be sent. */
+        double pending_scroll_x;
+        double pending_scroll_y;
+        int32_t pending_value120_x;
+        int32_t pending_value120_y;
+        bool received_value120_x;
+        bool received_value120_y;
+        enum wl_pointer_axis_source axis_source;
+        bool has_axis_source;
         enum {
             POINTER_EVENT_MOTION = 1,
         } received_events;

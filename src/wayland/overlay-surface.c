@@ -47,6 +47,8 @@ static void overlay_surface_handle_configure(
     zwlr_layer_surface_v1_ack_configure(surface->layer_surface, serial);
     surface->has_configured = true;
 
+    bool size_changed = surface->logical_width != width ||
+                        surface->logical_height != height;
     surface->logical_width = width;
     surface->logical_height = height;
     wp_viewport_set_destination(
@@ -64,6 +66,9 @@ static void overlay_surface_handle_configure(
         surface->renderer->canvas_resize(
             surface->canvas, surface->device_width, surface->device_height
         );
+    }
+    if (size_changed && surface->handlers.resize) {
+        surface->handlers.resize(surface->user_data);
     }
 
     overlay_surface_draw_immediate(surface);
@@ -92,6 +97,7 @@ static void preferred_scale_changed(
         data,
         scale
     );
+    bool scale_changed = surface->scale != scale;
     surface->scale = scale;
     recompute_device_size(surface);
     if (surface->canvas) {
@@ -101,6 +107,9 @@ static void preferred_scale_changed(
     }
     if (surface->handlers.scale) {
         surface->handlers.scale(surface->user_data, scale);
+    }
+    if (scale_changed && surface->handlers.resize) {
+        surface->handlers.resize(surface->user_data);
     }
     if (surface->has_configured) {
         overlay_surface_draw_immediate(surface);

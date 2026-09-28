@@ -4,6 +4,7 @@
 #include "picker/toplevel.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
+#include "wayland/seat.h"
 #include <wayland-client.h>
 
 typedef enum {
@@ -38,13 +39,39 @@ typedef struct {
     const PickerHost *host;
 } PickerContext;
 
+/**
+ * The interface each picker implements.
+ * Any handler except draw may be NULL if the picker has no use for it.
+ */
+typedef struct PickerVTable {
+    /**
+     * If true, one picker is created per captured output.
+     * If false, a single picker is created for the whole context
+     * (with no output)
+     */
+    bool per_output;
+    /** Called right after the picker's surface is created. */
+    void (*init)(PickerSurface *picker);
+    /** Called every time the picker is switched to. */
+    void (*enter)(PickerSurface *picker);
+    void (*draw)(PickerSurface *picker, RenderDisplayList *dl);
+    void (*mouse)(PickerSurface *picker, MouseEvent event);
+    void (*keyboard)(PickerSurface *picker, KeyboardEvent event);
+    void (*resize)(PickerSurface *picker);
+    void (*scale)(PickerSurface *picker, uint32_t scale);
+} PickerVTable;
+
+extern const PickerVTable region_picker_vtable;
+extern const PickerVTable output_picker_vtable;
+extern const PickerVTable toplevel_picker_vtable;
+
 typedef struct PickerSurface {
     PickerContext *ctx;
     OverlaySurface *surface;
     CaptureFrame *background;
     LinkBuffer *command_arena;
 
-    PickerType type;
+    const PickerVTable *vtable;
     RegionPicker region;
     OutputPicker output;
     ToplevelPicker toplevel;

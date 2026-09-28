@@ -1,5 +1,5 @@
 #pragma once
-#include "wayland/seat.h"
+#include "render/renderer.h"
 
 typedef struct PickerSurface PickerSurface;
 
@@ -15,9 +15,5 @@ typedef struct OutputPicker {
     bool move_label_down;
 } OutputPicker;
 
-void output_picker_init(PickerSurface *picker, WrappedOutput *output);
-void output_picker_enter(PickerSurface *picker);
+// All other functions are in the vtable.
 void output_picker_destroy(PickerSurface *picker);
-void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl);
-void output_picker_handle_mouse(PickerSurface *picker, MouseEvent event);
-void output_picker_handle_scale(PickerSurface *picker, uint32_t scale);

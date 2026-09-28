@@ -20,6 +20,12 @@ typedef RenderDisplayList (*OverlaySurfaceDrawCallback)(void *user_data);
 typedef void (*OverlaySurfaceCloseCallback)(void *user_data);
 
 /**
+ * Called when the surface's size or scale updates,
+ * just before the corresponding draw.
+ */
+typedef void (*OverlaySurfaceResizeCallback)(void *user_data);
+
+/**
  * Called when the surface's scale updates.
  */
 typedef void (*OverlaySurfaceScaleCallback)(void *user_data, uint32_t scale);
@@ -28,6 +34,7 @@ typedef struct {
     OverlaySurfaceDrawCallback draw;
     OverlaySurfaceCloseCallback close;
     OverlaySurfaceScaleCallback scale;
+    OverlaySurfaceResizeCallback resize;
 } OverlaySurfaceHandlers;
 
 typedef struct {

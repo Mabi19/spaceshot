@@ -196,7 +196,7 @@ static int decompose_holey_bbox(BBox outer, BBox inner, BBox out[4]) {
     return i;
 }
 
-void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
+static void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     RegionPicker *region = &picker->region;
     OverlaySurface *surface = picker->surface;
 
@@ -461,7 +461,8 @@ static void confirm_selection(PickerSurface *picker) {
     }
 }
 
-void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
+static void
+region_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     RegionPicker *region = &picker->region;
 
     RegionPickerState prev_state = region->state;
@@ -633,7 +634,8 @@ void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     }
 }
 
-void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
+static void
+region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
     RegionPicker *region = &picker->region;
 
     switch (event.keysym) {
@@ -668,7 +670,7 @@ void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
     // TODO: Hold Shift to lock aspect ratio
 }
 
-void region_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
+static void region_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
     RegionPicker *region = &picker->region;
     if (!region->smart_border &&
         config_get()->region.selection_border_color.type ==
@@ -678,7 +680,7 @@ void region_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
     }
 }
 
-void region_picker_enter(PickerSurface *picker) {
+static void region_picker_enter(PickerSurface *picker) {
     RegionPicker *region = &picker->region;
     region->state = REGION_PICKER_EMPTY;
     region->move_flag = false;
@@ -699,3 +701,12 @@ void region_picker_destroy(PickerSurface *picker) {
         smart_border_context_unref(region->smart_border);
     }
 }
+
+const PickerVTable region_picker_vtable = {
+    .per_output = true,
+    .enter = region_picker_enter,
+    .draw = region_picker_draw,
+    .mouse = region_picker_handle_mouse,
+    .keyboard = region_picker_handle_keyboard,
+    .scale = region_picker_handle_scale,
+};

@@ -19,6 +19,12 @@ typedef struct {
     void *user_data;
 } SeatListenerListEntry;
 
+// The amount of pixels one wheel scroll tick is worth.
+// Compositors can't be trusted to give reasonable values via axis events,
+// so convert ticks from axis_value120 with a multiplier.
+// TODO: make this configurable once the UI is more settled
+constexpr double SCROLL_TICK_PIXELS = 60.0;
+
 /** Assumes the passed-in wl_surface has pointer focus. */
 static void
 send_cursor_shape(SeatDispatcher *dispatcher, struct wl_surface *wl_surface) {
@@ -113,14 +119,24 @@ static void pointer_handle_button(
 }
 
 static void pointer_handle_axis(
-    void * /* data */,
+    void *data,
     struct wl_pointer * /* pointer */,
     uint32_t /* time */,
-    enum wl_pointer_axis /* axis */,
-    wl_fixed_t /* value */
+    enum wl_pointer_axis axis,
+    wl_fixed_t value
 ) {
-    // This space intentionally left blank
-    // (but may not be later)
+    SeatDispatcher *dispatcher = data;
+    double amount = wl_fixed_to_double(value);
+    switch (axis) {
+    case WL_POINTER_AXIS_VERTICAL_SCROLL:
+        dispatcher->pointer_data.pending_scroll_y += amount;
+        break;
+    case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
+        dispatcher->pointer_data.pending_scroll_x += amount;
+        break;
+    default:
+        break;
+    }
 }
 
 static void
@@ -128,10 +144,28 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
     SeatDispatcher *dispatcher = data;
     auto ptr_data = &dispatcher->pointer_data;
 
+    double scroll_x = ptr_data->pending_scroll_x;
+    double scroll_y = ptr_data->pending_scroll_y;
+    // Wheel scrolling gets much better granularity from the value120 events,
+    // so prefer them over the (tiny) axis values when available.
+    if (ptr_data->has_axis_source &&
+        ptr_data->axis_source == WL_POINTER_AXIS_SOURCE_WHEEL) {
+        if (ptr_data->received_value120_x) {
+            scroll_x =
+                ptr_data->pending_value120_x / 120.0 * SCROLL_TICK_PIXELS;
+        }
+        if (ptr_data->received_value120_y) {
+            scroll_y =
+                ptr_data->pending_value120_y / 120.0 * SCROLL_TICK_PIXELS;
+        }
+    }
+
     MouseEvent event = {
         .focus = ptr_data->focus,
         .surface_x = ptr_data->surface_x,
         .surface_y = ptr_data->surface_y,
+        .scroll_x = scroll_x,
+        .scroll_y = scroll_y,
         .buttons_pressed =
             ptr_data->pending_buttons & ~ptr_data->pressed_buttons,
         .buttons_held = ptr_data->pending_buttons,
@@ -139,9 +173,10 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
             ptr_data->pressed_buttons & ~ptr_data->pending_buttons,
     };
 
-    // emit events both on mouse move and button change
+    // emit events on mouse move, button change and scrolling
     if (ptr_data->received_events & POINTER_EVENT_MOTION ||
-        ptr_data->pressed_buttons != ptr_data->pending_buttons) {
+        ptr_data->pressed_buttons != ptr_data->pending_buttons ||
+        scroll_x != 0 || scroll_y != 0) {
 
         SeatListenerListEntry *entry;
         wl_array_for_each(entry, &dispatcher->listeners) {
@@ -154,15 +189,23 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
         }
     }
     ptr_data->pressed_buttons = ptr_data->pending_buttons;
+    ptr_data->pending_scroll_x = 0;
+    ptr_data->pending_scroll_y = 0;
+    ptr_data->pending_value120_x = 0;
+    ptr_data->pending_value120_y = 0;
+    ptr_data->received_value120_x = false;
+    ptr_data->received_value120_y = false;
     ptr_data->received_events = 0;
 }
 
 static void pointer_handle_axis_source(
-    void * /* data */,
+    void *data,
     struct wl_pointer * /* pointer */,
-    enum wl_pointer_axis_source /* axis_source */
+    enum wl_pointer_axis_source source
 ) {
-    // This space intentionally left blank
+    SeatDispatcher *dispatcher = data;
+    dispatcher->pointer_data.axis_source = source;
+    dispatcher->pointer_data.has_axis_source = true;
 }
 
 static void pointer_handle_axis_stop(
@@ -175,12 +218,24 @@ static void pointer_handle_axis_stop(
 }
 
 static void pointer_handle_axis_value120(
-    void * /* data */,
+    void *data,
     struct wl_pointer * /* pointer */,
-    enum wl_pointer_axis /* axis */,
-    int32_t /* value120 */
+    enum wl_pointer_axis axis,
+    int32_t value120
 ) {
-    // This space intentionally left blank
+    SeatDispatcher *dispatcher = data;
+    switch (axis) {
+    case WL_POINTER_AXIS_VERTICAL_SCROLL:
+        dispatcher->pointer_data.pending_value120_y += value120;
+        dispatcher->pointer_data.received_value120_y = true;
+        break;
+    case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
+        dispatcher->pointer_data.pending_value120_x += value120;
+        dispatcher->pointer_data.received_value120_x = true;
+        break;
+    default:
+        break;
+    }
 }
 
 static void pointer_handle_axis_relative_direction(

@@ -1,7 +1,5 @@
 #pragma once
 #include "picker/smart-border.h"
-#include "render/command.h"
-#include "wayland/seat.h"
 
 typedef struct PickerSurface PickerSurface;
 
@@ -36,9 +34,5 @@ typedef struct {
     } edit_data;
 } RegionPicker;
 
-void region_picker_enter(PickerSurface *picker);
+// All other functions are in the vtable.
 void region_picker_destroy(PickerSurface *picker);
-void region_picker_draw(PickerSurface *picker, RenderDisplayList *dl);
-void region_picker_handle_mouse(PickerSurface *picker, MouseEvent event);
-void region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event);
-void region_picker_handle_scale(PickerSurface *picker, uint32_t scale);
