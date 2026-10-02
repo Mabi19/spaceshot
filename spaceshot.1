@@ -32,12 +32,13 @@ Note that the region must be entirely contained within one monitor.
 Select an entire monitor (what Wayland calls an output).
 If the output is not specified, an interactive picker is opened to let the user choose.
 .TP
-\fBtoplevel\fR \fIidentifier\fR
+\fBtoplevel\fR [\fIidentifier\fR]
 Select a regular app window (what Wayland calls a toplevel).
 The identifier is an ext-foreign-toplevel-list-v1 ID,
 which you can get via compositor IPC or the
 .BR lswt (1)
 tool.
+If the toplevel is not specified, an interactive picker is opened to let the user choose.
 .TP
 \fBdefer \fItargets\fR
 Prepare a screenshot for later.
@@ -112,6 +113,12 @@ Screenshot the output named DP\-1:
 .RS
 spaceshot output DP\-1
 .RE
+.PP
+Screenshot a toplevel (window) interactively:
+.RS
+spaceshot toplevel
+.RE
+.PP
 Screenshot the toplevel with identifier 1800003b:
 .RS
 spaceshot toplevel 1800003b

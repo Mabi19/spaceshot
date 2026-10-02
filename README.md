@@ -21,7 +21,6 @@ Planned:
 - Zero-copy dmabuf-based capture
 - A more involved UI with extra options
 - More configuration options (mostly concerning appearance)
-- A toplevel picker
 
 ### Controls
 Region mode:
@@ -33,6 +32,11 @@ Region mode:
 
 Output mode:
 - Click on an output to capture it
+
+Toplevel mode (experimental):
+- Click on a toplevel preview to capture it
+- Alternatively, use the arrow keys or Tab/Shift+Tab to select a preview, then press Enter to capture it
+- Scroll with the mouse wheel or trackpad if there are too many previews to fit on screen
 
 ## Building
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
@@ -79,7 +83,9 @@ spaceshot region '150,150 300x200'
 spaceshot output
 # screenshot a predefined output
 spaceshot output DP-1
-# screenshot a toplevel
+# screenshot a toplevel (window)
+spaceshot toplevel
+# screenshot a predefined toplevel
 # pass in an ext-foreign-toplevel-list-v1 identifier
 # you can usually get these via compositor IPC or the lswt tool
 spaceshot toplevel 1800003b
