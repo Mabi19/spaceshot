@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static const char *program_name = NULL;
 
@@ -38,7 +39,9 @@ void report_error_fatal(const char *format, ...) {
     va_start(args);
     print_stderr_valist(format, args);
     va_end(args);
-    exit(2);
+    // _exit, because this function is called from forked processes,
+    // and doing normal exit would call atexit handlers twice
+    _exit(2);
 }
 
 void report_warning(const char *format, ...) {

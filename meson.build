@@ -7,6 +7,7 @@ project(
 )
 
 add_project_arguments('-D_POSIX_C_SOURCE=200809L', language: 'c')
+add_project_arguments('-D_XOPEN_SOURCE=500', language: 'c')
 
 build_conf = configuration_data()
 build_conf.set_quoted('SPACESHOT_VERSION', meson.project_version())

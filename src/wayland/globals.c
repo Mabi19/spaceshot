@@ -258,12 +258,6 @@ static void registry_handle_global(
             wl_registry_bind(registry, object_id, &wl_compositor_interface, 6);
     }
 
-    if (strcmp(interface, wl_data_device_manager_interface.name) == 0) {
-        globals->data_device_manager = wl_registry_bind(
-            registry, object_id, &wl_data_device_manager_interface, 3
-        );
-    }
-
     if (strcmp(interface, wl_shm_interface.name) == 0) {
         // wl_shm_release is only available from version 2 onwards.
         // But not all compositors support version 2, so bind 1 if 2 isn't
@@ -441,7 +435,9 @@ bool find_wayland_globals(
         wayland_globals.fractional_scale_manager == NULL ||
         wayland_globals.viewporter == NULL ||
         wayland_globals.layer_shell == NULL ||
-        wayland_globals.seat_dispatcher == NULL) {
+        wayland_globals.cursor_shape_manager == NULL ||
+        wayland_globals.seat_dispatcher == NULL ||
+        wayland_globals.ext_data_control_manager == NULL) {
         return false;
     }
 
@@ -471,11 +467,7 @@ void cleanup_wayland_globals() {
 
     // A couple of the built-in singleton globals do not have destructors:
     // - wl_compositor
-    // - wl_data_device_manager
 
-    if (wayland_globals.data_device) {
-        wl_data_device_release(wayland_globals.data_device);
-    }
     if (wl_shm_get_version(wayland_globals.shm) >= 2) {
         wl_shm_release(wayland_globals.shm);
     }

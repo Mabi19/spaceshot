@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stddef.h>
 #include <string.h>
+#include <unistd.h>
 
 LinkBuffer *link_buffer_new(size_t block_size) {
     LinkBuffer *result = malloc(sizeof(LinkBuffer));
@@ -103,6 +104,26 @@ void link_buffer_reset(LinkBuffer *buffer) {
         block = block->next;
     }
     buffer->last = buffer->first;
+}
+
+void link_buffer_read(LinkBuffer *buffer, int fd) {
+    while (true) {
+        size_t free = buffer->block_size - buffer->last->used_size;
+        if (free == 0) {
+            next_block(buffer);
+            free = buffer->block_size;
+        }
+        ssize_t bytes_read =
+            read(fd, buffer->last->data + buffer->last->used_size, free);
+        if (bytes_read == 0) {
+            return;
+        } else if (bytes_read == -1) {
+            perror("read failed");
+            exit(2);
+        } else {
+            buffer->last->used_size += bytes_read;
+        }
+    }
 }
 
 void link_buffer_write(LinkBuffer *buffer, FILE *out) {

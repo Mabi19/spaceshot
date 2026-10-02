@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+Arguments args = {};
+
 static void print_help(const char *program_name) {
     printf("Usage: %s <mode> <mode parameters> [options]\n", program_name);
     printf(
@@ -257,6 +259,12 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     result->defer_params = (DeferParams){
                         .needs_output = false, .needs_toplevel = false
                     };
+                } else if (strcmp(mode, "copy-helper") == 0) {
+                    result->mode = CAPTURE_COPY_HELPER;
+                    result->copy_helper_params = (CopyHelperParams){
+                        .mime_type = NULL,
+                        .file_path = NULL,
+                    };
                 } else {
                     report_error(
                         "invalid mode %s\n"
@@ -313,6 +321,17 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         report_error("invalid defer target '%s'", arg);
                         goto error;
                     }
+                } else if (result->mode == CAPTURE_COPY_HELPER) {
+                    if (result->captured_mode_params == 1) {
+                        result->copy_helper_params.mime_type = strdup(arg);
+                    } else if (result->captured_mode_params == 2) {
+                        result->copy_helper_params.file_path = strdup(arg);
+                    } else {
+                        report_error(
+                            "too many parameters for mode 'copy-helper' (max 2)"
+                        );
+                        goto error;
+                    }
                 } else {
                     REPORT_UNHANDLED("mode", "%d", result->mode);
                     goto error;
@@ -338,6 +357,12 @@ void parse_argv(Arguments *result, int argc, char **argv) {
             "information",
             result->executable_name
         );
+        goto error;
+    }
+
+    if (result->mode == CAPTURE_COPY_HELPER &&
+        result->captured_mode_params == 1) {
+        report_error("a MIME type is required");
         goto error;
     }
 

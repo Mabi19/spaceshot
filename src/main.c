@@ -13,7 +13,6 @@
 #include "wayland/toplevel.h"
 #include <assert.h>
 #include <config/config.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,11 +29,6 @@ static bool should_active_wait = true;
 static bool should_clipboard_wait = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
-static Arguments args;
-// image data is obtained some time after publishing the copy,
-// so these need to be kept at a higher level
-static ClipboardCopy *copy_source = NULL;
-static ClipboardCopyOffer *image_png_offer = NULL;
 /** list of CaptureFrame */
 static struct wl_list active_captures;
 // Captures only appear in the list when ready.
@@ -96,7 +90,7 @@ static void send_notification(char *output_filename, bool did_copy) {
             // if something has gone terribly wrong, exit
             // 104 is a random number that is used as a heuristic for when
             // exec() failed
-            exit(104);
+            _exit(104);
         } else if (pid == -1) {
             report_error("couldn't spawn spaceshot-notify");
         } else {
@@ -132,37 +126,28 @@ static void send_notification(char *output_filename, bool did_copy) {
 #endif
 }
 
-static void clipboard_copy_finish(ClipboardCopy *source) {
-    clipboard_copy_destroy(source);
-    should_clipboard_wait = false;
-}
-
-static void finish_noninteractive_screenshot(const Image *image) {
+static void finish_screenshot(const Image *image) {
     LinkBuffer *out_data = image_save_png(image);
-
-    ClipboardCopy *copy_source = NULL;
-    if (config_get()->copy_to_clipboard) {
-        copy_source = clipboard_copy_setup(false);
-    }
-    // the copy may not be successful
-    if (copy_source) {
-        copy_source->finished = clipboard_copy_finish;
-        ClipboardCopyOffer *offer =
-            clipboard_copy_offer_mime(copy_source, "image/png");
-        offer->buffer = out_data;
-        clipboard_copy_activate(copy_source);
-        clipboard_copy_run(copy_source);
-        should_clipboard_wait = true;
-    }
-
-    char *output_filename = get_output_filename();
+    char *output_filename = get_output_file_path();
     save_screenshot(out_data, output_filename);
-    send_notification(output_filename, copy_source != NULL);
+
+    bool should_copy = config_get()->copy_to_clipboard;
+    if (should_copy) {
+        clipboard_copy(
+            "image/png",
+            out_data,
+            output_filename,
+            &should_clipboard_wait,
+            config_get()->move_to_background
+        );
+    }
+
+    send_notification(output_filename, should_copy);
 
     free(output_filename);
     // copies take ownership of link buffers
-    // so only destroy now if NOT copied
-    if (!copy_source) {
+    // so only destroy now if the buffer isn't being used
+    if (!should_copy) {
         link_buffer_destroy(out_data);
     }
 
@@ -201,28 +186,17 @@ static void finish_predefined_region_screenshot(
         crop_bounds.height
     );
 
-    finish_noninteractive_screenshot(cropped);
+    finish_screenshot(cropped);
     image_destroy(cropped);
 }
 
-static void finalize_picker_prepare() {
-    if (config_get()->copy_to_clipboard) {
-        // Set up the copy while the picker's still alive
-        copy_source = clipboard_copy_setup(true);
-        assert(copy_source);
-        copy_source->finished = clipboard_copy_finish;
-        image_png_offer = clipboard_copy_offer_mime(copy_source, "image/png");
-        clipboard_copy_activate(copy_source);
-    }
-}
-
-static void finalize_picker_cancel() {
+static void picker_cancel() {
     printf("selection cancelled\n");
     was_cancelled = true;
     should_active_wait = false;
 }
 
-static void finalize_picker_finish(Image *result) {
+static void picker_finalize(Image *result) {
     // saving is an expensive operation - flush the display first so that
     // the pickers are properly closed before we block
     // TODO: properly poll the display fd if EAGAIN
@@ -230,26 +204,13 @@ static void finalize_picker_finish(Image *result) {
         report_warning("flushing Wayland display failed before encoding image");
     }
 
-    LinkBuffer *out_data = image_save_png(result);
+    finish_screenshot(result);
     image_destroy(result);
-    if (image_png_offer) {
-        image_png_offer->buffer = out_data;
-        clipboard_copy_run(copy_source);
-        should_clipboard_wait = true;
-    }
-
-    char *output_filename = get_output_filename();
-    save_screenshot(out_data, output_filename);
-    send_notification(output_filename, copy_source != NULL);
-
-    free(output_filename);
-    should_active_wait = false;
 }
 
 static const PickerHost picker_host = {
-    .finalize_prepare = finalize_picker_prepare,
-    .finalize_finish = finalize_picker_finish,
-    .finalize_cancel = finalize_picker_cancel,
+    .finalize = picker_finalize,
+    .cancel = picker_cancel,
 };
 
 static bool is_output_matching(WrappedOutput *output) {
@@ -420,6 +381,10 @@ static void get_required_capture_types(bool *output, bool *toplevel) {
         *output = args.defer_params.needs_output;
         *toplevel = args.defer_params.needs_toplevel;
         break;
+    case CAPTURE_COPY_HELPER:
+        *output = false;
+        *toplevel = false;
+        break;
     default:
         REPORT_UNHANDLED("capture mode", "%d", args.mode);
     }
@@ -530,9 +495,7 @@ static void dispatch_captures() {
             wl_list_for_each(frame, &active_captures, link) {
                 if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT &&
                     is_output_matching(frame->output)) {
-                    finish_noninteractive_screenshot(
-                        capture_frame_get_image(frame)
-                    );
+                    finish_screenshot(capture_frame_get_image(frame));
                     found = true;
                     break;
                 }
@@ -553,9 +516,7 @@ static void dispatch_captures() {
             if (output_count == 1) {
                 wl_list_for_each(frame, &active_captures, link) {
                     if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT) {
-                        finish_noninteractive_screenshot(
-                            capture_frame_get_image(frame)
-                        );
+                        finish_screenshot(capture_frame_get_image(frame));
                         capture_frame_destroy_list(&active_captures);
                         break;
                     }
@@ -575,9 +536,7 @@ static void dispatch_captures() {
             wl_list_for_each(frame, &active_captures, link) {
                 if (frame->type == CAPTURE_FRAME_TYPE_TOPLEVEL &&
                     is_toplevel_matching(frame->toplevel)) {
-                    finish_noninteractive_screenshot(
-                        capture_frame_get_image(frame)
-                    );
+                    finish_screenshot(capture_frame_get_image(frame));
                     found = true;
                     break;
                 }
@@ -617,6 +576,12 @@ int main(int argc, char **argv) {
     config_load();
     TIMING_END(config_load);
     set_program_name(argv[0]);
+    // Ignore SIGPIPE.
+    // This is not a filter program, and sometimes
+    // the other side of the clipboard pipe is naughty.
+    // This makes it so that we survive the other end of the clipboard pipe
+    // closing.
+    signal(SIGPIPE, SIG_IGN);
     init_debug_mode();
     args.executable_name = argv[0];
     parse_argv(&args, argc - 1, argv + 1);
@@ -639,69 +604,47 @@ int main(int argc, char **argv) {
     }
 
     wl_display_roundtrip(display);
-    // Non-matching outputs/toplevels are gonna be excluded from this count.
-    if (pending_captures == 0) {
-        report_error_fatal("couldn't find matching capture target");
-    }
 
-    // Wait for all the captured outputs to be ready.
-    TIMING_START(capture);
-    while (pending_captures > 0) {
-        log_debug("waiting for %d pending captures\n", pending_captures);
-        wl_display_dispatch(display);
-    }
-    TIMING_END(capture);
-
-    dispatch_captures();
-
-    while (wl_display_dispatch(display) != -1) {
-        if (!should_active_wait) {
-            break;
+    if (args.mode != CAPTURE_COPY_HELPER) {
+        // Non-matching outputs/toplevels are gonna be excluded from this count.
+        if (pending_captures == 0) {
+            report_error_fatal("couldn't find matching capture target");
         }
-    }
 
-    // By this point all of the pickers are done.
-    renderer_cleanup();
+        // Wait for all the captured outputs to be ready.
+        TIMING_START(capture);
+        while (pending_captures > 0) {
+            log_debug("waiting for %d pending captures\n", pending_captures);
+            wl_display_dispatch(display);
+        }
+        TIMING_END(capture);
+
+        dispatch_captures();
+
+        while (wl_display_dispatch(display) != -1) {
+            if (!should_active_wait) {
+                break;
+            }
+        }
+
+        // By this point all of the pickers are done.
+        renderer_cleanup();
+    } else {
+        // Copy helper mode: this is invoked by clipboard_copy with async set to
+        // true.
+        LinkBuffer *buf = link_buffer_new(LINK_BUFFER_DATA_SIZE);
+        link_buffer_read(buf, STDIN_FILENO);
+
+        clipboard_copy(
+            args.copy_helper_params.mime_type,
+            buf,
+            args.copy_helper_params.file_path,
+            &should_clipboard_wait,
+            false
+        );
+    }
 
     if (should_clipboard_wait) {
-        signal(SIGPIPE, SIG_IGN);
-        if (config_get()->move_to_background) {
-            // double-fork
-            // I'm not quite sure why this works, but according to daemon(7)
-            // it should prevent the process from re-acquiring terminals
-            pid_t pid = fork();
-            if (pid == 0) {
-                // child
-                setsid();
-                pid_t pid = fork();
-                if (pid != 0) {
-                    // parent
-                    _exit(0);
-                }
-            } else {
-                // parent
-                _exit(0);
-            }
-
-            int dev_null = open("/dev/null", O_RDWR);
-            if (dev_null >= 0) {
-                dup2(dev_null, STDOUT_FILENO);
-                dup2(dev_null, STDIN_FILENO);
-                dup2(dev_null, STDERR_FILENO);
-            } else {
-                close(STDOUT_FILENO);
-                close(STDIN_FILENO);
-                close(STDERR_FILENO);
-            }
-
-            int ret = chdir("/");
-            if (ret != 0) {
-                // If this happens, something really weird is going on,
-                // but it technically doesn't break anything for us
-                report_error("chdir failed: %s", strerror(errno));
-            }
-        }
-
         while (wl_display_dispatch(display) != -1) {
             if (!should_clipboard_wait) {
                 break;

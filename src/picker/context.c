@@ -215,13 +215,12 @@ void picker_context_finish(
 
     switch (reason) {
     case PICKER_FINISH_REASON_SELECTED: {
-        ctx->host->finalize_prepare();
         PickerSurface *surface, *tmp;
         wl_list_for_each_safe(surface, tmp, &ctx->pickers, link) {
             picker_surface_destroy(surface);
         }
         // this takes ownership of result
-        ctx->host->finalize_finish(result);
+        ctx->host->finalize(result);
         break;
     }
     case PICKER_FINISH_REASON_CANCELLED: {
@@ -229,7 +228,7 @@ void picker_context_finish(
         wl_list_for_each_safe(surface, tmp, &ctx->pickers, link) {
             picker_surface_destroy(surface);
         }
-        ctx->host->finalize_cancel();
+        ctx->host->cancel();
         break;
     }
     default:

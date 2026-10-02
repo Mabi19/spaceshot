@@ -25,10 +25,9 @@ typedef enum {
  * The pickers are destroyed between prepare and finish.
  */
 typedef struct {
-    void (*finalize_prepare)();
     /** The function takes ownership of the image. */
-    void (*finalize_finish)(Image *);
-    void (*finalize_cancel)();
+    void (*finalize)(Image *);
+    void (*cancel)();
 } PickerHost;
 
 typedef struct {

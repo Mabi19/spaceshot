@@ -7,6 +7,7 @@ typedef enum {
     CAPTURE_REGION,
     CAPTURE_TOPLEVEL,
     CAPTURE_DEFER,
+    CAPTURE_COPY_HELPER,
 } CaptureMode;
 
 typedef struct {
@@ -29,15 +30,23 @@ typedef struct {
 } DeferParams;
 
 typedef struct {
+    char *mime_type;
+    char *file_path;
+} CopyHelperParams;
+
+typedef struct {
     CaptureMode mode;
     union {
         OutputCaptureParams output_params;
         RegionCaptureParams region_params;
         ToplevelCaptureParams toplevel_params;
         DeferParams defer_params;
+        CopyHelperParams copy_helper_params;
     };
     int captured_mode_params;
     const char *executable_name;
 } Arguments;
+
+extern Arguments args;
 
 void parse_argv(Arguments *out, int argc, char **argv);

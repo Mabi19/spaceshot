@@ -37,7 +37,7 @@ const char *get_home_directory() {
     return result;
 }
 
-char *get_output_filename() {
+char *get_output_file_path() {
     char *template = config_get()->output_file;
     int template_len = strlen(template);
     int tilde_count = 0;
@@ -48,7 +48,7 @@ char *get_output_filename() {
         // if a path is all ~s, it won't match the null terminator
         template[tilde_count] != '/') {
         report_error_fatal(
-            "invalid filename template, ~ characters at the "
+            "invalid file path template, ~ characters at the "
             "beginning must be followed by a /"
         );
     }
@@ -76,7 +76,7 @@ char *get_output_filename() {
         strcat(expanded_template, template + tilde_count);
     } else {
         report_error_fatal(
-            "invalid filename template, can't expand %d ~ characters",
+            "invalid file path template, can't expand %d ~ characters",
             tilde_count
         );
     }

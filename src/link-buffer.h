@@ -56,6 +56,10 @@ void *link_buffer_alloc(LinkBuffer *buffer, size_t size, size_t align);
 void link_buffer_reset(LinkBuffer *buffer);
 
 /**
+ * Read the contents of a file descriptor into a link buffer.
+ */
+void link_buffer_read(LinkBuffer *buffer, int fd);
+/**
  * Write the contents of the link buffer to a file descriptor.
  */
 void link_buffer_write(LinkBuffer *buffer, FILE *out);
