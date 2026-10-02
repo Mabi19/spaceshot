@@ -236,11 +236,10 @@ void clipboard_copy(
         dest[1] = '\x0a';
         dest[2] = '\0';
 
-        free(absolute_path);
         ext_data_control_source_v1_offer(copy->data_source, "text/uri-list");
         // Also copy as text/plain, so you can paste the path if the file
         // doesn't work (like in a terminal).
-        copy->file_path = strdup(path);
+        copy->file_path = absolute_path;
         ext_data_control_source_v1_offer(
             copy->data_source, "text/plain;charset=utf-8"
         );
