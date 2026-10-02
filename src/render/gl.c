@@ -651,11 +651,9 @@ static GLTextCacheEntry *text_cache_ensure_entry(
     XXH3_64bits_update(text_cache_hash_state, &length, sizeof(length));
     XXH3_64bits_update(text_cache_hash_state, content, length);
     size_t font_family_len = strlen(style.font_family);
+    // include the null terminator to separate between fields
     XXH3_64bits_update(
-        text_cache_hash_state, &font_family_len, sizeof(font_family_len)
-    );
-    XXH3_64bits_update(
-        text_cache_hash_state, style.font_family, font_family_len
+        text_cache_hash_state, style.font_family, font_family_len + 1
     );
     XXH3_64bits_update(
         text_cache_hash_state, &style.font_size, sizeof(style.font_size)
@@ -666,6 +664,9 @@ static GLTextCacheEntry *text_cache_ensure_entry(
     XXH3_64bits_update(
         text_cache_hash_state, &style.italic, sizeof(style.italic)
     );
+    XXH3_64bits_update(
+        text_cache_hash_state, &style.max_width, sizeof(style.max_width)
+    );
     XXH64_hash_t hash = XXH3_64bits_digest(text_cache_hash_state);
     size_t slot = hash & (text_cache_size - 1);
     GLTextCacheEntry *entry = text_cache[slot];
@@ -675,7 +676,8 @@ static GLTextCacheEntry *text_cache_ensure_entry(
             strcmp(entry->style.font_family, style.font_family) == 0 &&
             entry->style.font_size == style.font_size &&
             entry->style.weight == style.weight &&
-            entry->style.italic == style.italic) {
+            entry->style.italic == style.italic &&
+            entry->style.max_width == style.max_width) {
             entry->last_used_frame = frame_no;
             return entry;
         }
