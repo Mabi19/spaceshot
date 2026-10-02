@@ -14,6 +14,8 @@
 
 ImageFormat image_format_from_wl(enum wl_shm_format format) {
     switch (format) {
+    case WL_SHM_FORMAT_ARGB8888:
+        return IMAGE_FORMAT_ARGB8888;
     case WL_SHM_FORMAT_XRGB8888:
         return IMAGE_FORMAT_XRGB8888;
     case WL_SHM_FORMAT_XBGR8888:
@@ -469,17 +471,24 @@ LinkBuffer *image_save_png(const Image *image) {
 
     // set up all the metadata
 
-    int png_bit_depth, png_significant_bits;
+    int png_bit_depth, png_significant_bits, png_alpha_bits;
     switch (image->format) {
+    case IMAGE_FORMAT_ARGB8888:
+        png_bit_depth = 8;
+        png_significant_bits = 8;
+        png_alpha_bits = 8;
+        break;
     case IMAGE_FORMAT_XRGB8888:
     case IMAGE_FORMAT_XBGR8888:
         png_bit_depth = 8;
         png_significant_bits = 8;
+        png_alpha_bits = 0;
         break;
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         png_bit_depth = 16;
         png_significant_bits = 10;
+        png_alpha_bits = 0;
         break;
     default:
         REPORT_UNHANDLED("image format", "0x%x", image->format);
@@ -490,7 +499,7 @@ LinkBuffer *image_save_png(const Image *image) {
         image->width,
         image->height,
         png_bit_depth,
-        PNG_COLOR_TYPE_RGB,
+        png_alpha_bits > 0 ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB,
         PNG_INTERLACE_NONE,
         PNG_COMPRESSION_TYPE_DEFAULT,
         PNG_FILTER_TYPE_DEFAULT
@@ -500,6 +509,7 @@ LinkBuffer *image_save_png(const Image *image) {
         .red = png_significant_bits,
         .blue = png_significant_bits,
         .green = png_significant_bits,
+        .alpha = png_alpha_bits,
     };
     png_set_sBIT(png_data, png_info, &sig_bits);
 
@@ -510,8 +520,18 @@ LinkBuffer *image_save_png(const Image *image) {
 
     png_bytepp row_ptrs = malloc(image->height * sizeof(png_bytep));
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(image->format);
-    if (image->format == IMAGE_FORMAT_XRGB8888 ||
-        image->format == IMAGE_FORMAT_XBGR8888) {
+    if (image->format == IMAGE_FORMAT_ARGB8888) {
+        // little-endian causes it to be effectively BGRA
+        png_set_bgr(png_data);
+
+        for (uint32_t y = 0; y < image->height; y++) {
+            row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
+        }
+        png_write_image(png_data, row_ptrs);
+    } else if (
+        image->format == IMAGE_FORMAT_XRGB8888 ||
+        image->format == IMAGE_FORMAT_XBGR8888
+    ) {
         // little-endian causes it to be effectively BGRX or RGBX
         png_set_filler(png_data, 0, PNG_FILLER_AFTER);
         if (image->format == IMAGE_FORMAT_XRGB8888) {
@@ -521,7 +541,6 @@ LinkBuffer *image_save_png(const Image *image) {
         for (uint32_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
         }
-
         png_write_image(png_data, row_ptrs);
     } else if (
         image->format == IMAGE_FORMAT_XRGB2101010 ||
