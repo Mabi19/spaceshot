@@ -398,10 +398,9 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                 has_updated_pango_context = true;
             }
 
-            renderer_update_pango_fontdesc(
-                pango_font_description, &text->style
+            renderer_update_pango(
+                pango_layout, pango_font_description, &text->style
             );
-            renderer_update_pango_layout(pango_layout, &text->style);
             pango_layout_set_text(pango_layout, text->content, text->length);
             pango_layout_set_font_description(
                 pango_layout, pango_font_description
@@ -456,8 +455,7 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
 static RenderTextMetrics renderer_cairo_measure_text(
     const char *content, int length, RenderTextStyle style
 ) {
-    renderer_update_pango_fontdesc(pango_font_description, &style);
-    renderer_update_pango_layout(pango_layout, &style);
+    renderer_update_pango(pango_layout, pango_font_description, &style);
     pango_layout_set_text(pango_layout, content, length);
     pango_layout_set_font_description(pango_layout, pango_font_description);
 

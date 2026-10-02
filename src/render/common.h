@@ -4,12 +4,11 @@
 
 // Renderer utilities.
 
-void renderer_update_pango_fontdesc(
-    PangoFontDescription *fontdesc, const RenderTextStyle *style
-);
 void renderer_init_pango_layout(PangoLayout *layout);
-void renderer_update_pango_layout(
-    PangoLayout *layout, const RenderTextStyle *style
+void renderer_update_pango(
+    PangoLayout *layout,
+    PangoFontDescription *fontdesc,
+    const RenderTextStyle *style
 );
 
 /**
