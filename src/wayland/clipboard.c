@@ -41,7 +41,9 @@ static void clipboard_handle_send(
     } else if (copy->file_uri && strcmp(mime_type, "text/uri-list") == 0) {
         fputs(copy->file_uri, wrapped_fd);
     } else if (
-        copy->file_path && strcmp(mime_type, "text/plain;charset=utf-8") == 0
+        copy->file_path &&
+        (strcmp(mime_type, "text/plain;charset=utf-8") == 0 ||
+         strcmp(mime_type, "text/plain") == 0)
     ) {
         fputs(copy->file_path, wrapped_fd);
     } else {
@@ -243,6 +245,7 @@ void clipboard_copy(
         ext_data_control_source_v1_offer(
             copy->data_source, "text/plain;charset=utf-8"
         );
+        ext_data_control_source_v1_offer(copy->data_source, "text/plain");
     }
 end_copy_path:
 
