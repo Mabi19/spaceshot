@@ -670,6 +670,17 @@ static RenderTexture *renderer_gl_texture_new_from_image(const Image *image) {
             GL_ALPHA
         );
         break;
+    case IMAGE_FORMAT_ABGR8888:
+        TEX_IMAGE(
+            GL_RGBA8,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            GL_RED,
+            GL_GREEN,
+            GL_BLUE,
+            GL_ALPHA
+        );
+        break;
     case IMAGE_FORMAT_XRGB2101010:
         TEX_IMAGE(
             GL_RGB10_A2,

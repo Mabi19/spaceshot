@@ -67,6 +67,7 @@ cairo_format_t image_format_to_cairo(ImageFormat format) {
     case IMAGE_FORMAT_XBGR8888:
         return CAIRO_FORMAT_RGB24;
     case IMAGE_FORMAT_ARGB8888:
+    case IMAGE_FORMAT_ABGR8888:
         return CAIRO_FORMAT_ARGB32;
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
@@ -79,6 +80,7 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
     switch (format) {
     case IMAGE_FORMAT_XRGB8888:
     case IMAGE_FORMAT_ARGB8888:
+    case IMAGE_FORMAT_ABGR8888:
     case IMAGE_FORMAT_XBGR8888:
     case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
@@ -382,6 +384,9 @@ static inline void image_get_pixel(
             *g = (*pixel_ptr >> 8 & 0xff) / 255.0;
             *b = (*pixel_ptr & 0xff) / 255.0;
             break;
+        case IMAGE_FORMAT_ABGR8888:
+            *a = (*pixel_ptr >> 24) / 255.0;
+            [[fallthrough]];
         case IMAGE_FORMAT_XBGR8888:
             *b = (*pixel_ptr >> 16 & 0xff) / 255.0;
             *g = (*pixel_ptr >> 8 & 0xff) / 255.0;
@@ -436,6 +441,14 @@ static inline void image_put_pixel(
             uint8_t chan_g = g * 255.0;
             uint8_t chan_b = b * 255.0;
             *pixel_ptr = chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
+            break;
+        }
+        case IMAGE_FORMAT_ABGR8888: {
+            uint8_t chan_a = a * 255.0;
+            uint8_t chan_r = r * 255.0;
+            uint8_t chan_g = g * 255.0;
+            uint8_t chan_b = b * 255.0;
+            *pixel_ptr = chan_a << 24 | chan_b << 16 | chan_g << 8 | chan_r;
             break;
         }
         case IMAGE_FORMAT_XRGB8888: {
@@ -532,6 +545,7 @@ LinkBuffer *image_save_png(const Image *image) {
     int png_bit_depth, png_significant_bits, png_alpha_bits;
     switch (image->format) {
     case IMAGE_FORMAT_ARGB8888:
+    case IMAGE_FORMAT_ABGR8888:
         png_bit_depth = 8;
         png_significant_bits = 8;
         png_alpha_bits = 8;
@@ -582,6 +596,12 @@ LinkBuffer *image_save_png(const Image *image) {
         // little-endian causes it to be effectively BGRA
         png_set_bgr(png_data);
 
+        for (uint32_t y = 0; y < image->height; y++) {
+            row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
+        }
+        png_write_image(png_data, row_ptrs);
+    } else if (image->format == IMAGE_FORMAT_ABGR8888) {
+        // little-endian makes the bytes RGBA, which is PNG's native order
         for (uint32_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
         }
