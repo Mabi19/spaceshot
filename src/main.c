@@ -684,41 +684,36 @@ int main(int argc, char **argv) {
 
     wl_display_roundtrip(display);
 
-    use_dmabuf_capture = should_use_dmabuf();
-    waiting_for_capture_targets = false;
-    {
-        CaptureTarget *target, *tmp;
-        wl_list_for_each_safe(target, tmp, &capture_targets, link) {
-            if (target->is_toplevel) {
-                if (is_toplevel_valid(target->toplevel)) {
+    if (args.mode != CAPTURE_COPY_HELPER) {
+        use_dmabuf_capture = should_use_dmabuf();
+        waiting_for_capture_targets = false;
+        {
+            CaptureTarget *target, *tmp;
+            wl_list_for_each_safe(target, tmp, &capture_targets, link) {
+                if (target->is_toplevel) {
+                    if (is_toplevel_valid(target->toplevel)) {
+                        pending_captures++;
+                        capture_toplevel(
+                            target->toplevel,
+                            use_dmabuf_capture,
+                            handle_captured_toplevel,
+                            target->toplevel
+                        );
+                    }
+                } else if (is_output_valid(target->output)) {
                     pending_captures++;
-                    capture_toplevel(
-                        target->toplevel,
+                    capture_output(
+                        target->output,
                         use_dmabuf_capture,
-                        handle_captured_toplevel,
-                        target->toplevel
+                        handle_captured_output,
+                        target->output
                     );
                 }
-            } else if (is_output_valid(target->output)) {
-                pending_captures++;
-                capture_output(
-                    target->output,
-                    use_dmabuf_capture,
-                    handle_captured_output,
-                    target->output
-                );
+                wl_list_remove(&target->link);
+                free(target);
             }
-            wl_list_remove(&target->link);
-            free(target);
         }
-    }
 
-    // Non-matching outputs/toplevels are gonna be excluded from this count.
-    if (pending_captures == 0) {
-        report_error_fatal("couldn't find matching capture target");
-    }
-
-    if (args.mode != CAPTURE_COPY_HELPER) {
         // Non-matching outputs/toplevels are gonna be excluded from this count.
         if (pending_captures == 0) {
             report_error_fatal("couldn't find matching capture target");

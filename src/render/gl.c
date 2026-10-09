@@ -800,9 +800,15 @@ renderer_gl_texture_new_from_dmabuf(DmabufBuffer *buffer) {
     case DRM_FORMAT_XBGR2101010:
         texture->download_format = IMAGE_FORMAT_XBGR2101010;
         break;
-    default:
+    case DRM_FORMAT_ARGB8888:
+        texture->download_format = IMAGE_FORMAT_ABGR8888;
+        break;
+    case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_XBGR8888:
         texture->download_format = IMAGE_FORMAT_XBGR8888;
         break;
+    default:
+        REPORT_UNHANDLED("dmabuf texture format", "%u", buffer->format);
     }
 
     log_debug("created texture %u from dmabuf\n", texture->gl);
@@ -883,7 +889,8 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
     // fine
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glPixelStorei(GL_PACK_ROW_LENGTH, raw->stride / bytes_per_pixel);
-    switch (raw->format) {
+    switch (texture->download_format) {
+    case IMAGE_FORMAT_ABGR8888:
     case IMAGE_FORMAT_XBGR8888:
         glReadPixels(
             0, 0, raw->width, raw->height, GL_RGBA, GL_UNSIGNED_BYTE, raw->data

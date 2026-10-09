@@ -47,6 +47,8 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
 }
 ImageFormat image_format_from_drm(uint32_t format) {
     switch (format) {
+    case DRM_FORMAT_ARGB8888:
+        return IMAGE_FORMAT_ARGB8888;
     case DRM_FORMAT_XRGB8888:
         return IMAGE_FORMAT_XRGB8888;
     case DRM_FORMAT_XBGR8888:

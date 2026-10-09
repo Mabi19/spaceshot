@@ -267,6 +267,32 @@ static void session_handle_dmabuf_device(
     }
 }
 
+/**
+ * Because the formats overlap so much,
+ * we can reuse one function for both wl_shm and DRM formats.
+ */
+static inline int format_priority(uint32_t format) {
+    // Use 10-bit if available, otherwise fall back to 8-bit.
+    // Alpha is preferred over no alpha
+    // because toplevel captures may be transparent.
+    // All wl_shm formats are defined as the same constants at the equivalent
+    // DRM formats, except for ARGB8888 (=0) and XRGB8888 (=1).
+    switch (format) {
+    case DRM_FORMAT_XRGB2101010:
+    case DRM_FORMAT_XBGR2101010:
+        return 3;
+    case WL_SHM_FORMAT_ARGB8888:
+    case DRM_FORMAT_ARGB8888:
+        return 2;
+    case WL_SHM_FORMAT_XRGB8888:
+    case DRM_FORMAT_XRGB8888:
+    case DRM_FORMAT_XBGR8888:
+        return 1;
+    default:
+        return -1;
+    }
+}
+
 static void session_handle_dmabuf_format(
     void *data,
     struct ext_image_copy_capture_session_v1 * /* session */,
@@ -281,59 +307,38 @@ static void session_handle_dmabuf_format(
 
     log_debug("got dmabuf format %x\n", format);
 
-    // 10-bit should be preferred if available
-    if (format == DRM_FORMAT_XRGB2101010 || format == DRM_FORMAT_XBGR2101010) {
-        goto accept_format;
-    } else if (
-        (format == DRM_FORMAT_XRGB8888 || format == DRM_FORMAT_XBGR8888) &&
-        !context->has_selected_dmabuf_format
-    ) {
-        goto accept_format;
+    int priority = format_priority(format);
+    if (priority >= 0) {
+        if (!context->has_selected_dmabuf_format ||
+            format_priority(context->selected_dmabuf_format) < priority) {
+            // The dmabuf format is also ingested by EGL, we need to ensure
+            // it is compatible with whatever the compositor gives us
+            size_t count = modifiers->size / sizeof(uint64_t);
+            uint64_t *list = NULL;
+            if (count > 0) {
+                list = malloc(count * sizeof(uint64_t));
+                memcpy(list, modifiers->data, count * sizeof(uint64_t));
+            }
+            // only keep modifiers which the renderer can import as a texture
+            count = renderer_get_default()->intersect_dmabuf_modifiers(
+                format, list, count
+            );
+            if (count == 0) {
+                log_debug("no texture-importable modifiers, skipping\n");
+                free(list);
+                return;
+            }
+            for (size_t i = 0; i < count; i++) {
+                log_debug("  modifier %zu: %lx\n", i, (unsigned long)list[i]);
+            }
+            free(context->dmabuf_modifiers);
+            context->dmabuf_modifiers = list;
+            context->dmabuf_modifier_count = count;
+            context->selected_dmabuf_format = format;
+            context->has_selected_dmabuf_format = true;
+        }
     }
     log_debug("skipping\n");
-    return;
-accept_format: {
-    size_t count = modifiers->size / sizeof(uint64_t);
-    uint64_t *list = NULL;
-    if (count > 0) {
-        list = malloc(count * sizeof(uint64_t));
-        memcpy(list, modifiers->data, count * sizeof(uint64_t));
-    }
-    // only keep modifiers which the renderer can import as a texture
-    count =
-        renderer_get_default()->intersect_dmabuf_modifiers(format, list, count);
-    if (count == 0) {
-        log_debug("no texture-importable modifiers, skipping\n");
-        free(list);
-        return;
-    }
-    for (size_t i = 0; i < count; i++) {
-        log_debug("  modifier %zu: %lx\n", i, (unsigned long)list[i]);
-    }
-    free(context->dmabuf_modifiers);
-    context->dmabuf_modifiers = list;
-    context->dmabuf_modifier_count = count;
-    context->selected_dmabuf_format = format;
-    context->has_selected_dmabuf_format = true;
-}
-}
-
-static inline int shm_format_priority(enum wl_shm_format format) {
-    // Use 10-bit if available, otherwise fall back to 8-bit.
-    // Alpha is preferred over no alpha
-    // because toplevel captures may be transparent.
-    switch (format) {
-    case WL_SHM_FORMAT_XRGB2101010:
-    case WL_SHM_FORMAT_XBGR2101010:
-        return 3;
-    case WL_SHM_FORMAT_ARGB8888:
-        return 2;
-    case WL_SHM_FORMAT_XRGB8888:
-    case WL_SHM_FORMAT_XBGR8888:
-        return 1;
-    default:
-        return -1;
-    }
 }
 
 static void session_handle_shm_format(
@@ -344,10 +349,10 @@ static void session_handle_shm_format(
     FrameContext *context = data;
 
     log_debug("got buffer format %x\n", format);
-    int format_priority = shm_format_priority(format);
-    if (format_priority >= 0) {
+    int priority = format_priority(format);
+    if (priority >= 0) {
         if (!context->has_selected_format ||
-            shm_format_priority(context->selected_format) < format_priority) {
+            format_priority(context->selected_format) < priority) {
             context->selected_format = format;
             context->has_selected_format = true;
         }
