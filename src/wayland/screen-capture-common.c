@@ -6,7 +6,14 @@
 #include <config/config.h>
 
 const Image *capture_frame_get_image(CaptureFrame *frame) {
-    // TODO: when image downloading exists, use it
+    if (!frame->image) {
+        assert(frame->texture);
+        // texture transforms are applied transparently by the renderer
+        frame->image = renderer_get_default()->texture_download(frame->texture);
+        if (!frame->image) {
+            report_error_fatal("couldn't download capture from GPU");
+        }
+    }
     return frame->image;
 }
 
@@ -20,8 +27,9 @@ const RenderTexture *capture_frame_get_texture(CaptureFrame *frame) {
 }
 
 Image *capture_frame_steal_image(CaptureFrame *frame) {
-    // TODO: when image downloading exists, use it like capture_frame_get_image
-    Image *result = frame->image;
+    // The image is only created here if the capture was texture-only
+    // (which means it's dmabuf-based and this will download it)
+    Image *result = (Image *)capture_frame_get_image(frame);
     // Renderer textures may borrow from the image's data,
     // so they have to be destroyed as well.
     if (frame->texture) {
@@ -52,7 +60,10 @@ void capture_frame_destroy_list(struct wl_list *captures) {
 }
 
 void capture_output_ext(
-    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
+    WrappedOutput *output,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 );
 bool capture_output_ext_is_available();
 void capture_output_wlr(
@@ -67,7 +78,10 @@ typedef enum {
 } OutputCaptureBackend;
 
 void capture_output(
-    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
+    WrappedOutput *output,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 ) {
     static bool has_selected_backend = false;
     static OutputCaptureBackend backend;
@@ -107,7 +121,7 @@ void capture_output(
     case OUTPUT_CAPTURE_BACKEND_NONE:
         report_error_fatal("couldn't choose an output capture backend");
     case OUTPUT_CAPTURE_BACKEND_EXT:
-        capture_output_ext(output, image_callback, data);
+        capture_output_ext(output, use_dmabuf, image_callback, data);
         break;
     case OUTPUT_CAPTURE_BACKEND_WLR:
         capture_output_wlr(output, image_callback, data);
@@ -116,7 +130,10 @@ void capture_output(
 }
 
 void capture_toplevel_ext(
-    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 );
 
 bool capture_toplevel_ext_is_available();
@@ -127,7 +144,10 @@ typedef enum {
 } ToplevelCaptureBackend;
 
 void capture_toplevel(
-    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 ) {
     static bool has_selected_backend = false;
     static ToplevelCaptureBackend backend;
@@ -147,7 +167,7 @@ void capture_toplevel(
     case TOPLEVEL_CAPTURE_BACKEND_NONE:
         report_error_fatal("couldn't choose an output capture backend");
     case TOPLEVEL_CAPTURE_BACKEND_EXT:
-        capture_toplevel_ext(toplevel, image_callback, data);
+        capture_toplevel_ext(toplevel, use_dmabuf, image_callback, data);
         break;
     }
 }

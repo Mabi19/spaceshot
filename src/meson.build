@@ -40,6 +40,12 @@ extra_protocols = [
     },
     {
         'provider': 'wp',
+        'state': 'stable',
+        'name': 'linux-dmabuf',
+        'version': 1,
+    },
+    {
+        'provider': 'wp',
         'state': 'staging',
         'name': 'cursor-shape',
         'version': 1,
@@ -125,7 +131,9 @@ endforeach
 
 cairo_dep = dependency('cairo')
 egl_dep = dependency('egl')
+gbm_dep = dependency('gbm')
 glesv2_dep = dependency('glesv2')
+libdrm_dep = dependency('libdrm')
 wayland_egl_dep = dependency('wayland-egl')
 # TODO: add an option to compile a custom libpng, probably with zlib-ng
 libpng_dep = dependency('libpng')
@@ -148,6 +156,7 @@ sources = files(
     'render/gl.c',
     'render/renderer.c',
     'wayland/clipboard.c',
+    'wayland/dmabuf.c',
     'wayland/globals.c',
     'wayland/overlay-surface.c',
     'wayland/screen-capture-common.c',
@@ -172,7 +181,9 @@ executable(
     dependencies: [
         cairo_dep,
         egl_dep,
+        gbm_dep,
         glesv2_dep,
+        libdrm_dep,
         wayland_egl_dep,
         libpng_dep,
         libxxhash_dep,

@@ -32,6 +32,11 @@ typedef struct {
     cairo_pattern_t *pattern;
     uint32_t width;
     uint32_t height;
+    /**
+     * The image the pattern's data is borrowed from.
+     * Must outlive the texture.
+     */
+    const Image *source;
 } CairoTexture;
 
 static void
@@ -472,6 +477,7 @@ renderer_cairo_texture_new_from_image(const Image *image) {
     CairoTexture *result = calloc(1, sizeof(CairoTexture));
     result->width = image->width;
     result->height = image->height;
+    result->source = image;
     cairo_surface_t *surface = cairo_image_surface_create_for_data(
         image->data,
         image_format_to_cairo(image->format),
@@ -492,6 +498,35 @@ static void renderer_cairo_texture_destroy(RenderTexture *render_texture) {
     free(texture);
 }
 
+static RenderTexture *
+renderer_cairo_texture_new_from_dmabuf(DmabufBuffer * /* buffer */) {
+    // dmabuf textures need to be imported into a GPU context
+    return NULL;
+}
+
+static void renderer_cairo_texture_dmabuf_set_transform(
+    RenderTexture * /* texture */, ImageTransform /* transform */
+) {
+    // dmabuf textures can't exist here
+}
+
+static size_t renderer_cairo_intersect_dmabuf_modifiers(
+    uint32_t /* format */,
+    uint64_t * /* modifiers */,
+    size_t /* modifier_count */
+) {
+    // no dmabuf modifiers can be imported as textures here
+    return 0;
+}
+
+static Image *
+renderer_cairo_texture_get_image(const RenderTexture *render_texture) {
+    const CairoTexture *texture = (const CairoTexture *)render_texture;
+    return image_copy(texture->source);
+}
+
+static bool renderer_cairo_supports_dmabuf() { return false; }
+
 const Renderer renderer_cairo = {
     .init = renderer_cairo_init,
     .cleanup = renderer_cairo_cleanup,
@@ -501,5 +536,10 @@ const Renderer renderer_cairo = {
     .draw = renderer_cairo_draw,
     .measure_text = renderer_cairo_measure_text,
     .texture_new_from_image = renderer_cairo_texture_new_from_image,
+    .texture_new_from_dmabuf = renderer_cairo_texture_new_from_dmabuf,
+    .texture_dmabuf_set_transform = renderer_cairo_texture_dmabuf_set_transform,
     .texture_destroy = renderer_cairo_texture_destroy,
+    .texture_download = renderer_cairo_texture_get_image,
+    .supports_dmabuf = renderer_cairo_supports_dmabuf,
+    .intersect_dmabuf_modifiers = renderer_cairo_intersect_dmabuf_modifiers,
 };

@@ -14,11 +14,11 @@ It takes a screenshot first and then allows selecting a region on it, which make
 - Screenshots are only ever cropped (and never scaled)
 - Selection border is drawn outside the selection (so it's clear which pixels will end up in the final screenshot)
 - Sending notifications, with actions to open the result file, edit it, and view it in a file manager
+- Efficient dmabuf-based capture
 
 Note that spaceshot will not allow selecting a region which overlaps multiple monitors. This is because screenshotting multiple monitors at once requires scaling the screenshots, which is a non-goal.
 
 Planned:
-- Zero-copy dmabuf-based capture
 - A more involved UI with extra options
 - More configuration options (mostly concerning appearance)
 
@@ -42,7 +42,9 @@ Toplevel mode (experimental):
 You will need a C23-capable compiler and [Meson](https://mesonbuild.com). GCC 15 or Clang 19 should work.
 Dependencies:
 - egl
+- gbm
 - glesv2
+- libdrm
 - wayland-egl
 - cairo
 - libpng

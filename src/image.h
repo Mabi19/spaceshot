@@ -23,6 +23,7 @@ typedef enum {
 
 ImageFormat image_format_from_wl(enum wl_shm_format format);
 enum wl_shm_format image_format_to_wl(ImageFormat format);
+ImageFormat image_format_from_drm(uint32_t format);
 /**
  * Note that this function always returns an RGB format.
  * Manually specified colors should have R & B flipped if
@@ -51,6 +52,28 @@ ImageTransform image_transform_from_wl(enum wl_output_transform transform);
  * is the same as img.
  */
 ImageTransform image_transform_invert(ImageTransform transform);
+
+/**
+ * Whether applying the specified transform swaps the image's
+ * width and height.
+ */
+bool image_transform_swaps_dimensions(ImageTransform transform);
+
+/**
+ * Apply a transform to a pair of texture coordinates.
+ * This is the continuous analog of image_transform_coords, with the same
+ * direction (source to transformed).
+ *
+ * Consumers which display the source image in its *original* orientation
+ * (i.e. undo a transform applied to it) pick their side of the duality:
+ * copying pixels like image_transform does means placing them with
+ * image_transform_invert explicitly, while sampling them pulls from the
+ * inverse mapping - which is this function applied to the transform directly,
+ * since the two inversions cancel.
+ */
+void image_transform_uv(
+    ImageTransform transform, double u, double v, double *dest_u, double *dest_v
+);
 
 typedef struct {
     uint8_t *data;

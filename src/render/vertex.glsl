@@ -9,7 +9,9 @@ layout(location = 4) in vec4 border_radius;
 layout(location = 5) in vec4 border_width;
 layout(location = 6) in vec4 border_color;
 layout(location = 7) in vec2 uv_tl;
-layout(location = 8) in vec2 uv_br;
+layout(location = 8) in vec2 uv_tr;
+layout(location = 9) in vec2 uv_bl;
+layout(location = 10) in vec2 uv_br;
 
 out vec4 rect_color;
 out vec4 rect_border_radius;
@@ -44,5 +46,8 @@ void main() {
     local_pos = v_pos * (size + 2.0) - 1.0;
     // UVs span the *unexpanded* rect; the fringe samples slightly outside the
     // given range, which textures must handle via GL_CLAMP_TO_EDGE.
-    uv = uv_tl + (local_pos / size) * (uv_br - uv_tl);
+    // The four corners allow transformed (e.g. rotated) textures to be drawn
+    // with a plain axis-aligned rect.
+    vec2 uv_frac = local_pos / size;
+    uv = mix(mix(uv_tl, uv_tr, uv_frac.x), mix(uv_bl, uv_br, uv_frac.x), uv_frac.y);
 }

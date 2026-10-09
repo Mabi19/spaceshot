@@ -22,6 +22,16 @@
 #include <unistd.h>
 #include <wayland-client.h>
 
+/** A capture target */
+typedef struct {
+    bool is_toplevel;
+    union {
+        WrappedOutput *output;
+        WrappedToplevel *toplevel;
+    };
+    struct wl_list link;
+} CaptureTarget;
+
 // First, Wayland should be polled until an "active wait" flag is unset,
 // then the process should detach as to not block when waiting for others to
 // paste, then Wayland should be polled until a "clipboard wait" flag is unset.
@@ -29,9 +39,19 @@ static bool should_active_wait = true;
 static bool should_clipboard_wait = false;
 // This flag causes an unsuccessful exit code to be returned from main.
 static bool was_cancelled = false;
-/** list of CaptureFrame */
+// Collected capture targets.
+// These are stashed because we need to know how many
+// outputs there are to determine whether we're gonna be rendering
+// list of CaptureTarget
+static struct wl_list capture_targets;
+static bool waiting_for_capture_targets = true;
+// Whether dmabuf capture should be used for this session.
+// Noninteractive sessions don't benefit from dmabuf.
+static bool use_dmabuf_capture = false;
+// Fully captured frames.
+// list of CaptureFrame
 static struct wl_list active_captures;
-// Captures only appear in the list when ready.
+// Captures only appear in the active_captures list when ready.
 // This counter helps with waiting until everything's captured.
 static int pending_captures = 0;
 static PickerContext pickers;
@@ -283,6 +303,61 @@ static void handle_captured_output(CaptureFrame *frame, void *data) {
     wl_list_insert(&active_captures, &frame->link);
 }
 
+/**
+ * Whether to capture into dmabufs for efficient display in pickers.
+ * Modes which are going to open a graphical picker benefit from this directly;
+ * the ones which only ever use the captured frames as CPU-side images could
+ * just as well use shared memory. Deferred captures are the exception: they
+ * are typically used for "pick a capture mode" menus, which usually end up
+ * opening a picker - and if they don't, the contents are simply downloaded
+ * when they're needed.
+ */
+static bool should_use_dmabuf() {
+    if (!config_get()->dmabuf_capture) {
+        return false;
+    }
+
+    switch (args.mode) {
+    case CAPTURE_REGION:
+        if (args.region_params.has_region) {
+            return false;
+        }
+        break;
+    case CAPTURE_TOPLEVEL:
+        if (args.toplevel_params.toplevel_id) {
+            return false;
+        }
+        break;
+    case CAPTURE_OUTPUT: {
+        if (args.output_params.output_name) {
+            return false;
+        }
+
+        // the output picker only opens with multiple matching outputs
+        int matching_outputs = 0;
+        WrappedOutput *output;
+        wl_list_for_each(output, &wayland_globals.outputs, link) {
+            if (is_output_matching(output)) {
+                matching_outputs++;
+            }
+        }
+        if (matching_outputs <= 1) {
+            return false;
+        }
+        break;
+    }
+    case CAPTURE_DEFER:
+        // the mode isn't known yet; see the comment above
+        break;
+    default:
+        REPORT_UNHANDLED("capture mode", "%d", args.mode);
+    }
+
+    // dmabufs are only useful as GPU textures, so a working GL renderer is
+    // necessary (this also initializes the renderer if it wasn't already)
+    return renderer_get_default()->supports_dmabuf();
+}
+
 static void add_new_output(WrappedOutput *output) {
     log_debug(
         "Got output %p with name %s\n",
@@ -290,8 +365,9 @@ static void add_new_output(WrappedOutput *output) {
         output->name ? output->name : "NULL"
     );
 
-    // New outputs shouldn't be accepted if spaceshot is in the background
-    if (!should_active_wait) {
+    // We dispatch all the captures at once.
+    // After that's done we have no use for them anymore
+    if (!waiting_for_capture_targets) {
         return;
     }
 
@@ -318,10 +394,9 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    // We use the output as user data here because if capturing fails,
-    // we can use it to print out the error message without the frame object
-    pending_captures++;
-    capture_output(output, handle_captured_output, output);
+    CaptureTarget *target = calloc(1, sizeof(CaptureTarget));
+    target->output = output;
+    wl_list_insert(&capture_targets, &target->link);
 }
 
 static void handle_captured_toplevel(CaptureFrame *frame, void *data) {
@@ -354,7 +429,7 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
         toplevel->title
     );
 
-    if (!should_active_wait) {
+    if (!waiting_for_capture_targets) {
         return;
     }
 
@@ -362,8 +437,10 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
         return;
     }
 
-    pending_captures++;
-    capture_toplevel(toplevel, handle_captured_toplevel, toplevel);
+    CaptureTarget *target = calloc(1, sizeof(CaptureTarget));
+    target->is_toplevel = true;
+    target->toplevel = toplevel;
+    wl_list_insert(&capture_targets, &target->link);
 }
 
 static void get_required_capture_types(bool *output, bool *toplevel) {
@@ -571,6 +648,7 @@ extern void init_debug_mode();
 
 int main(int argc, char **argv) {
     wl_list_init(&active_captures);
+    wl_list_init(&capture_targets);
 
     TIMING_START(config_load);
     config_load();
@@ -593,6 +671,7 @@ int main(int argc, char **argv) {
 
     bool needs_output, needs_toplevel;
     get_required_capture_types(&needs_output, &needs_toplevel);
+    waiting_for_capture_targets = true;
 
     bool found_everything = find_wayland_globals(
         display,
@@ -604,6 +683,40 @@ int main(int argc, char **argv) {
     }
 
     wl_display_roundtrip(display);
+
+    use_dmabuf_capture = should_use_dmabuf();
+    waiting_for_capture_targets = false;
+    {
+        CaptureTarget *target, *tmp;
+        wl_list_for_each_safe(target, tmp, &capture_targets, link) {
+            if (target->is_toplevel) {
+                if (is_toplevel_valid(target->toplevel)) {
+                    pending_captures++;
+                    capture_toplevel(
+                        target->toplevel,
+                        use_dmabuf_capture,
+                        handle_captured_toplevel,
+                        target->toplevel
+                    );
+                }
+            } else if (is_output_valid(target->output)) {
+                pending_captures++;
+                capture_output(
+                    target->output,
+                    use_dmabuf_capture,
+                    handle_captured_output,
+                    target->output
+                );
+            }
+            wl_list_remove(&target->link);
+            free(target);
+        }
+    }
+
+    // Non-matching outputs/toplevels are gonna be excluded from this count.
+    if (pending_captures == 0) {
+        report_error_fatal("couldn't find matching capture target");
+    }
 
     if (args.mode != CAPTURE_COPY_HELPER) {
         // Non-matching outputs/toplevels are gonna be excluded from this count.

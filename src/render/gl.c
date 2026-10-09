@@ -7,14 +7,20 @@
 #include "wayland/globals.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+// clang-format off
+// gl2ext.h depends on GLES3/gl3.h being included
 #include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
+// clang-format on
 #include <assert.h>
 #include <cairo.h>
+#include <drm_fourcc.h>
 #include <math.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wayland-egl.h>
 #include <xxh3.h>
 
@@ -29,11 +35,19 @@ typedef struct {
     uint32_t device_height;
 } GLCanvas;
 
-// Currently the only texture data is its GL object ID.
-// But in the future, when transformed textures exist, more fields may have to
-// be stored.
+// Texture metadata: dimensions and CPU readback information.
+// Transformed textures (which can appear with dmabufs) additionally store the
+// transform applied to their contents; both drawing and downloading apply it.
 typedef struct {
     GLuint gl;
+    /** EGLImage for dmabuf-backed textures, EGL_NO_IMAGE_KHR otherwise. */
+    EGLImageKHR image;
+    // dmabuf-backed textures own their buffers
+    DmabufBuffer *dmabuf;
+    uint32_t width;
+    uint32_t height;
+    ImageFormat download_format;
+    ImageTransform transform;
 } GLTexture;
 
 // Data for a single instance of a rectangle.
@@ -46,10 +60,12 @@ typedef struct {
     // order: left, right, top, bottom
     GLfloat border_width[4];
     GLfloat border_color[4];
-    // TODO: should UVs instead be in a third VBO for per-vertex data?
-    // note that if transformed textures ever appear (possible under dmabufs for
-    // example) this representation is not enough
+    // UVs are stored here with the instances instead of per-vertex,
+    // because the first instance's UVs would loop
+    // instead of using the data corresponding to each instance.
     GLfloat uv_tl[2];
+    GLfloat uv_tr[2];
+    GLfloat uv_bl[2];
     GLfloat uv_br[2];
 } GLRectData;
 
@@ -64,7 +80,9 @@ typedef struct {
     RECT_FIELD(5, border_width);                                               \
     RECT_FIELD(6, border_color);                                               \
     RECT_FIELD(7, uv_tl);                                                      \
-    RECT_FIELD(8, uv_br)
+    RECT_FIELD(8, uv_tr);                                                      \
+    RECT_FIELD(9, uv_bl);                                                      \
+    RECT_FIELD(10, uv_br)
 
 typedef struct GLTextCacheEntry {
     char *content;
@@ -97,6 +115,13 @@ static const char FRAGMENT_SHADER_SOURCE[] = {
 static EGLDisplay egl_display = EGL_NO_DISPLAY;
 static EGLContext egl_context = EGL_NO_CONTEXT;
 
+// EGL/GL entry points and capabilities for dmabuf import
+static bool gl_has_dmabuf_import = false;
+static PFNEGLCREATEIMAGEKHRPROC gl_eglCreateImageKHR = NULL;
+static PFNEGLDESTROYIMAGEKHRPROC gl_eglDestroyImageKHR = NULL;
+static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC gl_eglImageTargetTexture2DOES = NULL;
+static PFNEGLQUERYDMABUFMODIFIERSEXTPROC gl_eglQueryDmaBufModifiersEXT = NULL;
+
 static GLuint gl_texture_none = 0;
 static GLuint gl_vao = 0;
 static GLuint gl_vbo_rect_mesh = 0;
@@ -122,6 +147,19 @@ static uint32_t frame_no = 0;
 
 static void renderer_gl_cleanup();
 
+/** Whether the current context supports a GL extension. */
+static bool gl_has_extension(const char *name) {
+    GLint count = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &count);
+    for (GLint i = 0; i < count; i++) {
+        const char *extension = (const char *)glGetStringi(GL_EXTENSIONS, i);
+        if (extension && strcmp(extension, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool renderer_gl_init() {
     egl_display = eglGetPlatformDisplay(
         EGL_PLATFORM_WAYLAND_KHR, wayland_globals.display, NULL
@@ -145,19 +183,32 @@ static bool renderer_gl_init() {
     }
     bool has_no_config_context = false;
     bool has_surfaceless_context = false;
+    bool has_image_dma_buf_import = false;
+    bool has_image_base = false;
+    bool has_image_dma_buf_import_modifiers = false;
     const char *ext_start = exts;
     int length = 0;
     while (true) {
         char c = ext_start[length];
         if (c == ' ' || c == '\0') {
-            if (length == 25 &&
-                memcmp(ext_start, "EGL_KHR_no_config_context", length) == 0) {
+#define CHECK_EXT(name)                                                        \
+    length == sizeof(name) - 1 && memcmp(ext_start, name, length) == 0
+            if (CHECK_EXT("EGL_KHR_no_config_context")) {
                 has_no_config_context = true;
             }
-            if (length == 27 &&
-                memcmp(ext_start, "EGL_KHR_surfaceless_context", length) == 0) {
+            if (CHECK_EXT("EGL_KHR_surfaceless_context")) {
                 has_surfaceless_context = true;
             }
+            if (CHECK_EXT("EGL_KHR_image_base")) {
+                has_image_base = true;
+            }
+            if (CHECK_EXT("EGL_EXT_image_dma_buf_import")) {
+                has_image_dma_buf_import = true;
+            }
+            if (CHECK_EXT("EGL_EXT_image_dma_buf_import_modifiers")) {
+                has_image_dma_buf_import_modifiers = true;
+            }
+#undef CHECK_EXT
 
             if (c == '\0') {
                 break;
@@ -205,6 +256,30 @@ static bool renderer_gl_init() {
         log_debug("eglMakeCurrent failed\n");
         renderer_gl_cleanup();
         return false;
+    }
+
+    // dmabuf import is optional; without it dmabuf capture is disabled
+    // (GL_OES_EGL_image is what provides glEGLImageTargetTexture2DOES, whose
+    // GLeglImageOES argument is the handle of an EGLImage created with
+    // eglCreateImageKHR)
+    if (has_image_base && has_image_dma_buf_import &&
+        has_image_dma_buf_import_modifiers &&
+        gl_has_extension("GL_OES_EGL_image")) {
+        gl_eglCreateImageKHR =
+            (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+        gl_eglDestroyImageKHR =
+            (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+        gl_eglImageTargetTexture2DOES = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)
+            eglGetProcAddress("glEGLImageTargetTexture2DOES");
+        gl_eglQueryDmaBufModifiersEXT = (PFNEGLQUERYDMABUFMODIFIERSEXTPROC)
+            eglGetProcAddress("eglQueryDmaBufModifiersEXT");
+        gl_has_dmabuf_import = gl_eglCreateImageKHR != NULL &&
+                               gl_eglDestroyImageKHR != NULL &&
+                               gl_eglImageTargetTexture2DOES != NULL &&
+                               gl_eglQueryDmaBufModifiersEXT != NULL;
+    }
+    if (!gl_has_dmabuf_import) {
+        log_debug("dmabuf texture import is unavailable\n");
     }
 
     // Set up common GL state and data
@@ -388,6 +463,12 @@ static void renderer_gl_cleanup() {
 
     free(rect_instance_buffer);
 
+    gl_has_dmabuf_import = false;
+    gl_eglCreateImageKHR = NULL;
+    gl_eglDestroyImageKHR = NULL;
+    gl_eglImageTargetTexture2DOES = NULL;
+    gl_eglQueryDmaBufModifiersEXT = NULL;
+
     if (pango_fontmap) {
         g_object_unref(pango_fontmap);
     }
@@ -516,6 +597,11 @@ static void renderer_gl_canvas_destroy(RenderCanvas *render_canvas) {
 
 static RenderTexture *renderer_gl_texture_new_from_image(const Image *image) {
     GLTexture *texture = calloc(1, sizeof(GLTexture));
+    texture->width = image->width;
+    texture->height = image->height;
+    // Uploading and reading back with the same GL formats is byte-preserving,
+    // so readback can produce the original format.
+    texture->download_format = image->format;
     glGenTextures(1, &texture->gl);
     glBindTexture(GL_TEXTURE_2D, texture->gl);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -617,7 +703,226 @@ static RenderTexture *renderer_gl_texture_new_from_image(const Image *image) {
 static void renderer_gl_texture_destroy(RenderTexture *render_texture) {
     GLTexture *texture = (GLTexture *)render_texture;
     glDeleteTextures(1, &texture->gl);
+    if (texture->image != EGL_NO_IMAGE_KHR) {
+        gl_eglDestroyImageKHR(egl_display, texture->image);
+        dmabuf_buffer_destroy(texture->dmabuf);
+    }
     free(texture);
+}
+
+static bool renderer_gl_supports_dmabuf() { return gl_has_dmabuf_import; }
+
+static RenderTexture *
+renderer_gl_texture_new_from_dmabuf(DmabufBuffer *buffer) {
+    if (!gl_has_dmabuf_import) {
+        return NULL;
+    }
+
+    EGLint attribs[64];
+    int c = 0;
+    attribs[c++] = EGL_WIDTH;
+    attribs[c++] = buffer->width;
+    attribs[c++] = EGL_HEIGHT;
+    attribs[c++] = buffer->height;
+    attribs[c++] = EGL_LINUX_DRM_FOURCC_EXT;
+    attribs[c++] = buffer->format;
+    for (uint32_t i = 0; i < buffer->plane_count; i++) {
+#define PLANE_ATTRIBS(no)                                                      \
+    attribs[c++] = EGL_DMA_BUF_PLANE##no##_FD_EXT;                             \
+    attribs[c++] = buffer->planes[no].fd;                                      \
+    attribs[c++] = EGL_DMA_BUF_PLANE##no##_OFFSET_EXT;                         \
+    attribs[c++] = buffer->planes[no].offset;                                  \
+    attribs[c++] = EGL_DMA_BUF_PLANE##no##_PITCH_EXT;                          \
+    attribs[c++] = buffer->planes[no].pitch;                                   \
+    attribs[c++] = EGL_DMA_BUF_PLANE##no##_MODIFIER_LO_EXT;                    \
+    attribs[c++] = (EGLint)(buffer->modifier & 0xffffffffu);                   \
+    attribs[c++] = EGL_DMA_BUF_PLANE##no##_MODIFIER_HI_EXT;                    \
+    attribs[c++] = (EGLint)(buffer->modifier >> 32)
+        switch (i) {
+        case 0:
+            PLANE_ATTRIBS(0);
+            break;
+        case 1:
+            PLANE_ATTRIBS(1);
+            break;
+        case 2:
+            PLANE_ATTRIBS(2);
+            break;
+        case 3:
+            PLANE_ATTRIBS(3);
+            break;
+        }
+    }
+#undef PLANE_ATTRIBS
+    attribs[c++] = EGL_NONE;
+
+    EGLImageKHR image = gl_eglCreateImageKHR(
+        egl_display, EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT, NULL, attribs
+    );
+    if (image == EGL_NO_IMAGE_KHR) {
+        log_debug("eglCreateImageKHR failed: %x\n", eglGetError());
+        return NULL;
+    }
+
+    GLTexture *texture = calloc(1, sizeof(GLTexture));
+    glGenTextures(1, &texture->gl);
+    glBindTexture(GL_TEXTURE_2D, texture->gl);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // The buffer's DRM format already determines the color components
+    // correctly, so (unlike with glTexImage2D uploads) no swizzling of them
+    // is necessary.
+    while (glGetError() != GL_NO_ERROR) {
+        // clear errors from unrelated state changes
+    }
+    // GLeglImageOES (GL_OES_EGL_image) is the GL-side name of an EGLImage
+    // handle created with eglCreateImageKHR
+    gl_eglImageTargetTexture2DOES(GL_TEXTURE_2D, (GLeglImageOES)image);
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        log_debug("glEGLImageTargetTexture2DOES failed: %x\n", error);
+        glDeleteTextures(1, &texture->gl);
+        gl_eglDestroyImageKHR(egl_display, image);
+        free(texture);
+        return NULL;
+    }
+
+    texture->image = image;
+    texture->width = buffer->width;
+    texture->height = buffer->height;
+    texture->dmabuf = buffer;
+    // glReadPixels yields logical RGBA component order, which in memory is
+    // the little-endian XBGR layout.
+    switch (buffer->format) {
+    case DRM_FORMAT_XRGB2101010:
+    case DRM_FORMAT_XBGR2101010:
+        texture->download_format = IMAGE_FORMAT_XBGR2101010;
+        break;
+    default:
+        texture->download_format = IMAGE_FORMAT_XBGR8888;
+        break;
+    }
+
+    log_debug("created texture %u from dmabuf\n", texture->gl);
+    return (RenderTexture *)texture;
+}
+
+static void renderer_gl_texture_dmabuf_set_transform(
+    RenderTexture *render_texture, ImageTransform transform
+) {
+    GLTexture *texture = (GLTexture *)render_texture;
+    texture->transform = transform;
+}
+
+static size_t renderer_gl_intersect_dmabuf_modifiers(
+    uint32_t format, uint64_t *modifiers, size_t modifier_count
+) {
+    if (!gl_has_dmabuf_import || modifier_count == 0) {
+        return 0;
+    }
+
+    constexpr EGLint MAX_MODIFIERS = 256;
+    EGLuint64KHR supported[MAX_MODIFIERS];
+    EGLBoolean external_only[MAX_MODIFIERS];
+    EGLint count = 0;
+    if (!gl_eglQueryDmaBufModifiersEXT(
+            egl_display, format, MAX_MODIFIERS, supported, external_only, &count
+        ) ||
+        count == 0) {
+        // can't enumerate; assume the modifiers are not usable
+        return 0;
+    }
+
+    size_t kept = 0;
+    for (size_t i = 0; i < modifier_count; i++) {
+        for (EGLint j = 0; j < count; j++) {
+            // external-only modifiers cannot be bound to GL_TEXTURE_2D
+            if (supported[j] == modifiers[i] && external_only[j] == EGL_FALSE) {
+                modifiers[kept++] = modifiers[i];
+                break;
+            }
+        }
+    }
+    return kept;
+}
+
+static Image *
+renderer_gl_texture_download(const RenderTexture *render_texture) {
+    const GLTexture *texture = (const GLTexture *)render_texture;
+
+    // This function is intended to work only for dmabuf-based textures.
+    // If a regular texture which is already on the CPU calls this, something's
+    // probably wrong. Also it depends on the texture not being swizzled, and
+    // image textures can be.
+    assert(texture->dmabuf);
+
+    Image *raw =
+        image_new(texture->width, texture->height, texture->download_format);
+    if (!raw) {
+        return NULL;
+    }
+
+    GLuint framebuffer;
+    glGenFramebuffers(1, &framebuffer);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+    glFramebufferTexture2D(
+        GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->gl, 0
+    );
+    GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        log_debug("texture readback framebuffer is incomplete (%u)\n", status);
+        glDeleteFramebuffers(1, &framebuffer);
+        image_destroy(raw);
+        return NULL;
+    }
+
+    uint32_t bytes_per_pixel = image_format_bytes_per_pixel(raw->format);
+    // Only glReadPixels uses these two parameters, so just setting them here is
+    // fine
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glPixelStorei(GL_PACK_ROW_LENGTH, raw->stride / bytes_per_pixel);
+    switch (raw->format) {
+    case IMAGE_FORMAT_XBGR8888:
+        glReadPixels(
+            0, 0, raw->width, raw->height, GL_RGBA, GL_UNSIGNED_BYTE, raw->data
+        );
+        break;
+    case IMAGE_FORMAT_XBGR2101010:
+        glReadPixels(
+            0,
+            0,
+            raw->width,
+            raw->height,
+            GL_RGBA,
+            GL_UNSIGNED_INT_2_10_10_10_REV,
+            raw->data
+        );
+        break;
+    default:
+        REPORT_UNHANDLED("download image format", "%d", raw->format);
+    }
+
+    glDeleteFramebuffers(1, &framebuffer);
+
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        log_debug("glReadPixels produced an error: %u\n", error);
+        image_destroy(raw);
+        return NULL;
+    }
+
+    if (texture->transform == IMAGE_TRANSFORM_NORMAL) {
+        return raw;
+    }
+    // image_transform places pixels at transformed positions, so undoing an
+    // applied transform means placing them with its inverse.
+    // (Drawing shows the same image by sampling; there the inverse cancels.)
+    Image *result =
+        image_transform(raw, image_transform_invert(texture->transform));
+    image_destroy(raw);
+    return result;
 }
 
 /** Double the size of the text cache's hash table. */
@@ -864,6 +1169,34 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             if (rect->texture) {
                 assert(rect->uv.u1 > rect->uv.u0 && rect->uv.v1 > rect->uv.v0);
             }
+
+            // dmabuf-based textures may come transformed (the stored transform
+            // is what the compositor applied to their contents); un-apply it
+            // here by picking the right UVs.
+            //
+            // The image to show is image_transform(contents, invert(T)), whose
+            // pixel at some position comes from the contents at the position
+            // image_transform_coords(invert(T)) maps it *from*. Sampling is the
+            // inverse of placing pixels, so that's just image_transform_uv(T) -
+            // the two inversions cancel out. (texture_download places pixels
+            // instead, so there the invert is explicit.)
+            const double u[4] = {
+                rect->uv.u0, rect->uv.u1, rect->uv.u0, rect->uv.u1
+            };
+            const double v[4] = {
+                rect->uv.v0, rect->uv.v0, rect->uv.v1, rect->uv.v1
+            };
+            GLfloat uv_corners[4][2];
+            ImageTransform transform =
+                rect->texture ? ((const GLTexture *)rect->texture)->transform
+                              : IMAGE_TRANSFORM_NORMAL;
+            for (int j = 0; j < 4; j++) {
+                double source_u, source_v;
+                image_transform_uv(transform, u[j], v[j], &source_u, &source_v);
+                uv_corners[j][0] = source_u;
+                uv_corners[j][1] = source_v;
+            }
+
             rect_instance_buffer[i] = (GLRectData){
                 .position = {rect->bounds.x, rect->bounds.y},
                 .size = {rect->bounds.width, rect->bounds.height},
@@ -887,8 +1220,10 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                      rect->border_color.g,
                      rect->border_color.b,
                      rect->border_color.a},
-                .uv_tl = {rect->uv.u0, rect->uv.v0},
-                .uv_br = {rect->uv.u1, rect->uv.v1},
+                .uv_tl = {uv_corners[0][0], uv_corners[0][1]},
+                .uv_tr = {uv_corners[1][0], uv_corners[1][1]},
+                .uv_bl = {uv_corners[2][0], uv_corners[2][1]},
+                .uv_br = {uv_corners[3][0], uv_corners[3][1]},
             };
             i++;
             break;
@@ -920,6 +1255,8 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                      text->color.b,
                      text->color.a},
                 .uv_tl = {0, 0},
+                .uv_tr = {1, 0},
+                .uv_bl = {0, 1},
                 .uv_br = {1, 1}
             };
 
@@ -1106,5 +1443,10 @@ const Renderer renderer_gl = {
     .draw = renderer_gl_draw,
     .measure_text = renderer_gl_measure_text,
     .texture_new_from_image = renderer_gl_texture_new_from_image,
+    .texture_new_from_dmabuf = renderer_gl_texture_new_from_dmabuf,
+    .texture_dmabuf_set_transform = renderer_gl_texture_dmabuf_set_transform,
     .texture_destroy = renderer_gl_texture_destroy,
+    .texture_download = renderer_gl_texture_download,
+    .supports_dmabuf = renderer_gl_supports_dmabuf,
+    .intersect_dmabuf_modifiers = renderer_gl_intersect_dmabuf_modifiers,
 };

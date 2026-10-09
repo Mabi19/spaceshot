@@ -2,6 +2,7 @@
 #include "image.h"
 #include "render/command.h"
 #include "render/texture.h"
+#include "wayland/dmabuf.h"
 #include <wayland-client.h>
 
 /** An opaque handle representing renderer-specific data for a surface. */
@@ -43,7 +44,41 @@ typedef struct {
     );
 
     RenderTexture *(*texture_new_from_image)(const Image *image);
+    /**
+     * Create a texture directly from a dmabuf, taking ownership of the dmabuf
+     * in the process (as long as creation succeeds).
+     * This is not a copy, so the dmabuf's contents may be filled in later
+     * (in our case by the compositor with the screenshot)
+     * and the texture will reflect that. Texture contents are undefined
+     * until the dmabuf is filled in.
+     * Returns NULL if dmabuf import is unsupported or fails.
+     */
+    RenderTexture *(*texture_new_from_dmabuf)(DmabufBuffer *buffer);
+    /**
+     * With dmabuf captures the transform is only known after the capture has
+     * happened. This function can be used to update a dmabuf-backed texture's
+     * transform.
+     */
+    void (*texture_dmabuf_set_transform)(
+        RenderTexture *texture, ImageTransform transform
+    );
     void (*texture_destroy)(RenderTexture *texture);
+    /**
+     * Read a texture's contents back to the CPU.
+     * The result is in the displayed orientation (i.e. texture transforms are
+     * already unapplied) and is owned by the caller.
+     */
+    Image *(*texture_download)(const RenderTexture *texture);
+    /** Whether dmabuf import is supported by this renderer. */
+    bool (*supports_dmabuf)();
+    /**
+     * Filter a list of DRM format modifiers for a format down to those which
+     * can be imported as textures. The list is compacted in place and the
+     * number of remaining modifiers is returned.
+     */
+    size_t (*intersect_dmabuf_modifiers)(
+        uint32_t format, uint64_t *modifiers, size_t modifier_count
+    );
 } Renderer;
 
 extern const Renderer renderer_cairo;

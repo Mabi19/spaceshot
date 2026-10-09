@@ -14,7 +14,7 @@ typedef enum {
  * A helper struct to assist with using captured frames.
  * At least one of the image or texture fields will be set;
  * the getter for the other one will create it on demand.
- * This is because with dmabuf-based capture (not implemented yet),
+ * This is because with dmabuf-based capture,
  * an Image will not exist, only a texture created from the dmabuf.
  */
 typedef struct CaptureFrame {
@@ -63,16 +63,26 @@ typedef void (*FrameCaptureCallback)(CaptureFrame *frame, void *data);
 
 /**
  * Takes a screenshot of an output.
+ * If use_dmabuf is set, the capture is done into a dmabuf which is used
+ * for efficient display; this only makes sense when the frame's texture is
+ * going to be used (i.e. when a picker is shown).
  * You are responsible for destroying the result yourself.
  */
 void capture_output(
-    WrappedOutput *output, FrameCaptureCallback image_callback, void *data
+    WrappedOutput *output,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 );
 
 /**
  * Takes a screenshot of a toplevel.
+ * See capture_output for the meaning of use_dmabuf.
  * You are responsible for destroying the result yourself.
  */
 void capture_toplevel(
-    WrappedToplevel *toplevel, FrameCaptureCallback image_callback, void *data
+    WrappedToplevel *toplevel,
+    bool use_dmabuf,
+    FrameCaptureCallback image_callback,
+    void *data
 );

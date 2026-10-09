@@ -7,6 +7,7 @@
 #include <ext-image-capture-source-client.h>
 #include <ext-image-copy-capture-client.h>
 #include <fractional-scale-client.h>
+#include <linux-dmabuf-client.h>
 #include <viewporter-client.h>
 #include <wayland-client.h>
 #include <wlr-layer-shell-client.h>
@@ -21,6 +22,7 @@ typedef struct {
     struct wl_compositor *compositor;
     struct wl_shm *shm;
     struct wl_subcompositor *subcompositor;
+    struct zwp_linux_dmabuf_v1 *linux_dmabuf;
     struct ext_data_control_manager_v1 *ext_data_control_manager;
     struct ext_data_control_device_v1 *ext_data_control_device;
     struct ext_foreign_toplevel_list_v1 *ext_foreign_toplevel_list;

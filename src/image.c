@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <cairo.h>
 #include <config/config.h>
+#include <drm_fourcc.h>
 #include <png.h>
 #include <setjmp.h>
 #include <stdlib.h>
@@ -42,6 +43,20 @@ enum wl_shm_format image_format_to_wl(ImageFormat format) {
         return WL_SHM_FORMAT_XBGR2101010;
     default:
         REPORT_UNHANDLED("image format", "%x", format);
+    }
+}
+ImageFormat image_format_from_drm(uint32_t format) {
+    switch (format) {
+    case DRM_FORMAT_XRGB8888:
+        return IMAGE_FORMAT_XRGB8888;
+    case DRM_FORMAT_XBGR8888:
+        return IMAGE_FORMAT_XBGR8888;
+    case DRM_FORMAT_XRGB2101010:
+        return IMAGE_FORMAT_XRGB2101010;
+    case DRM_FORMAT_XBGR2101010:
+        return IMAGE_FORMAT_XBGR2101010;
+    default:
+        REPORT_UNHANDLED("drm format", "%x", format);
     }
 }
 cairo_format_t image_format_to_cairo(ImageFormat format) {
@@ -174,7 +189,7 @@ ImageTransform image_transform_invert(ImageTransform transform) {
     }
 }
 
-static bool image_transform_swaps_dimensions(ImageTransform transform) {
+bool image_transform_swaps_dimensions(ImageTransform transform) {
     switch (transform) {
     case IMAGE_TRANSFORM_90:
     case IMAGE_TRANSFORM_270:
@@ -227,6 +242,47 @@ static inline void image_transform_coords(
     case IMAGE_TRANSFORM_FLIPPED_270:
         *dest_x = height - 1 - y;
         *dest_y = width - 1 - x;
+        break;
+    default:
+        REPORT_UNHANDLED("image transform", "%d", transform);
+    }
+}
+
+void image_transform_uv(
+    ImageTransform transform, double u, double v, double *dest_u, double *dest_v
+) {
+    switch (transform) {
+    case IMAGE_TRANSFORM_NORMAL:
+        *dest_u = u;
+        *dest_v = v;
+        break;
+    case IMAGE_TRANSFORM_90:
+        *dest_u = v;
+        *dest_v = 1.0 - u;
+        break;
+    case IMAGE_TRANSFORM_180:
+        *dest_u = 1.0 - u;
+        *dest_v = 1.0 - v;
+        break;
+    case IMAGE_TRANSFORM_270:
+        *dest_u = 1.0 - v;
+        *dest_v = u;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED:
+        *dest_u = 1.0 - u;
+        *dest_v = v;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_90:
+        *dest_u = v;
+        *dest_v = u;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_180:
+        *dest_u = u;
+        *dest_v = 1.0 - v;
+        break;
+    case IMAGE_TRANSFORM_FLIPPED_270:
+        *dest_u = 1.0 - v;
+        *dest_v = 1.0 - u;
         break;
     default:
         REPORT_UNHANDLED("image transform", "%d", transform);

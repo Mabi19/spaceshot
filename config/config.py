@@ -9,6 +9,7 @@ config_c, config_h = sc.config({
     "copy-to-clipboard": sc.bool(),
     "output-capture-backends": sc.tokenlist("ext", "wlr"),
     "renderer": sc.tokenlist("gl", "cairo"),
+    "dmabuf-capture": sc.bool(),
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),

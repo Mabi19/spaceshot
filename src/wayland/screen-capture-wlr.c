@@ -17,10 +17,10 @@ typedef struct {
     bool has_selected_format;
     enum zwlr_screencopy_frame_v1_flags frame_flags;
     // Shared memory bookkeeping
-    SharedBuffer *buffer;
+    SharedBuffer *shm_buffer;
     // callback
     WrappedOutput *output;
-    FrameCaptureCallback image_callback;
+    FrameCaptureCallback frame_callback;
     void *user_data;
 } FrameContext;
 
@@ -38,11 +38,11 @@ static void frame_context_finalize(
         capture_frame->output = context->output;
         wl_list_init(&capture_frame->link);
     }
-    context->image_callback(capture_frame, context->user_data);
+    context->frame_callback(capture_frame, context->user_data);
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
-    shared_buffer_destroy(context->buffer);
+    shared_buffer_destroy(context->shm_buffer);
     free(context);
 }
 
@@ -90,6 +90,7 @@ static void frame_handle_linux_dmabuf(
     uint32_t /* width */,
     uint32_t /* height */
 ) {
+    // dmabuf capture is only implemented for ext-image-copy-capture
     log_debug("got linux_dmabuf, doing nothing with it\n");
 }
 
@@ -101,13 +102,13 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
         report_error_fatal("couldn't agree on screenshot image format");
     }
 
-    context->buffer = shared_buffer_new(
+    context->shm_buffer = shared_buffer_new(
         context->width,
         context->height,
         context->stride,
         context->selected_format
     );
-    zwlr_screencopy_frame_v1_copy(frame, context->buffer->wl_buffer);
+    zwlr_screencopy_frame_v1_copy(frame, context->shm_buffer->wl_buffer);
 
     log_debug("buffer done\n");
 }
@@ -132,7 +133,7 @@ static void frame_handle_ready(
 
     Image *result = image_new_from_wayland(
         context->selected_format,
-        context->buffer->data,
+        context->shm_buffer->data,
         context->width,
         context->height,
         context->stride
@@ -146,7 +147,7 @@ static void frame_handle_ready(
     log_debug(
         "Top-left pixel: %x, original: %x\n",
         ((uint32_t *)result->data)[0],
-        ((uint32_t *)context->buffer->data)[0]
+        ((uint32_t *)context->shm_buffer->data)[0]
     );
 
     frame_context_finalize(context, frame, result);
@@ -178,7 +179,7 @@ void capture_output_wlr(
         );
     FrameContext *context = calloc(1, sizeof(FrameContext));
     context->output = output;
-    context->image_callback = image_callback;
+    context->frame_callback = image_callback;
     context->user_data = data;
     zwlr_screencopy_frame_v1_add_listener(frame, &frame_listener, context);
 }

@@ -273,6 +273,14 @@ static void registry_handle_global(
         );
     }
 
+    if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+        if (version >= 4) {
+            globals->linux_dmabuf = wl_registry_bind(
+                registry, object_id, &zwp_linux_dmabuf_v1_interface, 4
+            );
+        }
+    }
+
     if (strcmp(interface, ext_data_control_manager_v1_interface.name) == 0) {
         globals->ext_data_control_manager = wl_registry_bind(
             registry, object_id, &ext_data_control_manager_v1_interface, 1
@@ -472,6 +480,9 @@ void cleanup_wayland_globals() {
         wl_shm_release(wayland_globals.shm);
     }
     wl_subcompositor_destroy(wayland_globals.subcompositor);
+    if (wayland_globals.linux_dmabuf) {
+        zwp_linux_dmabuf_v1_destroy(wayland_globals.linux_dmabuf);
+    }
     if (wayland_globals.ext_foreign_toplevel_list) {
         ext_foreign_toplevel_list_v1_stop(
             wayland_globals.ext_foreign_toplevel_list
