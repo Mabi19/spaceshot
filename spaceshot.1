@@ -3,7 +3,7 @@
 spaceshot \- screenshot tool for wlroots-compatible Wayland compositors
 .SH SYNOPSIS
 .B spaceshot
-\fImode\fR \fImodeparams\fR \fR[\fIoptions\fR]
+\fIMODE\fR \fIMODEPARAMS\fR \fR[\fIOPTIONS\fR]...
 .SH DESCRIPTION
 .B spaceshot
 is an integrated screenshot tool: it both captures images and crops them.
@@ -27,17 +27,17 @@ Scroll with the mouse wheel or trackpad if there are too many previews to fit on
 The mode determines how to select the part of the display to screenshot.
 A mode is required; the common names \fBmonitor\fR and \fBwindow\fR are aliases for \fBoutput\fR and \fBtoplevel\fR respectively.
 .TP
-\fBregion\fR [\fIregion\fR]
+\fBregion\fR [\fIREGION\fR]
 Select a rectangular region.
 The region should be in the format 'X,Y WxH', in global compositor coordinates.
 If the region is not specified, an interactive picker is opened to let the user choose.
 Note that the region must be entirely contained within one monitor.
 .TP
-\fBoutput\fR [\fIoutput-name\fR]
+\fBoutput\fR [\fINAME\fR]
 Select an entire monitor (what Wayland calls an output).
 If the output is not specified, an interactive picker is opened to let the user choose.
 .TP
-\fBtoplevel\fR [\fIidentifier\fR]
+\fBtoplevel\fR [\fIIDENTIFIER\fR]
 Select a regular app window (what Wayland calls a toplevel).
 The identifier is an ext-foreign-toplevel-list-v1 ID,
 which you can get via compositor IPC or the
@@ -45,7 +45,7 @@ which you can get via compositor IPC or the
 tool.
 If the toplevel is not specified, an interactive picker is opened to let the user choose.
 .TP
-\fBdefer \fItargets\fR
+\fBdefer \fITARGET\fR...
 Prepare a screenshot for later.
 The available targets are all outputs and all toplevels, selected by adding the keywords
 .BR output
