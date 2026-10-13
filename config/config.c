@@ -107,6 +107,12 @@ extern void config_parse_entry(
     void *data, const char *section, const char *key, char *value
 );
 
+void config_load_string(const char *str) {
+    char *mutable_str = strdup(str);
+    config_parse_string(mutable_str, config_parse_entry, &config);
+    free(mutable_str);
+}
+
 bool config_load_file(const char *path) {
     FILE *config_file = fopen(path, "rb");
     if (!config_file) {

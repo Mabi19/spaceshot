@@ -71,6 +71,18 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
         char *value = equals_sign + 1;
         advance_whitespace(&value);
 
+        // In the default section, the key may be dot-separated
+        // to specify the section inline.
+        char *inline_section = NULL;
+        if (*section == NULL) {
+            char *dot = strchr(key, '.');
+            if (dot) {
+                *dot = '\0';
+                inline_section = key;
+                key = dot + 1;
+            }
+        }
+
         // handle quotes
         if (*value == '"' || *value == '\'') {
             char quote_type = *value;
@@ -100,7 +112,7 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
             *end = '\0';
         }
 
-        callback(data, *section, key, value);
+        callback(data, *section ? *section : inline_section, key, value);
     }
 }
 

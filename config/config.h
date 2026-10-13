@@ -10,6 +10,7 @@ const char **config_get_locations();
  * @returns whether the file exists
  */
 bool config_load_file(const char *path);
+void config_load_string(const char *str);
 void config_load();
 
 /**

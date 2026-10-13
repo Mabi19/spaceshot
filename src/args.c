@@ -38,6 +38,7 @@ static void print_help(const char *program_name) {
         "  -c, --copy        copy screenshot to clipboard (default)\n"
         "  --no-copy         do not copy the screenshot\n"
         "  -C, --config-file load an additional configuration file\n"
+        "  -D, --define      set a config variable\n"
         "  -f, --foreground  stay in foreground when waiting for pastes\n"
         "  --background      move to background by forking after "
         "screenshotting (default)\n"
@@ -77,6 +78,9 @@ static void interpret_option(Arguments *args, char opt, char *value) {
             report_warning("couldn't read configuration file %s", value);
         }
         break;
+    case 'D':
+        config_load_string(value);
+        break;
     case 'n':
         config_get()->notify.enabled = true;
         break;
@@ -111,6 +115,7 @@ static const LongOption LONG_OPTIONS[] = {
     {"copy", 'c', false},
     {"no-copy", '!', false},
     {"config-file", 'C', true},
+    {"define", 'D', true},
     {"help", 'h', false},
     {"notify", 'n', false},
     {"no-notify", '@', false},
@@ -191,11 +196,14 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     // options with arguments
                     // must be at the end of the string
                     case 'C':
+                    case 'D':
                     case 'o':
                         if (arg[j + 1] != '\0') {
                             report_error(
                                 "option -%c requires an argument and "
-                                "can't be placed here",
+                                "can't be placed here\ntip: put a space "
+                                "between the option shorthand and its "
+                                "parameter",
                                 arg[j]
                             );
                             goto error;

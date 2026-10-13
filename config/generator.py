@@ -589,7 +589,7 @@ void config_parse_entry(void *data, const char *section, const char *key, char *
 
     definition_parts.append('''
     if (section) {
-        config_warn("unknown key [%s] %s", section, key);
+        config_warn("unknown key %s.%s", section, key);
     } else {
         config_warn("unknown key %s", key);
     }''')
