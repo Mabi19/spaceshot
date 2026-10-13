@@ -14,15 +14,15 @@ static void print_help(const char *program_name) {
     printf("Usage: %s <mode> <mode parameters> [options]\n", program_name);
     printf(
         "Modes:\n"
-        "  - output [output-name]: screenshot an entire output\n"
-        "    if output is not specified and there's more than one connected, "
-        "opens the output picker to let the user choose\n"
         "  - region [region]: screenshot a region\n"
         "    region format is 'X,Y WxH', in global compositor space\n"
         "    if region is not specified, opens the region picker to let the "
         "user choose\n"
+        "  - output [output-name]: screenshot an entire output (aka monitor)\n"
+        "    if output is not specified and there's more than one connected, "
+        "opens the output picker to let the user choose\n"
         "    note that the region must be fully contained within one output\n"
-        "  - toplevel [identifier]: screenshot a toplevel (window)\n"
+        "  - toplevel [identifier]: screenshot a toplevel (aka window)\n"
         "    pass in an ext-foreign-toplevel-list-v1 identifier\n"
         "    if toplevel is not specified, opens the toplevel picker to let "
         "the user choose\n"
@@ -126,6 +126,8 @@ static const LongOption LONG_OPTIONS[] = {
 static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
 void parse_argv(Arguments *result, int argc, char **argv) {
+    char *mode_name = "?";
+
     for (int i = 0; i < argc; i++) {
         char *arg = argv[i];
         // do not include flags where the first character is a digit,
@@ -238,36 +240,40 @@ void parse_argv(Arguments *result, int argc, char **argv) {
         } else {
             if (result->captured_mode_params == 0) {
                 // this is the mode
-                char *mode = argv[i];
-                if (strcmp(mode, "help") == 0) {
+                mode_name = argv[i];
+                if (strcmp(mode_name, "help") == 0) {
                     print_help(result->executable_name);
                     exit(EXIT_SUCCESS);
                 }
 
-                if (strcmp(mode, "version") == 0) {
+                if (strcmp(mode_name, "version") == 0) {
                     print_version();
                     exit(EXIT_SUCCESS);
                 }
 
-                if (strcmp(mode, "output") == 0) {
+                if (strcmp(mode_name, "output") == 0 ||
+                    strcmp(mode_name, "monitor") == 0) {
                     result->mode = CAPTURE_OUTPUT;
                     result->output_params =
                         (OutputCaptureParams){.output_name = NULL};
-                } else if (strcmp(mode, "region") == 0) {
+                } else if (strcmp(mode_name, "region") == 0) {
                     result->mode = CAPTURE_REGION;
                     result->region_params.region =
                         (BBox){.x = 0.0, .y = 0.0, .width = 0.0, .height = 0.0};
                     result->region_params.has_region = false;
-                } else if (strcmp(mode, "toplevel") == 0) {
+                } else if (
+                    strcmp(mode_name, "toplevel") == 0 ||
+                    strcmp(mode_name, "window") == 0
+                ) {
                     result->mode = CAPTURE_TOPLEVEL;
                     result->toplevel_params =
                         (ToplevelCaptureParams){.toplevel_id = NULL};
-                } else if (strcmp(mode, "defer") == 0) {
+                } else if (strcmp(mode_name, "defer") == 0) {
                     result->mode = CAPTURE_DEFER;
                     result->defer_params = (DeferParams){
                         .needs_output = false, .needs_toplevel = false
                     };
-                } else if (strcmp(mode, "copy-helper") == 0) {
+                } else if (strcmp(mode_name, "copy-helper") == 0) {
                     result->mode = CAPTURE_COPY_HELPER;
                     result->copy_helper_params = (CopyHelperParams){
                         .mime_type = NULL,
@@ -276,11 +282,11 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                 } else {
                     report_error(
                         "invalid mode %s\n"
-                        "valid modes are 'output [output-name]', "
-                        "'region [region]', "
+                        "valid modes are 'region [region]', "
+                        "'output [output-name]', "
                         "'toplevel <toplevel>', "
                         "and 'defer <targets>'\n",
-                        mode
+                        mode_name
                     );
                     goto error;
                 }
@@ -291,7 +297,8 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         result->output_params.output_name = strdup(arg);
                     } else {
                         report_error(
-                            "too many parameters for mode 'output' (max 1)"
+                            "too many parameters for mode '%s' (max 1)",
+                            mode_name
                         );
                         goto error;
                     }
@@ -307,7 +314,8 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         result->region_params.has_region = true;
                     } else {
                         report_error(
-                            "too many parameters for mode 'region' (max 1)"
+                            "too many parameters for mode '%s' (max 1)",
+                            mode_name
                         );
                         goto error;
                     }
@@ -316,14 +324,19 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         result->toplevel_params.toplevel_id = strdup(arg);
                     } else {
                         report_error(
-                            "too many parameters for mode 'toplevel' (max 1)"
+                            "too many parameters for mode '%s' (max 1)",
+                            mode_name
                         );
                         goto error;
                     }
                 } else if (result->mode == CAPTURE_DEFER) {
-                    if (strcmp(arg, "output") == 0) {
+                    if (strcmp(arg, "output") == 0 ||
+                        strcmp(arg, "monitor") == 0) {
                         result->defer_params.needs_output = true;
-                    } else if (strcmp(arg, "toplevel") == 0) {
+                    } else if (
+                        strcmp(arg, "toplevel") == 0 ||
+                        strcmp(arg, "window") == 0
+                    ) {
                         result->defer_params.needs_toplevel = true;
                     } else {
                         report_error("invalid defer target '%s'", arg);

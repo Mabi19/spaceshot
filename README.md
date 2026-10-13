@@ -23,9 +23,11 @@ Planned:
 - More configuration options (mostly concerning appearance)
 
 ### Controls
+In any interactive mode, press Esc to cancel.
+
 Region mode:
 - Click and drag to select a region
-- Press Esc or click in place to cancel
+- Click in place to cancel
 - Hold Alt or Space to move the selection instead of resizing it
 - Hold Ctrl while releasing the mouse button to edit the selection by dragging its edges or corners
     - In edit mode, press Enter to confirm
@@ -35,6 +37,7 @@ Output mode:
 
 Toplevel mode (experimental):
 - Click on a toplevel preview to capture it
+- Click on the background to cancel
 - Alternatively, use the arrow keys or Tab/Shift+Tab to select a preview, then press Enter to capture it
 - Scroll with the mouse wheel or trackpad if there are too many previews to fit on screen
 
@@ -81,7 +84,7 @@ spaceshot region
 # screenshot a predefined region
 # note that the coordinates can be fractional, unlike slurp
 spaceshot region '150,150 300x200'
-# screenshot an output
+# screenshot an output (monitor)
 spaceshot output
 # screenshot a predefined output
 spaceshot output DP-1

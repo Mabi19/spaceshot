@@ -10,14 +10,14 @@ is an integrated screenshot tool: it both captures images and crops them.
 It can also copy the result to the clipboard and send notifications with further actions
 (such as opening the newly created file in an image editor or viewing it in a file manager).
 .SH CONTROLS
+In any interactive mode, press Escape to exit.
 .SS Region picker
 Click and drag to select a region.
 While dragging, hold Alt or Space to move the selection instead of resizing it.
 Hold Ctrl while releasing the mouse button to edit the selection using edge and corner handles.
 When in edit mode, press Enter to confirm the selection.
-Press Esc to exit.
 .SS Output picker
-Click on a monitor to screenshot it, or press Esc to exit.
+Click on a monitor to screenshot it.
 .SS Toplevel picker
 Click on a toplevel preview to capture it.
 Alternatively, use the arrow keys or Tab/Shift+Tab to select a preview, then press Enter to capture it.
@@ -25,6 +25,7 @@ Scroll with the mouse wheel or trackpad if there are too many previews to fit on
 .SH OPTIONS
 .SS Modes
 The mode determines how to select the part of the display to screenshot.
+A mode is required; the common names \fBmonitor\fR and \fBwindow\fR are aliases for \fBoutput\fR and \fBtoplevel\fR respectively.
 .TP
 \fBregion\fR [\fIregion\fR]
 Select a rectangular region.
