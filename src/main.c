@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <config/config.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -660,6 +661,10 @@ int main(int argc, char **argv) {
     // This makes it so that we survive the other end of the clipboard pipe
     // closing.
     signal(SIGPIPE, SIG_IGN);
+    // Use the system locale for collation.
+    // Sorting toplevels uses it; otherwise
+    // we have no use for locale.
+    setlocale(LC_COLLATE, "");
     init_debug_mode();
     args.executable_name = argv[0];
     parse_argv(&args, argc - 1, argv + 1);
