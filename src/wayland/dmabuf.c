@@ -94,14 +94,23 @@ static void params_handle_created(
     zwp_linux_buffer_params_v1_destroy(params);
     buffer->params = NULL;
     buffer->wl_buffer = wl_buffer;
-    buffer->on_finished(buffer->texture, wl_buffer, buffer->user_data);
+    buffer->on_finished(
+        buffer->texture,
+        wl_buffer,
+        buffer->width,
+        buffer->height,
+        buffer->format,
+        buffer->user_data
+    );
 }
 
 static void params_handle_failed(
     void *data, struct zwp_linux_buffer_params_v1 * /* params */
 ) {
     DmabufBuffer *buffer = data;
-    buffer->on_finished(NULL, NULL, buffer->user_data);
+    buffer->on_finished(
+        NULL, NULL, 0, 0, DRM_FORMAT_INVALID, buffer->user_data
+    );
     // In this case the texture has been created, but isn't given to the user,
     // so we need to destroy it.
     // It has, however, taken ownership of the buffer struct.
@@ -125,13 +134,13 @@ void dmabuf_buffer_new(
 ) {
     if (wayland_globals.linux_dmabuf == NULL) {
         log_debug("dmabuf: zwp_linux_dmabuf_v1 not available\n");
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 
     int drm_fd = open_drm_node(device);
     if (drm_fd < 0) {
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 
@@ -139,7 +148,7 @@ void dmabuf_buffer_new(
     if (!gbm) {
         log_debug("dmabuf: gbm_create_device failed\n");
         close(drm_fd);
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 
@@ -149,7 +158,7 @@ void dmabuf_buffer_new(
         log_debug("dmabuf: buffer allocation failed\n");
         gbm_device_destroy(gbm);
         close(drm_fd);
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 
@@ -159,7 +168,7 @@ void dmabuf_buffer_new(
         gbm_bo_destroy(bo);
         gbm_device_destroy(gbm);
         close(drm_fd);
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 
@@ -182,7 +191,7 @@ void dmabuf_buffer_new(
             log_debug("dmabuf: gbm_bo_get_fd_for_plane failed\n");
             buffer->plane_count = i;
             dmabuf_buffer_destroy(buffer);
-            on_finished(NULL, NULL, data);
+            on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
             return;
         }
         // gbm doesn't promise close-on-exec
@@ -208,7 +217,7 @@ void dmabuf_buffer_new(
     if (!buffer->texture) {
         log_debug("dmabuf: renderer import failed\n");
         dmabuf_buffer_destroy(buffer);
-        on_finished(NULL, NULL, data);
+        on_finished(NULL, NULL, 0, 0, DRM_FORMAT_INVALID, data);
         return;
     }
 

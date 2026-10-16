@@ -20,7 +20,12 @@ constexpr size_t DMABUF_MAX_PLANES = 4;
  * Either both texture and wl_buffer will be present or they will both be NULL.
  */
 typedef void (*DmabufBufferCallback)(
-    RenderTexture *texture, struct wl_buffer *wl_buffer, void *data
+    RenderTexture *texture,
+    struct wl_buffer *wl_buffer,
+    uint32_t width,
+    uint32_t height,
+    uint32_t drm_format,
+    void *data
 );
 
 /**
