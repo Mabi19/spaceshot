@@ -46,8 +46,8 @@ static int open_drm_node(dev_t device) {
 /**
  * Create a gbm_bo with one of the given modifiers.
  * Modifiers are tried one at a time (in preference order): gbm otherwise gets
- * to pick any of them at once. Linear is preferred, since it can be imported
- * anywhere.
+ * to pick any of them. Linear is preferred, since it can be imported
+ * anywhere, and has a high likelihood of being downloadable with glReadPixels.
  */
 static struct gbm_bo *create_bo(
     struct gbm_device *gbm,
