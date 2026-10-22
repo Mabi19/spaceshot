@@ -98,10 +98,14 @@ void timing_display(
     struct timespec ts_diff;
     timespec_subtract(&ts_diff, end, start);
     uint64_t us = ts_diff.tv_sec * 1'000'000 + ts_diff.tv_nsec / 1000;
-    if (us >= 1000) {
-        fprintf(stderr, "%s took %ldms\n", name, us / 1000);
+    if (us >= 10000) {
+        fprintf(stderr, "%s took %ld ms\n", name, us / 1000);
+    } else if (us >= 1000) {
+        fprintf(
+            stderr, "%s took %ld.%ld ms\n", name, us / 1000, (us % 1000) / 100
+        );
     } else {
-        fprintf(stderr, "%s took %ldµs\n", name, us);
+        fprintf(stderr, "%s took %ld µs\n", name, us);
     }
 }
 
