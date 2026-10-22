@@ -539,6 +539,7 @@ const Renderer renderer_cairo = {
     .texture_new_from_dmabuf = renderer_cairo_texture_new_from_dmabuf,
     .texture_dmabuf_set_transform = renderer_cairo_texture_dmabuf_set_transform,
     .texture_destroy = renderer_cairo_texture_destroy,
+    .texture_run_pass = NULL,
     .texture_download = renderer_cairo_texture_get_image,
     .supports_dmabuf = renderer_cairo_supports_dmabuf,
     .intersect_dmabuf_modifiers = renderer_cairo_intersect_dmabuf_modifiers,

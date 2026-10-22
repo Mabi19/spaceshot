@@ -13,6 +13,14 @@ typedef struct {
     double height;
 } RenderTextMetrics;
 
+typedef enum {
+    /**
+     * The identity operator: returns a copy of the texture, same format.
+     * Takes no extra parameters.
+     */
+    SHADER_PASS_IDENTITY,
+} ShaderPassType;
+
 /** A vtable of renderer operations. */
 typedef struct {
     /** Initialize the renderer's internal state. */
@@ -63,6 +71,15 @@ typedef struct {
         RenderTexture *texture, ImageTransform transform
     );
     void (*texture_destroy)(RenderTexture *texture);
+    /**
+     * Process a texture through a shader pass.
+     * Returns the new texture.
+     * This function is optional and may be set to NULL if the renderer
+     * does not support shader passes.
+     */
+    RenderTexture *(*texture_run_pass)(
+        const RenderTexture *source, ShaderPassType type, ...
+    );
     /**
      * Read a texture's contents back to the CPU.
      * The result is in the displayed orientation (i.e. texture transforms are

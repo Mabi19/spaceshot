@@ -45,9 +45,9 @@ static int open_drm_node(dev_t device) {
 
 /**
  * Create a gbm_bo with one of the given modifiers.
- * Modifiers are tried one at a time (in preference order): gbm otherwise gets
- * to pick any of them. Linear is preferred, since it can be imported
- * anywhere, and has a high likelihood of being downloadable with glReadPixels.
+ * Modifiers are tried one at a time (in preference order);
+ * if the dmabuf_prefer_linear option is set then
+ * the LINEAR modifier is tested first.
  */
 static struct gbm_bo *create_bo(
     struct gbm_device *gbm,
@@ -57,13 +57,17 @@ static struct gbm_bo *create_bo(
     const uint64_t *modifiers,
     size_t modifier_count
 ) {
-    for (size_t i = 0; i < modifier_count; i++) {
-        if (modifiers[i] == DRM_FORMAT_MOD_LINEAR) {
-            struct gbm_bo *bo = gbm_bo_create_with_modifiers(
-                gbm, width, height, format, &modifiers[i], 1
-            );
-            if (bo) {
-                return bo;
+    bool prefer_linear = config_get()->dmabuf_prefer_linear;
+
+    if (prefer_linear) {
+        for (size_t i = 0; i < modifier_count; i++) {
+            if (modifiers[i] == DRM_FORMAT_MOD_LINEAR) {
+                struct gbm_bo *bo = gbm_bo_create_with_modifiers(
+                    gbm, width, height, format, &modifiers[i], 1
+                );
+                if (bo) {
+                    return bo;
+                }
             }
         }
     }
@@ -72,7 +76,7 @@ static struct gbm_bo *create_bo(
         // implicit modifiers are only negotiated by legacy protocols
         // (wlr-screencopy); ext capture always uses explicit modifiers
         if (modifiers[i] == DRM_FORMAT_MOD_INVALID ||
-            modifiers[i] == DRM_FORMAT_MOD_LINEAR) {
+            (prefer_linear && modifiers[i] == DRM_FORMAT_MOD_LINEAR)) {
             continue;
         }
         struct gbm_bo *bo = gbm_bo_create_with_modifiers(

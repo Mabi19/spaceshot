@@ -10,6 +10,7 @@ config_c, config_h = sc.config({
     "output-capture-backends": sc.tokenlist("ext", "wlr"),
     "renderer": sc.tokenlist("gl", "cairo"),
     "dmabuf-capture": sc.bool(),
+    "dmabuf-prefer-linear": sc.bool(),
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),

@@ -18,6 +18,7 @@
 #include <math.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,12 +103,22 @@ typedef struct GLTextCacheEntry {
 } GLTextCacheEntry;
 
 static const char VERTEX_SHADER_SOURCE[] = {
-#embed "vertex.glsl"
+#embed "rect-vert.glsl"
     , '\0'
 };
 
 static const char FRAGMENT_SHADER_SOURCE[] = {
-#embed "fragment.glsl"
+#embed "rect-frag.glsl"
+    , '\0'
+};
+
+static const char PASS_VERTEX_SHADER_SOURCE[] = {
+#embed "pass-vert.glsl"
+    , '\0'
+};
+
+static const char PASS_IDENTITY_SHADER_SOURCE[] = {
+#embed "pass-identity.glsl"
     , '\0'
 };
 
@@ -130,6 +141,15 @@ static GLuint gl_shader_program = 0;
 static GLuint gl_uniform_screen_size = 0;
 static GLuint gl_uniform_tex = 0;
 
+// Offscreen programs share this vertex shader and fullscreen quad. Keep the
+// shader alive so future image-processing programs can link against it too.
+static GLuint gl_pass_vertex_shader = 0;
+static GLuint gl_pass_vao = 0;
+static GLuint gl_pass_vbo = 0;
+// SHADER_PASS_IDENTITY
+static GLuint gl_pass_identity_program = 0;
+static GLint gl_pass_identity_tex = 0;
+
 static GLRectData *rect_instance_buffer = NULL;
 static size_t rect_instance_capacity = 0;
 
@@ -146,6 +166,56 @@ static size_t text_cache_size = 0;
 static uint32_t frame_no = 0;
 
 static void renderer_gl_cleanup();
+
+static GLuint
+compile_shader(const char *name, GLenum type, const char *source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+    GLint compiled;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        GLchar message[1024];
+        glGetShaderInfoLog(shader, sizeof(message), NULL, message);
+        log_debug(
+            "GL shader '%s' compilation failed (%x):\n%s\n", name, type, message
+        );
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
+// The caller retains ownership of both shaders, including on failure.
+static GLuint
+link_program(const char *name, GLuint vertex_shader, GLuint fragment_shader) {
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertex_shader);
+    glAttachShader(program, fragment_shader);
+    glLinkProgram(program);
+    GLint linked;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        GLchar message[1024];
+        glGetProgramInfoLog(program, sizeof(message), NULL, message);
+        log_debug("GL shader '%s' link failed:\n%s\n", name, message);
+        glDeleteProgram(program);
+        return 0;
+    }
+    return program;
+}
+
+static GLuint
+create_pass_program(const char *name, const char *fragment_source) {
+    GLuint fragment_shader =
+        compile_shader(name, GL_FRAGMENT_SHADER, fragment_source);
+    if (!fragment_shader) {
+        return 0;
+    }
+    GLuint program = link_program(name, gl_pass_vertex_shader, fragment_shader);
+    glDeleteShader(fragment_shader);
+    return program;
+}
 
 /** Whether the current context supports a GL extension. */
 static bool gl_has_extension(const char *name) {
@@ -342,52 +412,25 @@ static bool renderer_gl_init() {
     RECT_DATA_FIELDS;
 #undef RECT_FIELD
 
-    // Shaders
+    // Shader for regular drawing
     TIMING_START(gl_shader_init);
-    GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-    const char *vert_src = VERTEX_SHADER_SOURCE;
-    glShaderSource(vertex_shader, 1, &vert_src, NULL);
-    glCompileShader(vertex_shader);
-    GLint vertex_compiled;
-    glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vertex_compiled);
-    if (vertex_compiled != GL_TRUE) {
-        GLchar message[1024];
-        glGetShaderInfoLog(vertex_shader, 1024, NULL, message);
-        log_debug("GL vertex shader compilation failed:\n%s\n", message);
+    GLuint vertex_shader =
+        compile_shader("rect-vert", GL_VERTEX_SHADER, VERTEX_SHADER_SOURCE);
+    if (!vertex_shader) {
+        renderer_gl_cleanup();
+        return false;
+    }
+    GLuint fragment_shader =
+        compile_shader("rect-frag", GL_FRAGMENT_SHADER, FRAGMENT_SHADER_SOURCE);
+    if (!fragment_shader) {
         glDeleteShader(vertex_shader);
         renderer_gl_cleanup();
         return false;
     }
-    GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-    const char *frag_src = FRAGMENT_SHADER_SOURCE;
-    glShaderSource(fragment_shader, 1, &frag_src, NULL);
-    glCompileShader(fragment_shader);
-    GLint fragment_compiled;
-    glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &fragment_compiled);
-    if (fragment_compiled != GL_TRUE) {
-        GLchar message[1024];
-        glGetShaderInfoLog(fragment_shader, 1024, NULL, message);
-        log_debug("GL fragment shader compilation failed:\n%s\n", message);
-        glDeleteShader(vertex_shader);
-        glDeleteShader(fragment_shader);
-        renderer_gl_cleanup();
-        return false;
-    }
-
-    gl_shader_program = glCreateProgram();
-    glAttachShader(gl_shader_program, vertex_shader);
-    glAttachShader(gl_shader_program, fragment_shader);
-    glLinkProgram(gl_shader_program);
-    // We can delete now because in both the common and error case we don't care
-    // about these anymore.
+    gl_shader_program = link_program("rect", vertex_shader, fragment_shader);
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
-    GLint program_linked;
-    glGetProgramiv(gl_shader_program, GL_LINK_STATUS, &program_linked);
-    if (program_linked != GL_TRUE) {
-        GLchar message[1024];
-        glGetProgramInfoLog(gl_shader_program, 1024, NULL, message);
-        log_debug("GL shader link failed:\n%s\n", message);
+    if (!gl_shader_program) {
         renderer_gl_cleanup();
         return false;
     }
@@ -395,13 +438,48 @@ static bool renderer_gl_init() {
     gl_uniform_screen_size =
         glGetUniformLocation(gl_shader_program, "screen_size");
     gl_uniform_tex = glGetUniformLocation(gl_shader_program, "tex");
-    // everything uses this shader, so we may as well use it now
-    glUseProgram(gl_shader_program);
     // 0 is technically the default, but set it to be explicit
+    glUseProgram(gl_shader_program);
     glUniform1i(gl_uniform_tex, 0);
+
+    // Shaders and other data for texture_run_pass
+    gl_pass_vertex_shader = compile_shader(
+        "pass-vertex", GL_VERTEX_SHADER, PASS_VERTEX_SHADER_SOURCE
+    );
+    if (!gl_pass_vertex_shader) {
+        renderer_gl_cleanup();
+        return false;
+    }
+    gl_pass_identity_program =
+        create_pass_program("pass-identity", PASS_IDENTITY_SHADER_SOURCE);
+    if (!gl_pass_identity_program) {
+        renderer_gl_cleanup();
+        return false;
+    }
+    gl_pass_identity_tex =
+        glGetUniformLocation(gl_pass_identity_program, "tex");
+
     TIMING_END(gl_shader_init);
 
     GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        log_debug("GL error during init A: %d\n", error);
+        renderer_gl_cleanup();
+        return false;
+    }
+
+    glGenVertexArrays(1, &gl_pass_vao);
+    glBindVertexArray(gl_pass_vao);
+    glGenBuffers(1, &gl_pass_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, gl_pass_vbo);
+    constexpr GLfloat PASS_QUAD[] = {
+        -1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, 1.f
+    };
+    glBufferData(GL_ARRAY_BUFFER, sizeof(PASS_QUAD), PASS_QUAD, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
+
+    error = glGetError();
     if (error != GL_NO_ERROR) {
         log_debug("GL error during init: %d\n", error);
         renderer_gl_cleanup();
@@ -426,6 +504,18 @@ static bool renderer_gl_init() {
 static void text_cache_free_entry(GLTextCacheEntry *entry);
 
 static void renderer_gl_cleanup() {
+    if (gl_pass_identity_program != 0) {
+        glDeleteProgram(gl_pass_identity_program);
+    }
+    if (gl_pass_vertex_shader != 0) {
+        glDeleteShader(gl_pass_vertex_shader);
+    }
+    if (gl_pass_vao != 0) {
+        glDeleteVertexArrays(1, &gl_pass_vao);
+    }
+    if (gl_pass_vbo != 0) {
+        glDeleteBuffers(1, &gl_pass_vbo);
+    }
     if (gl_shader_program != 0) {
         glDeleteProgram(gl_shader_program);
     }
@@ -721,6 +811,122 @@ static void renderer_gl_texture_destroy(RenderTexture *render_texture) {
     free(texture);
 }
 
+// TODO: This comment is way too long.
+/**
+ * Run a same-size image-processing pass into a new, caller-owned texture.
+ * Programs are linked with gl_pass_vertex_shader and sample `tex` on unit 0;
+ * gl_FragCoord.xy identifies the source texel. Additional uniforms may be set
+ * by the caller before invoking this function. Output components are stored
+ * in the requested canonical format (R8, RGBA8, or RGB10_A2).
+ *
+ * Coordinates stay in storage orientation, with the source transform retained
+ * as metadata. Sampling honors source swizzles, just as normal drawing does.
+ * No blending, dithering, or color-space conversion is applied. Call between
+ * canvas draws: this restores the UI program, VAO, and default framebuffer,
+ * while the next draw sets its own viewport and texture binding.
+ * Returns NULL on allocation/rendering failure.
+ */
+static RenderTexture *renderer_gl_texture_run_pass(
+    const RenderTexture *render_source, ShaderPassType type, ...
+) {
+    GLTexture *source = (GLTexture *)render_source;
+
+    TIMING_START(texture_pass);
+
+    ImageFormat output_format;
+    va_list args;
+    va_start(args);
+    switch (type) {
+    case SHADER_PASS_IDENTITY:
+        glUseProgram(gl_pass_identity_program);
+        glUniform1i(gl_pass_identity_tex, 0);
+        output_format = source->download_format;
+        break;
+    default:
+        REPORT_UNHANDLED("shader pass type", "%d", type);
+    }
+    va_end(args);
+
+    GLenum internal_format;
+    switch (output_format) {
+    case IMAGE_FORMAT_GRAY8:
+        internal_format = GL_R8;
+        break;
+    case IMAGE_FORMAT_ABGR8888:
+    case IMAGE_FORMAT_XBGR8888:
+        internal_format = GL_RGBA8;
+        break;
+    case IMAGE_FORMAT_XBGR2101010:
+        internal_format = GL_RGB10_A2;
+        break;
+    default:
+        REPORT_UNHANDLED("pass output format", "%d", output_format);
+    }
+
+    GLTexture *result = calloc(1, sizeof(GLTexture));
+    if (!result) {
+        return NULL;
+    }
+
+    result->width = source->width;
+    result->height = source->height;
+    result->download_format = output_format;
+    result->transform = source->transform;
+    glGenTextures(1, &result->gl);
+    glBindTexture(GL_TEXTURE_2D, result->gl);
+    glTexStorage2D(
+        GL_TEXTURE_2D, 1, internal_format, result->width, result->height
+    );
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (output_format == IMAGE_FORMAT_GRAY8) {
+        // Grayscale pass results can also be drawn by the normal UI shader.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_ONE);
+    }
+
+    GLuint target;
+    glGenFramebuffers(1, &target);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target);
+    glFramebufferTexture2D(
+        GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, result->gl, 0
+    );
+    GLenum status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
+    if (status == GL_FRAMEBUFFER_COMPLETE) {
+        glDisable(GL_BLEND);
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_DITHER);
+        glViewport(0, 0, result->width, result->height);
+        glBindVertexArray(gl_pass_vao);
+        glBindTexture(GL_TEXTURE_2D, source->gl);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    } else {
+        log_debug("texture pass framebuffer is incomplete (%u)\n", status);
+    }
+
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &target);
+    glEnable(GL_BLEND);
+    glEnable(GL_SCISSOR_TEST);
+    glEnable(GL_DITHER);
+
+#ifdef SPACESHOT_TIMING
+    glFinish();
+#endif
+    TIMING_END(texture_pass);
+
+    GLenum error = glGetError();
+    if (status != GL_FRAMEBUFFER_COMPLETE || error != GL_NO_ERROR) {
+        log_debug("texture pass failed (GL error %u)\n", error);
+        renderer_gl_texture_destroy((RenderTexture *)result);
+        return NULL;
+    }
+    return (RenderTexture *)result;
+}
+
 static bool renderer_gl_supports_dmabuf() { return gl_has_dmabuf_import; }
 
 static RenderTexture *
@@ -869,6 +1075,8 @@ static Image *
 renderer_gl_texture_download(const RenderTexture *render_texture) {
     const GLTexture *texture = (const GLTexture *)render_texture;
 
+    TIMING_START(texture_download);
+
     // This function is intended to work only for dmabuf-based textures.
     // If a regular texture which is already on the CPU calls this, something's
     // probably wrong. Also it depends on the texture not being swizzled, and
@@ -881,16 +1089,41 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
         return NULL;
     }
 
+    // Imported modifiers need only be sampleable, not framebuffer-compatible.
+    // Running an identity shader pass essentially copies into a texture made by
+    // us, which should always work for creating the read framebuffer. However,
+    // linear modifiers typically do work for read framebuffer directly.
+    // TODO: If performance turns out to not be a big concern, always do the
+    // identity pass to make sure.
+    GLTexture *staging = NULL;
+    GLuint texture_id;
+    if (texture->dmabuf->modifier == DRM_FORMAT_MOD_LINEAR) {
+        texture_id = texture->gl;
+    } else {
+        staging = (GLTexture *)renderer_gl_texture_run_pass(
+            render_texture, SHADER_PASS_IDENTITY
+        );
+        texture_id = staging->gl;
+        if (!staging) {
+            image_destroy(raw);
+            return NULL;
+        }
+    }
+
     GLuint framebuffer;
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
     glFramebufferTexture2D(
-        GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture->gl, 0
+        GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture_id, 0
     );
     GLenum status = glCheckFramebufferStatus(GL_READ_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
         log_debug("texture readback framebuffer is incomplete (%u)\n", status);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &framebuffer);
+        if (staging) {
+            renderer_gl_texture_destroy((RenderTexture *)staging);
+        }
         image_destroy(raw);
         return NULL;
     }
@@ -922,7 +1155,11 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
         REPORT_UNHANDLED("download image format", "%d", raw->format);
     }
 
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glDeleteFramebuffers(1, &framebuffer);
+    if (staging) {
+        renderer_gl_texture_destroy((RenderTexture *)staging);
+    }
 
     GLenum error = glGetError();
     if (error != GL_NO_ERROR) {
@@ -932,6 +1169,7 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
     }
 
     if (texture->transform == IMAGE_TRANSFORM_NORMAL) {
+        TIMING_END(texture_download);
         return raw;
     }
     // image_transform places pixels at transformed positions, so undoing an
@@ -940,6 +1178,9 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
     Image *result =
         image_transform(raw, image_transform_invert(texture->transform));
     image_destroy(raw);
+
+    TIMING_END(texture_download);
+
     return result;
 }
 
@@ -1155,6 +1396,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     }
     glViewport(0, 0, canvas_width, canvas_height);
     glScissor(0, 0, canvas_width, canvas_height);
+    glUseProgram(gl_shader_program);
     glUniform2f(gl_uniform_screen_size, canvas_width, canvas_height);
 
     // Count the number of quads to emit this frame,
@@ -1288,6 +1530,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
 
         cmd = cmd->next;
     }
+    glBindVertexArray(gl_vao);
     glBindBuffer(GL_ARRAY_BUFFER, gl_vbo_rect_data);
     glBufferData(
         GL_ARRAY_BUFFER,
@@ -1464,6 +1707,7 @@ const Renderer renderer_gl = {
     .texture_new_from_dmabuf = renderer_gl_texture_new_from_dmabuf,
     .texture_dmabuf_set_transform = renderer_gl_texture_dmabuf_set_transform,
     .texture_destroy = renderer_gl_texture_destroy,
+    .texture_run_pass = renderer_gl_texture_run_pass,
     .texture_download = renderer_gl_texture_download,
     .supports_dmabuf = renderer_gl_supports_dmabuf,
     .intersect_dmabuf_modifiers = renderer_gl_intersect_dmabuf_modifiers,
