@@ -1,16 +1,15 @@
 #pragma once
 #include "image.h"
-#include "render/renderer.h"
 #include "render/texture.h"
 #include "wayland/screen-capture.h"
 #include <stdatomic.h>
 #include <threads.h>
 
 typedef struct {
-    const Renderer *renderer;
     const Image *base;
     uint32_t scale;
     Image *result_image;
+    // This must be deleted by the owner of the SmartBorderContext.
     RenderTexture *result_texture;
     // Synchronization primitives to support both:
     // (a) atomically checking whether the generation is done,

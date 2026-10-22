@@ -19,6 +19,18 @@ typedef enum {
      * Takes no extra parameters.
      */
     SHADER_PASS_IDENTITY,
+    /**
+     * The first pass of the smart border: converts to grayscale and does
+     * a horizontal-only box blur. Returns a GRAY8 texture.
+     * Takes one extra parameter: uint32_t scale.
+     */
+    SHADER_PASS_SMART_BORDER_H,
+    /**
+     * The second pass of the smart border: does a vertical-only box blur
+     * and quantizes the image to black/white. Returns a GRAY8 texture.
+     * Takes one extra parameter: uint32_t scale.
+     */
+    SHADER_PASS_SMART_BORDER_V,
 } ShaderPassType;
 
 /** A vtable of renderer operations. */

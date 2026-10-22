@@ -122,6 +122,16 @@ static const char PASS_IDENTITY_SHADER_SOURCE[] = {
     , '\0'
 };
 
+static const char PASS_SMART_BORDER_H_SHADER_SOURCE[] = {
+#embed "pass-smarth.glsl"
+    , '\0'
+};
+
+static const char PASS_SMART_BORDER_V_SHADER_SOURCE[] = {
+#embed "pass-smartv.glsl"
+    , '\0'
+};
+
 // internal state: EGL & GL objects + Pango objects necessary for text
 static EGLDisplay egl_display = EGL_NO_DISPLAY;
 static EGLContext egl_context = EGL_NO_CONTEXT;
@@ -149,6 +159,14 @@ static GLuint gl_pass_vbo = 0;
 // SHADER_PASS_IDENTITY
 static GLuint gl_pass_identity_program = 0;
 static GLint gl_pass_identity_tex = 0;
+// SHADER_PASS_SMART_BORDER_H
+static GLuint gl_pass_smart_border_h_program = 0;
+static GLint gl_pass_smart_border_h_tex = 0;
+static GLint gl_pass_smart_border_h_scale = 0;
+// SHADER_PASS_SMART_BORDER_V
+static GLuint gl_pass_smart_border_v_program = 0;
+static GLint gl_pass_smart_border_v_tex = 0;
+static GLint gl_pass_smart_border_v_scale = 0;
 
 static GLRectData *rect_instance_buffer = NULL;
 static size_t rect_instance_capacity = 0;
@@ -450,6 +468,7 @@ static bool renderer_gl_init() {
         renderer_gl_cleanup();
         return false;
     }
+
     gl_pass_identity_program =
         create_pass_program("pass-identity", PASS_IDENTITY_SHADER_SOURCE);
     if (!gl_pass_identity_program) {
@@ -458,6 +477,30 @@ static bool renderer_gl_init() {
     }
     gl_pass_identity_tex =
         glGetUniformLocation(gl_pass_identity_program, "tex");
+
+    gl_pass_smart_border_h_program = create_pass_program(
+        "pass-smart-border-h", PASS_SMART_BORDER_H_SHADER_SOURCE
+    );
+    if (!gl_pass_smart_border_h_program) {
+        renderer_gl_cleanup();
+        return false;
+    }
+    gl_pass_smart_border_h_tex =
+        glGetUniformLocation(gl_pass_smart_border_h_program, "tex");
+    gl_pass_smart_border_h_scale =
+        glGetUniformLocation(gl_pass_smart_border_h_program, "scale");
+
+    gl_pass_smart_border_v_program = create_pass_program(
+        "pass-smart-border-v", PASS_SMART_BORDER_V_SHADER_SOURCE
+    );
+    if (!gl_pass_smart_border_v_program) {
+        renderer_gl_cleanup();
+        return false;
+    }
+    gl_pass_smart_border_v_tex =
+        glGetUniformLocation(gl_pass_smart_border_v_program, "tex");
+    gl_pass_smart_border_v_scale =
+        glGetUniformLocation(gl_pass_smart_border_v_program, "scale");
 
     TIMING_END(gl_shader_init);
 
@@ -506,6 +549,12 @@ static void text_cache_free_entry(GLTextCacheEntry *entry);
 static void renderer_gl_cleanup() {
     if (gl_pass_identity_program != 0) {
         glDeleteProgram(gl_pass_identity_program);
+    }
+    if (gl_pass_smart_border_h_program != 0) {
+        glDeleteProgram(gl_pass_smart_border_h_program);
+    }
+    if (gl_pass_smart_border_v_program != 0) {
+        glDeleteProgram(gl_pass_smart_border_v_program);
     }
     if (gl_pass_vertex_shader != 0) {
         glDeleteShader(gl_pass_vertex_shader);
@@ -811,20 +860,9 @@ static void renderer_gl_texture_destroy(RenderTexture *render_texture) {
     free(texture);
 }
 
-// TODO: This comment is way too long.
 /**
- * Run a same-size image-processing pass into a new, caller-owned texture.
- * Programs are linked with gl_pass_vertex_shader and sample `tex` on unit 0;
- * gl_FragCoord.xy identifies the source texel. Additional uniforms may be set
- * by the caller before invoking this function. Output components are stored
- * in the requested canonical format (R8, RGBA8, or RGB10_A2).
- *
- * Coordinates stay in storage orientation, with the source transform retained
- * as metadata. Sampling honors source swizzles, just as normal drawing does.
- * No blending, dithering, or color-space conversion is applied. Call between
- * canvas draws: this restores the UI program, VAO, and default framebuffer,
- * while the next draw sets its own viewport and texture binding.
- * Returns NULL on allocation/rendering failure.
+ * Run a same-size image-processing shader pass into a new, caller-owned
+ * texture. Returns NULL on allocation/rendering failure.
  */
 static RenderTexture *renderer_gl_texture_run_pass(
     const RenderTexture *render_source, ShaderPassType type, ...
@@ -842,6 +880,22 @@ static RenderTexture *renderer_gl_texture_run_pass(
         glUniform1i(gl_pass_identity_tex, 0);
         output_format = source->download_format;
         break;
+    case SHADER_PASS_SMART_BORDER_H: {
+        glUseProgram(gl_pass_smart_border_h_program);
+        glUniform1i(gl_pass_smart_border_h_tex, 0);
+        uint32_t scale = va_arg(args, uint32_t);
+        glUniform1ui(gl_pass_smart_border_h_scale, scale);
+        output_format = IMAGE_FORMAT_GRAY8;
+        break;
+    }
+    case SHADER_PASS_SMART_BORDER_V: {
+        glUseProgram(gl_pass_smart_border_v_program);
+        glUniform1i(gl_pass_smart_border_v_tex, 0);
+        uint32_t scale = va_arg(args, uint32_t);
+        glUniform1ui(gl_pass_smart_border_v_scale, scale);
+        output_format = IMAGE_FORMAT_GRAY8;
+        break;
+    }
     default:
         REPORT_UNHANDLED("shader pass type", "%d", type);
     }

@@ -1,5 +1,7 @@
 #include "smart-border.h"
 #include "log.h"
+#include "render/renderer.h"
+#include "render/texture.h"
 #include "wayland/screen-capture.h"
 #include <stdatomic.h>
 #include <threads.h>
@@ -7,8 +9,6 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define IMAGE_ROW(img, y) (img->data + (y) * img->stride)
-
-// TODO: When dmabuf capture lands, add a GPU backend.
 
 static int smart_border_context_thread_func(void *data) {
     SmartBorderContext *ctx = data;
@@ -100,19 +100,42 @@ static int smart_border_context_thread_func(void *data) {
 SmartBorderContext *
 smart_border_context_start(CaptureFrame *base, uint32_t scale) {
     SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
-    ctx->base = capture_frame_get_image(base);
     ctx->scale = scale;
     mtx_init(&ctx->base_mtx, mtx_plain);
     cnd_init(&ctx->base_cnd);
-    ctx->is_done = false;
-    ctx->ref_count = 2;
-    thrd_t thread;
-    if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
-        thrd_success) {
-        thrd_detach(thread);
-    } else {
+    auto texture_run_pass = renderer_get_default()->texture_run_pass;
+    if (texture_run_pass) {
+        // Use the shader passes.
+        TIMING_START(smart_border);
+
+        RenderTexture *intermediate = texture_run_pass(
+            capture_frame_get_texture(base), SHADER_PASS_SMART_BORDER_H, scale
+        );
+        if (intermediate) {
+            ctx->result_texture = texture_run_pass(
+                intermediate, SHADER_PASS_SMART_BORDER_V, scale
+            );
+            renderer_get_default()->texture_destroy(intermediate);
+        }
+
+        TIMING_END(smart_border);
+
         ctx->ref_count = 1;
         ctx->base_released = true;
+        ctx->is_done = true;
+    } else {
+        // Do a CPU-based implementation on a separate thread.
+        ctx->base = capture_frame_get_image(base);
+        ctx->is_done = false;
+        ctx->ref_count = 2;
+        thrd_t thread;
+        if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
+            thrd_success) {
+            thrd_detach(thread);
+        } else {
+            ctx->ref_count = 1;
+            ctx->base_released = true;
+        }
     }
     return ctx;
 }
