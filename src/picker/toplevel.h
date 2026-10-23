@@ -4,6 +4,7 @@
 
 typedef struct PickerSurface PickerSurface;
 
+/** All coordinates in this struct are in device space. */
 typedef struct {
     CaptureFrame *frame;
     char *title;
@@ -39,10 +40,10 @@ typedef struct {
     double target_y;
     /**
      * The scroll offset of the view into the content,
-     * in content coordinates. Always positive (or zero).
+     * in logical coordinates. Always nonnegative.
      */
     double scroll_y;
-    /** The total height of the entry grid, in content coordinates. */
+    /** The total height of the entry grid, in logical coordinates. */
     double content_height;
 
     RenderTextStyle label_text_style;

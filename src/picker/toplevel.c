@@ -24,7 +24,7 @@ constexpr double LABEL_PADDING_Y = 4;
 static void clamp_scroll(PickerSurface *picker) {
     ToplevelPicker *toplevel = &picker->toplevel;
     double max_scroll =
-        fmax(toplevel->content_height - picker->surface->device_height, 0);
+        fmax(toplevel->content_height - picker->surface->logical_height, 0);
     toplevel->scroll_y = fmin(fmax(toplevel->scroll_y, 0), max_scroll);
 }
 
@@ -125,11 +125,11 @@ static void recompute_grid(PickerSurface *picker) {
 
     // The tallest column determines the content height
     // (column_y already includes the trailing padding).
-    double content_height = 0;
+    double device_content_height = 0;
     for (int c = 0; c < columns; c++) {
-        content_height = fmax(content_height, column_y[c]);
+        device_content_height = fmax(device_content_height, column_y[c]);
     }
-    toplevel->content_height = content_height;
+    toplevel->content_height = device_content_height / scale;
     clamp_scroll(picker);
 
     free(column_x);
@@ -176,7 +176,7 @@ static bool update_mouse_hover(PickerSurface *picker, bool pointer_moved) {
     if (seat->pointer_data.focus == picker->surface->wl_surface) {
         double x = seat->pointer_data.surface_x * scale;
         // Undo scrolling
-        double y = seat->pointer_data.surface_y * scale + toplevel->scroll_y;
+        double y = (seat->pointer_data.surface_y + toplevel->scroll_y) * scale;
         for (int i = 0; i < toplevel->entry_count; i++) {
             ToplevelPickerEntry *entry = &toplevel->entries[i];
             if (!entry->visible) {
@@ -399,8 +399,13 @@ toplevel_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
         }
 
         // Make sure the newly focused entry is on screen.
-        BBox bounds = toplevel->entries[new_idx].full_bounds;
-        double view_height = picker->surface->device_height;
+        // Entry coordinates are in device space while scrolling is in logical
+        // space.
+        BBox bounds = bbox_scale(
+            toplevel->entries[new_idx].full_bounds,
+            120.0 / picker->surface->scale
+        );
+        double view_height = picker->surface->logical_height;
         if (bounds.y < toplevel->scroll_y) {
             toplevel->scroll_y = bounds.y;
         } else if (
@@ -438,7 +443,7 @@ static void toplevel_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
         .color = {0.025, 0.025, 0.025, 0.4}
     );
 
-    double scroll = toplevel->scroll_y;
+    double scroll = toplevel->scroll_y * surface->scale / 120.0;
     int focused = focused_entry(toplevel);
     for (int i = 0; i < toplevel->entry_count; i++) {
         ToplevelPickerEntry *entry = &toplevel->entries[i];
