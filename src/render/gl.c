@@ -906,12 +906,17 @@ static RenderTexture *renderer_gl_texture_run_pass(
     case IMAGE_FORMAT_GRAY8:
         internal_format = GL_R8;
         break;
+    case IMAGE_FORMAT_ARGB8888:
     case IMAGE_FORMAT_ABGR8888:
+    case IMAGE_FORMAT_XRGB8888:
     case IMAGE_FORMAT_XBGR8888:
         internal_format = GL_RGBA8;
+        output_format = IMAGE_FORMAT_ABGR8888;
         break;
+    case IMAGE_FORMAT_XRGB2101010:
     case IMAGE_FORMAT_XBGR2101010:
         internal_format = GL_RGB10_A2;
+        output_format = IMAGE_FORMAT_XBGR2101010;
         break;
     default:
         REPORT_UNHANDLED("pass output format", "%d", output_format);
@@ -1157,11 +1162,11 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
         staging = (GLTexture *)renderer_gl_texture_run_pass(
             render_texture, SHADER_PASS_IDENTITY
         );
-        texture_id = staging->gl;
         if (!staging) {
             image_destroy(raw);
             return NULL;
         }
+        texture_id = staging->gl;
     }
 
     GLuint framebuffer;

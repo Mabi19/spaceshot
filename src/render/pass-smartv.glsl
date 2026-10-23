@@ -7,7 +7,7 @@ out float color;
 
 float quantize(float col) {
     // constant is 0x6f / 0xff
-    return step(col, 0.4352941176);
+    return 1.0 - step(0.4352941176, col);
 }
 
 void main() {

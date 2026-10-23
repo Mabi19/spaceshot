@@ -45,7 +45,7 @@ static int smart_border_context_thread_func(void *data) {
 
         for (int x = 0; x < width; x++) {
             sum += src_row[MIN(x + BOX_BLUR_SIZE, width - 1)];
-            sum -= src_row[MAX(x - BOX_BLUR_SIZE, 0)];
+            sum -= src_row[MAX(x - BOX_BLUR_SIZE - 1, 0)];
             dest_row[x] = sum / (2 * BOX_BLUR_SIZE + 1);
         }
     }
@@ -68,7 +68,7 @@ static int smart_border_context_thread_func(void *data) {
 
         for (int y = 0; y < height; y++) {
             sum += IMAGE_ROW(work_buf_2, MIN(y + BOX_BLUR_SIZE, height - 1))[x];
-            sum -= IMAGE_ROW(work_buf_2, MAX(y - BOX_BLUR_SIZE, 0))[x];
+            sum -= IMAGE_ROW(work_buf_2, MAX(y - BOX_BLUR_SIZE - 1, 0))[x];
             IMAGE_ROW(work_buf_1, y)[x] = sum / (2 * BOX_BLUR_SIZE + 1);
         }
     }
@@ -120,22 +120,25 @@ smart_border_context_start(CaptureFrame *base, uint32_t scale) {
 
         TIMING_END(smart_border);
 
-        ctx->ref_count = 1;
-        ctx->base_released = true;
-        ctx->is_done = true;
-    } else {
-        // Do a CPU-based implementation on a separate thread.
-        ctx->base = capture_frame_get_image(base);
-        ctx->is_done = false;
-        ctx->ref_count = 2;
-        thrd_t thread;
-        if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
-            thrd_success) {
-            thrd_detach(thread);
-        } else {
+        if (ctx->result_texture) {
             ctx->ref_count = 1;
             ctx->base_released = true;
+            ctx->is_done = true;
+            return ctx;
         }
+        // fall through
+    }
+    // Do a CPU-based implementation on a separate thread.
+    ctx->base = capture_frame_get_image(base);
+    ctx->is_done = false;
+    ctx->ref_count = 2;
+    thrd_t thread;
+    if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
+        thrd_success) {
+        thrd_detach(thread);
+    } else {
+        ctx->ref_count = 1;
+        ctx->base_released = true;
     }
     return ctx;
 }
