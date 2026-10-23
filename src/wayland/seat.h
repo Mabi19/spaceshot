@@ -85,16 +85,20 @@ typedef struct {
     // (it does mean O(n) insertions though)
     // of (private) struct SeatListenerListEntry
     struct wl_array listeners;
-} SeatDispatcher;
+} Seat;
 
 /**
- * Create a SeatDispatcher for the specified seat.
+ * Create a Seat wrapper object for the specified seat.
  */
-SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat);
+Seat *seat_new(struct wl_seat *seat);
 
-/** Set the cursor shape for a specific OverlaySurface. */
-void seat_dispatcher_set_cursor_for_surface(
-    SeatDispatcher *dispatcher,
+/**
+ * Try sending a new cursor shape for a specific OverlaySurface.
+ * This function is called automatically by the OverlaySurface
+ * when its cursor shape is set.
+ */
+void seat_try_send_cursor_for_surface(
+    Seat *seat,
     OverlaySurface *surface,
     enum wp_cursor_shape_device_v1_shape shape
 );
@@ -108,17 +112,12 @@ void seat_dispatcher_set_cursor_for_surface(
  * @note Any subsurfaces must have an empty input region to not capture mouse
  * movement.
  */
-void seat_dispatcher_add_listener(
-    SeatDispatcher *dispatcher,
-    OverlaySurface *surface,
-    SeatListener *listener,
-    void *user_data
+void seat_add_listener(
+    Seat *seat, OverlaySurface *surface, SeatListener *listener, void *user_data
 );
 /**
  * Removes the listener that belongs to the specified OverlaySurface.
  */
-void seat_dispatcher_remove_listener(
-    SeatDispatcher *dispatcher, OverlaySurface *surface
-);
+void seat_remove_listener(Seat *seat, OverlaySurface *surface);
 
-void seat_dispatcher_destroy(SeatDispatcher *dispatcher);
+void seat_destroy(Seat *seat);

@@ -81,7 +81,7 @@ static struct ext_data_control_device_v1 *get_data_device() {
         wayland_globals.ext_data_control_device =
             ext_data_control_manager_v1_get_data_device(
                 wayland_globals.ext_data_control_manager,
-                wayland_globals.seat_dispatcher->seat
+                wayland_globals.seat->seat
             );
     }
     return wayland_globals.ext_data_control_device;

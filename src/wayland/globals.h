@@ -37,7 +37,7 @@ typedef struct {
     struct zwlr_layer_shell_v1 *layer_shell;
     struct zwlr_screencopy_manager_v1 *wlr_screencopy_manager;
     struct zxdg_output_manager_v1 *output_manager;
-    SeatDispatcher *seat_dispatcher;
+    Seat *seat;
     struct wl_list outputs;
     struct wl_list toplevels;
     OutputCallback handle_output_create;

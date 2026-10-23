@@ -9,7 +9,6 @@
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
-#include "wayland/seat.h"
 #include <config/config.h>
 #include <cursor-shape-client.h>
 #include <math.h>
@@ -388,7 +387,7 @@ static void update_cursor_shape(PickerSurface *picker) {
                                   : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR;
         break;
     case REGION_PICKER_EDITING:
-        if (wayland_globals.seat_dispatcher->pointer_data.focus ==
+        if (wayland_globals.seat->pointer_data.focus ==
             picker->surface->wl_surface) {
             if (region->edit_data.is_move) {
                 shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_GRABBING;
@@ -396,8 +395,8 @@ static void update_cursor_shape(PickerSurface *picker) {
                 Anchor anchor;
                 if (hit_test_at_position(
                         picker,
-                        wayland_globals.seat_dispatcher->pointer_data.surface_x,
-                        wayland_globals.seat_dispatcher->pointer_data.surface_y,
+                        wayland_globals.seat->pointer_data.surface_x,
+                        wayland_globals.seat->pointer_data.surface_y,
                         &anchor
                     )) {
                     shape = get_cursor_for_anchor(anchor);
@@ -412,9 +411,7 @@ static void update_cursor_shape(PickerSurface *picker) {
     default:
         REPORT_UNHANDLED("region picker state", "%d", region->state);
     }
-    seat_dispatcher_set_cursor_for_surface(
-        wayland_globals.seat_dispatcher, picker->surface, shape
-    );
+    overlay_surface_set_cursor(picker->surface, shape);
 }
 
 static void change_state(PickerSurface *picker, RegionPickerState new_state) {

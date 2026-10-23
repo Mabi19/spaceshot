@@ -3,6 +3,7 @@
 #include "log.h"
 #include "render/renderer.h"
 #include "wayland/globals.h"
+#include "wayland/seat.h"
 #include <assert.h>
 #include <cursor-shape-client.h>
 #include <fractional-scale-client.h>
@@ -47,8 +48,8 @@ static void overlay_surface_handle_configure(
     zwlr_layer_surface_v1_ack_configure(surface->layer_surface, serial);
     surface->has_configured = true;
 
-    bool size_changed = surface->logical_width != width ||
-                        surface->logical_height != height;
+    bool size_changed =
+        surface->logical_width != width || surface->logical_height != height;
     surface->logical_width = width;
     surface->logical_height = height;
     wp_viewport_set_destination(
@@ -205,6 +206,15 @@ static void draw_immediate_and_request_frame(OverlaySurface *surface) {
         surface->frame_callback, &frame_callback_listener, surface
     );
     overlay_surface_draw_immediate(surface);
+}
+
+void overlay_surface_set_cursor(
+    OverlaySurface *surface, enum wp_cursor_shape_device_v1_shape shape
+) {
+    if (surface->cursor_shape != shape) {
+        surface->cursor_shape = shape;
+        seat_try_send_cursor_for_surface(wayland_globals.seat, surface, shape);
+    }
 }
 
 void overlay_surface_queue_draw(OverlaySurface *surface) {

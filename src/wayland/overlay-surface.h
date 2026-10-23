@@ -59,7 +59,7 @@ typedef struct {
     // callback things
     OverlaySurfaceHandlers handlers;
     // technically also a callback thing.
-    // Consumed by the SeatDispatcher
+    // Consumed by the seat
     enum wp_cursor_shape_device_v1_shape cursor_shape;
     void *user_data;
     // used to safeguard against drawing frames after the surface is destroyed
@@ -76,6 +76,9 @@ OverlaySurface *overlay_surface_new(
     ImageFormat pixel_format,
     OverlaySurfaceHandlers handlers,
     void *user_data
+);
+void overlay_surface_set_cursor(
+    OverlaySurface *surface, enum wp_cursor_shape_device_v1_shape shape
 );
 /** Call the draw_callback sometime in the future and present the result. */
 void overlay_surface_queue_draw(OverlaySurface *surface);

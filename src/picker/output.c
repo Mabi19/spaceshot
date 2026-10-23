@@ -4,7 +4,6 @@
 #include "render/command.h"
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
-#include "wayland/seat.h"
 #include <cursor-shape-client.h>
 #include <stdlib.h>
 #include <string.h>
@@ -119,17 +118,15 @@ static void output_picker_init(PickerSurface *picker) {
 static void output_picker_enter(PickerSurface *picker) {
     OutputPicker *output = &picker->output;
 
-    if (wayland_globals.seat_dispatcher->pointer_data.focus ==
+    if (wayland_globals.seat->pointer_data.focus ==
         picker->surface->wl_surface) {
         output->state = OUTPUT_PICKER_ACTIVE;
     } else {
         output->state = OUTPUT_PICKER_INACTIVE;
     }
 
-    seat_dispatcher_set_cursor_for_surface(
-        wayland_globals.seat_dispatcher,
-        picker->surface,
-        WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
+    overlay_surface_set_cursor(
+        picker->surface, WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_CROSSHAIR
     );
 }
 

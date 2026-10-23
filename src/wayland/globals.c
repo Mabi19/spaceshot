@@ -363,7 +363,7 @@ static void registry_handle_global(
     }
 
     if (strcmp(interface, wl_seat_interface.name) == 0) {
-        if (globals->seat_dispatcher) {
+        if (globals->seat) {
             report_warning(
                 "Multiple seats present. Handling this is "
                 "unimplemented, only one will work"
@@ -371,7 +371,7 @@ static void registry_handle_global(
         } else {
             struct wl_seat *seat =
                 wl_registry_bind(registry, object_id, &wl_seat_interface, 9);
-            globals->seat_dispatcher = seat_dispatcher_new(seat);
+            globals->seat = seat_new(seat);
         }
     }
 
@@ -444,7 +444,7 @@ bool find_wayland_globals(
         wayland_globals.viewporter == NULL ||
         wayland_globals.layer_shell == NULL ||
         wayland_globals.cursor_shape_manager == NULL ||
-        wayland_globals.seat_dispatcher == NULL ||
+        wayland_globals.seat == NULL ||
         wayland_globals.ext_data_control_manager == NULL) {
         return false;
     }
@@ -471,7 +471,7 @@ void cleanup_wayland_globals() {
         free(output);
     }
 
-    seat_dispatcher_destroy(wayland_globals.seat_dispatcher);
+    seat_destroy(wayland_globals.seat);
 
     // A couple of the built-in singleton globals do not have destructors:
     // - wl_compositor

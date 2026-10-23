@@ -170,7 +170,7 @@ static int first_visible_entry(ToplevelPicker *toplevel) {
  */
 static bool update_mouse_hover(PickerSurface *picker, bool pointer_moved) {
     ToplevelPicker *toplevel = &picker->toplevel;
-    SeatDispatcher *seat = wayland_globals.seat_dispatcher;
+    Seat *seat = wayland_globals.seat;
     double scale = picker->surface->scale / 120.0;
     int hover_idx = -1;
     if (seat->pointer_data.focus == picker->surface->wl_surface) {

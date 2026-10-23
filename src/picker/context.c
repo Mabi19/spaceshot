@@ -122,8 +122,8 @@ static PickerSurface *picker_surface_new(
     picker->background = frame;
     picker->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
 
-    seat_dispatcher_add_listener(
-        wayland_globals.seat_dispatcher,
+    seat_add_listener(
+        wayland_globals.seat,
         picker->surface,
         &picker_surface_seat_listener,
         picker
@@ -133,9 +133,7 @@ static PickerSurface *picker_surface_new(
 }
 
 static void picker_surface_destroy(PickerSurface *picker) {
-    seat_dispatcher_remove_listener(
-        wayland_globals.seat_dispatcher, picker->surface
-    );
+    seat_remove_listener(wayland_globals.seat, picker->surface);
 
     // Destroy every picker in case switches happened.
     region_picker_destroy(picker);

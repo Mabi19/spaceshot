@@ -25,24 +25,6 @@ typedef struct {
 // TODO: make this configurable once the UI is more settled
 constexpr double SCROLL_TICK_PIXELS = 60.0;
 
-/** Assumes the passed-in wl_surface has pointer focus. */
-static void
-send_cursor_shape(SeatDispatcher *dispatcher, struct wl_surface *wl_surface) {
-    SeatListenerListEntry *entry;
-    wl_array_for_each(entry, &dispatcher->listeners) {
-        if (!entry->surface)
-            continue;
-
-        if (entry->surface->wl_surface == wl_surface) {
-            wp_cursor_shape_device_v1_set_shape(
-                dispatcher->pointer_data.shape_device,
-                dispatcher->pointer_data.last_enter_serial,
-                entry->surface->cursor_shape
-            );
-        }
-    }
-}
-
 static void pointer_handle_enter(
     void *data,
     struct wl_pointer * /* pointer */,
@@ -51,14 +33,26 @@ static void pointer_handle_enter(
     wl_fixed_t x,
     wl_fixed_t y
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->pointer_data.focus = surface;
-    dispatcher->pointer_data.surface_x = wl_fixed_to_double(x);
-    dispatcher->pointer_data.surface_y = wl_fixed_to_double(y);
-    dispatcher->pointer_data.received_events |= POINTER_EVENT_MOTION;
-    dispatcher->pointer_data.last_enter_serial = serial;
+    Seat *seat = data;
+    seat->pointer_data.focus = surface;
+    seat->pointer_data.surface_x = wl_fixed_to_double(x);
+    seat->pointer_data.surface_y = wl_fixed_to_double(y);
+    seat->pointer_data.received_events |= POINTER_EVENT_MOTION;
+    seat->pointer_data.last_enter_serial = serial;
 
-    send_cursor_shape(dispatcher, surface);
+    SeatListenerListEntry *entry;
+    wl_array_for_each(entry, &seat->listeners) {
+        if (!entry->surface)
+            continue;
+
+        if (entry->surface->wl_surface == surface) {
+            wp_cursor_shape_device_v1_set_shape(
+                seat->pointer_data.shape_device,
+                seat->pointer_data.last_enter_serial,
+                entry->surface->cursor_shape
+            );
+        }
+    }
 }
 
 static void pointer_handle_leave(
@@ -67,8 +61,8 @@ static void pointer_handle_leave(
     uint32_t /* serial */,
     struct wl_surface * /* surface */
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->pointer_data.focus = NULL;
+    Seat *seat = data;
+    seat->pointer_data.focus = NULL;
 }
 
 static void pointer_handle_motion(
@@ -78,10 +72,10 @@ static void pointer_handle_motion(
     wl_fixed_t x,
     wl_fixed_t y
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->pointer_data.surface_x = wl_fixed_to_double(x);
-    dispatcher->pointer_data.surface_y = wl_fixed_to_double(y);
-    dispatcher->pointer_data.received_events |= POINTER_EVENT_MOTION;
+    Seat *seat = data;
+    seat->pointer_data.surface_x = wl_fixed_to_double(x);
+    seat->pointer_data.surface_y = wl_fixed_to_double(y);
+    seat->pointer_data.received_events |= POINTER_EVENT_MOTION;
 }
 
 static void pointer_handle_button(
@@ -92,8 +86,8 @@ static void pointer_handle_button(
     uint32_t button,
     enum wl_pointer_button_state state
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->last_clipboard_serial = serial;
+    Seat *seat = data;
+    seat->last_clipboard_serial = serial;
 
     PointerButtons button_mask;
     switch (button) {
@@ -112,9 +106,9 @@ static void pointer_handle_button(
     }
 
     if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
-        dispatcher->pointer_data.pending_buttons |= button_mask;
+        seat->pointer_data.pending_buttons |= button_mask;
     } else {
-        dispatcher->pointer_data.pending_buttons &= ~button_mask;
+        seat->pointer_data.pending_buttons &= ~button_mask;
     }
 }
 
@@ -125,14 +119,14 @@ static void pointer_handle_axis(
     enum wl_pointer_axis axis,
     wl_fixed_t value
 ) {
-    SeatDispatcher *dispatcher = data;
+    Seat *seat = data;
     double amount = wl_fixed_to_double(value);
     switch (axis) {
     case WL_POINTER_AXIS_VERTICAL_SCROLL:
-        dispatcher->pointer_data.pending_scroll_y += amount;
+        seat->pointer_data.pending_scroll_y += amount;
         break;
     case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
-        dispatcher->pointer_data.pending_scroll_x += amount;
+        seat->pointer_data.pending_scroll_x += amount;
         break;
     default:
         break;
@@ -141,8 +135,8 @@ static void pointer_handle_axis(
 
 static void
 pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
-    SeatDispatcher *dispatcher = data;
-    auto ptr_data = &dispatcher->pointer_data;
+    Seat *seat = data;
+    auto ptr_data = &seat->pointer_data;
 
     double scroll_x = ptr_data->pending_scroll_x;
     double scroll_y = ptr_data->pending_scroll_y;
@@ -179,7 +173,7 @@ pointer_handle_frame(void *data, struct wl_pointer * /* pointer */) {
         scroll_x != 0 || scroll_y != 0) {
 
         SeatListenerListEntry *entry;
-        wl_array_for_each(entry, &dispatcher->listeners) {
+        wl_array_for_each(entry, &seat->listeners) {
             if (!entry->surface)
                 continue;
 
@@ -203,9 +197,9 @@ static void pointer_handle_axis_source(
     struct wl_pointer * /* pointer */,
     enum wl_pointer_axis_source source
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->pointer_data.axis_source = source;
-    dispatcher->pointer_data.has_axis_source = true;
+    Seat *seat = data;
+    seat->pointer_data.axis_source = source;
+    seat->pointer_data.has_axis_source = true;
 }
 
 static void pointer_handle_axis_stop(
@@ -223,15 +217,15 @@ static void pointer_handle_axis_value120(
     enum wl_pointer_axis axis,
     int32_t value120
 ) {
-    SeatDispatcher *dispatcher = data;
+    Seat *seat = data;
     switch (axis) {
     case WL_POINTER_AXIS_VERTICAL_SCROLL:
-        dispatcher->pointer_data.pending_value120_y += value120;
-        dispatcher->pointer_data.received_value120_y = true;
+        seat->pointer_data.pending_value120_y += value120;
+        seat->pointer_data.received_value120_y = true;
         break;
     case WL_POINTER_AXIS_HORIZONTAL_SCROLL:
-        dispatcher->pointer_data.pending_value120_x += value120;
-        dispatcher->pointer_data.received_value120_x = true;
+        seat->pointer_data.pending_value120_x += value120;
+        seat->pointer_data.received_value120_x = true;
         break;
     default:
         break;
@@ -268,14 +262,14 @@ static void keyboard_handle_keymap(
     int fd,
     uint32_t size
 ) {
-    SeatDispatcher *dispatcher = data;
-    if (dispatcher->keyboard_data.keymap) {
-        xkb_keymap_unref(dispatcher->keyboard_data.keymap);
-        dispatcher->keyboard_data.keymap = NULL;
+    Seat *seat = data;
+    if (seat->keyboard_data.keymap) {
+        xkb_keymap_unref(seat->keyboard_data.keymap);
+        seat->keyboard_data.keymap = NULL;
     }
-    if (dispatcher->keyboard_data.state) {
-        xkb_state_unref(dispatcher->keyboard_data.state);
-        dispatcher->keyboard_data.state = NULL;
+    if (seat->keyboard_data.state) {
+        xkb_state_unref(seat->keyboard_data.state);
+        seat->keyboard_data.state = NULL;
     }
 
     if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
@@ -286,8 +280,8 @@ static void keyboard_handle_keymap(
     if (map_shm == MAP_FAILED) {
         report_error_fatal("couldn't mmap keymap");
     }
-    dispatcher->keyboard_data.keymap = xkb_keymap_new_from_string(
-        dispatcher->keyboard_data.context,
+    seat->keyboard_data.keymap = xkb_keymap_new_from_string(
+        seat->keyboard_data.context,
         map_shm,
         XKB_KEYMAP_FORMAT_TEXT_V1,
         XKB_KEYMAP_COMPILE_NO_FLAGS
@@ -295,8 +289,7 @@ static void keyboard_handle_keymap(
     munmap(map_shm, size);
     close(fd);
 
-    dispatcher->keyboard_data.state =
-        xkb_state_new(dispatcher->keyboard_data.keymap);
+    seat->keyboard_data.state = xkb_state_new(seat->keyboard_data.keymap);
 }
 
 static void keyboard_handle_enter(
@@ -306,8 +299,8 @@ static void keyboard_handle_enter(
     struct wl_surface *surface,
     struct wl_array * /* keys */
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->keyboard_data.focus = surface;
+    Seat *seat = data;
+    seat->keyboard_data.focus = surface;
     // TODO: handle initial keys
     // fire a different event with initial key presses?
 }
@@ -318,8 +311,8 @@ static void keyboard_handle_leave(
     uint32_t /* serial */,
     struct wl_surface * /* surface */
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->keyboard_data.focus = NULL;
+    Seat *seat = data;
+    seat->keyboard_data.focus = NULL;
 }
 
 static void keyboard_handle_key(
@@ -330,8 +323,8 @@ static void keyboard_handle_key(
     uint32_t keycode,
     enum wl_keyboard_key_state key_state
 ) {
-    SeatDispatcher *dispatcher = data;
-    dispatcher->last_clipboard_serial = serial;
+    Seat *seat = data;
+    seat->last_clipboard_serial = serial;
 
     KeyboardEventType type;
     switch (key_state) {
@@ -349,16 +342,15 @@ static void keyboard_handle_key(
     }
 
     KeyboardEvent event = {
-        .focus = dispatcher->keyboard_data.focus,
-        .keysym = xkb_state_key_get_one_sym(
-            dispatcher->keyboard_data.state, keycode + 8
-        ),
+        .focus = seat->keyboard_data.focus,
+        .keysym =
+            xkb_state_key_get_one_sym(seat->keyboard_data.state, keycode + 8),
         .type = type,
-        .state = dispatcher->keyboard_data.state,
+        .state = seat->keyboard_data.state,
     };
 
     SeatListenerListEntry *entry;
-    wl_array_for_each(entry, &dispatcher->listeners) {
+    wl_array_for_each(entry, &seat->listeners) {
         if (!entry->surface)
             continue;
 
@@ -377,9 +369,9 @@ static void keyboard_handle_modifiers(
     uint32_t locked,
     uint32_t group
 ) {
-    SeatDispatcher *dispatcher = data;
+    Seat *seat = data;
     xkb_state_update_mask(
-        dispatcher->keyboard_data.state, depressed, latched, locked, 0, 0, group
+        seat->keyboard_data.state, depressed, latched, locked, 0, 0, group
     );
 }
 
@@ -406,39 +398,33 @@ static void seat_handle_capabilities(
     struct wl_seat * /* seat */,
     enum wl_seat_capability capabilities
 ) {
-    SeatDispatcher *dispatcher = data;
+    Seat *seat = data;
     if (capabilities & WL_SEAT_CAPABILITY_POINTER) {
-        if (!dispatcher->pointer) {
-            dispatcher->pointer = wl_seat_get_pointer(dispatcher->seat);
-            dispatcher->pointer_data.shape_device =
+        if (!seat->pointer) {
+            seat->pointer = wl_seat_get_pointer(seat->seat);
+            seat->pointer_data.shape_device =
                 wp_cursor_shape_manager_v1_get_pointer(
-                    wayland_globals.cursor_shape_manager, dispatcher->pointer
+                    wayland_globals.cursor_shape_manager, seat->pointer
                 );
-            wl_pointer_add_listener(
-                dispatcher->pointer, &pointer_listener, dispatcher
-            );
+            wl_pointer_add_listener(seat->pointer, &pointer_listener, seat);
         }
     } else {
-        if (dispatcher->pointer) {
-            wp_cursor_shape_device_v1_destroy(
-                dispatcher->pointer_data.shape_device
-            );
-            wl_pointer_release(dispatcher->pointer);
-            dispatcher->pointer = NULL;
+        if (seat->pointer) {
+            wp_cursor_shape_device_v1_destroy(seat->pointer_data.shape_device);
+            wl_pointer_release(seat->pointer);
+            seat->pointer = NULL;
         }
     }
 
     if (capabilities & WL_SEAT_CAPABILITY_KEYBOARD) {
-        if (!dispatcher->keyboard) {
-            dispatcher->keyboard = wl_seat_get_keyboard(dispatcher->seat);
-            wl_keyboard_add_listener(
-                dispatcher->keyboard, &keyboard_listener, dispatcher
-            );
+        if (!seat->keyboard) {
+            seat->keyboard = wl_seat_get_keyboard(seat->seat);
+            wl_keyboard_add_listener(seat->keyboard, &keyboard_listener, seat);
         }
     } else {
-        if (dispatcher->keyboard) {
-            wl_keyboard_release(dispatcher->keyboard);
-            dispatcher->keyboard = NULL;
+        if (seat->keyboard) {
+            wl_keyboard_release(seat->keyboard);
+            seat->keyboard = NULL;
         }
     }
 
@@ -454,8 +440,8 @@ static struct wl_seat_listener seat_listener = {
     .name = seat_handle_name,
 };
 
-SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
-    SeatDispatcher *result = calloc(1, sizeof(SeatDispatcher));
+Seat *seat_new(struct wl_seat *seat) {
+    Seat *result = calloc(1, sizeof(Seat));
     result->seat = seat;
 
     wl_seat_add_listener(seat, &seat_listener, result);
@@ -467,30 +453,28 @@ SeatDispatcher *seat_dispatcher_new(struct wl_seat *seat) {
     return result;
 }
 
-void seat_dispatcher_set_cursor_for_surface(
-    SeatDispatcher *dispatcher,
+void seat_try_send_cursor_for_surface(
+    Seat *seat,
     OverlaySurface *surface,
     enum wp_cursor_shape_device_v1_shape shape
 ) {
-    if (surface->cursor_shape != shape) {
-        surface->cursor_shape = shape;
-        if (dispatcher->pointer_data.focus == surface->wl_surface) {
-            send_cursor_shape(dispatcher, surface->wl_surface);
-        }
-        // If not focused right now, cursor shape will be set later when that
-        // happens.
+    if (seat->pointer_data.focus == surface->wl_surface) {
+        wp_cursor_shape_device_v1_set_shape(
+            seat->pointer_data.shape_device,
+            seat->pointer_data.last_enter_serial,
+            shape
+        );
     }
+    // If not focused right now, cursor shape will be set later when that
+    // happens in the enter handler.
 }
 
-void seat_dispatcher_add_listener(
-    SeatDispatcher *dispatcher,
-    OverlaySurface *surface,
-    SeatListener *listener,
-    void *user_data
+void seat_add_listener(
+    Seat *seat, OverlaySurface *surface, SeatListener *listener, void *user_data
 ) {
     SeatListenerListEntry *entry;
     // try to find an empty slot first
-    wl_array_for_each(entry, &dispatcher->listeners) {
+    wl_array_for_each(entry, &seat->listeners) {
         if (entry->surface == NULL) {
             entry->surface = surface;
             entry->listener = listener;
@@ -499,17 +483,15 @@ void seat_dispatcher_add_listener(
         }
     }
     // push to the end
-    entry = wl_array_add(&dispatcher->listeners, sizeof(SeatListenerListEntry));
+    entry = wl_array_add(&seat->listeners, sizeof(SeatListenerListEntry));
     entry->surface = surface;
     entry->listener = listener;
     entry->user_data = user_data;
 }
 
-void seat_dispatcher_remove_listener(
-    SeatDispatcher *dispatcher, OverlaySurface *surface
-) {
+void seat_remove_listener(Seat *seat, OverlaySurface *surface) {
     SeatListenerListEntry *entry;
-    wl_array_for_each(entry, &dispatcher->listeners) {
+    wl_array_for_each(entry, &seat->listeners) {
         if (entry->surface == surface) {
             // clear everything for safety
             entry->surface = NULL;
@@ -519,23 +501,21 @@ void seat_dispatcher_remove_listener(
     }
 }
 
-void seat_dispatcher_destroy(SeatDispatcher *dispatcher) {
-    wl_seat_release(dispatcher->seat);
-    if (dispatcher->pointer) {
-        wl_pointer_release(dispatcher->pointer);
-        wp_cursor_shape_device_v1_destroy(
-            dispatcher->pointer_data.shape_device
-        );
+void seat_destroy(Seat *seat) {
+    wl_seat_release(seat->seat);
+    if (seat->pointer) {
+        wl_pointer_release(seat->pointer);
+        wp_cursor_shape_device_v1_destroy(seat->pointer_data.shape_device);
     }
-    if (dispatcher->keyboard) {
-        wl_keyboard_release(dispatcher->keyboard);
+    if (seat->keyboard) {
+        wl_keyboard_release(seat->keyboard);
     }
 
-    xkb_context_unref(dispatcher->keyboard_data.context);
-    xkb_keymap_unref(dispatcher->keyboard_data.keymap);
-    xkb_state_unref(dispatcher->keyboard_data.state);
+    xkb_context_unref(seat->keyboard_data.context);
+    xkb_keymap_unref(seat->keyboard_data.keymap);
+    xkb_state_unref(seat->keyboard_data.state);
 
-    wl_array_release(&dispatcher->listeners);
+    wl_array_release(&seat->listeners);
 
-    free(dispatcher);
+    free(seat);
 }
