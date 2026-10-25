@@ -40,7 +40,7 @@ static int smart_border_context_thread_func(void *data) {
         // extend first pixel out
         uint32_t sum = (BOX_BLUR_SIZE + 2) * src_row[0];
         for (int x = 1; x < BOX_BLUR_SIZE; x++) {
-            sum += src_row[x];
+            sum += src_row[MIN(x, width - 1)];
         }
 
         for (int x = 0; x < width; x++) {
@@ -63,7 +63,7 @@ static int smart_border_context_thread_func(void *data) {
         // extend first pixel out
         uint32_t sum = (BOX_BLUR_SIZE + 2) * IMAGE_ROW(work_buf_2, 0)[x];
         for (int y = 1; y < BOX_BLUR_SIZE; y++) {
-            sum += IMAGE_ROW(work_buf_2, y)[x];
+            sum += IMAGE_ROW(work_buf_2, MIN(y, height - 1))[x];
         }
 
         for (int y = 0; y < height; y++) {
