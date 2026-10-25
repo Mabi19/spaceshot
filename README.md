@@ -37,7 +37,7 @@ Output mode:
 
 Toplevel mode (experimental):
 - Click on a toplevel preview to capture it
-- Click on the background to cancel
+- Click on the background to cancel (or deselect if keyboard navigation is active)
 - Alternatively, use the arrow keys or Tab/Shift+Tab to select a preview, then press Enter to capture it
 - Scroll with the mouse wheel or trackpad if there are too many previews to fit on screen
 
