@@ -2,7 +2,6 @@
 #include <config/config.h>
 #include <gio/gio.h>
 #include <glib.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -189,12 +188,12 @@ static void exec_action(NotificationAction action, const char *path) {
 
 static void handle_notification_closed(guint id, guint reason) {
     if (g_hash_table_remove(active_notifications, GUINT_TO_POINTER(id))) {
-        printf("notification closed: %u (reason = %u)\n", id, reason);
+        g_debug("notification closed: %u (reason = %u)", id, reason);
     }
 }
 
 static void handle_notification_action(guint id, const char *key) {
-    printf("notification action %s for %u\n", key, id);
+    g_debug("notification action %s for %u", key, id);
     const char *path =
         g_hash_table_lookup(active_notifications, GUINT_TO_POINTER(id));
     if (path == NULL) {
@@ -219,7 +218,7 @@ static void handle_notification_action(guint id, const char *key) {
             return;
         }
     }
-    g_assert_not_reached();
+    g_warning("unknown action %s", key);
 }
 
 static void on_notification_proxy_signal(
@@ -350,13 +349,13 @@ static bool notify_for_file(const char *path, bool did_copy, GError **error) {
     g_hash_table_insert(
         active_notifications, GUINT_TO_POINTER(id), g_strdup(path)
     );
-    printf("notify for %s produced id %u\n", path, id);
+    g_debug("notify for %s produced id %u", path, id);
     return true;
 }
 
 static gboolean reload_timeout_cb(void * /* user_data */) {
     config_reload_timeout_id = 0;
-    printf("Reloading config...\n");
+    g_print("Reloading config...\n");
     config_load();
     return G_SOURCE_REMOVE;
 }
@@ -369,7 +368,7 @@ static void on_config_file_changed(
     void * /* user_data */
 ) {
     char *file_path = g_file_get_path(file);
-    g_print(
+    g_debug(
         "config file changed! %s, event: %d\n",
         file_path != NULL ? file_path : "(null)",
         (int)event_type
@@ -415,7 +414,7 @@ static void server_init(void) {
     const char **config_locations = config_get_locations();
     for (size_t i = 0; config_locations[i] != NULL; i++) {
         const char *location = config_locations[i];
-        g_print("config location: %s\n", location);
+        g_debug("config location: %s\n", location);
         GFile *file = g_file_new_for_path(location);
         GError *monitor_error = NULL;
         GFileMonitor *monitor = g_file_monitor_file(
