@@ -436,46 +436,48 @@ static inline void image_put_pixel(
         uint32_t *pixel_ptr = (uint32_t *)raw_pixel_ptr;
         switch (target->format) {
         case IMAGE_FORMAT_ARGB8888: {
-            uint8_t chan_a = a * 255.0;
-            uint8_t chan_r = r * 255.0;
-            uint8_t chan_g = g * 255.0;
-            uint8_t chan_b = b * 255.0;
-            *pixel_ptr = chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
+            uint32_t chan_a = a * 255.0;
+            uint32_t chan_r = r * 255.0;
+            uint32_t chan_g = g * 255.0;
+            uint32_t chan_b = b * 255.0;
+            *pixel_ptr =
+                (uint32_t)chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
             break;
         }
         case IMAGE_FORMAT_ABGR8888: {
-            uint8_t chan_a = a * 255.0;
-            uint8_t chan_r = r * 255.0;
-            uint8_t chan_g = g * 255.0;
-            uint8_t chan_b = b * 255.0;
-            *pixel_ptr = chan_a << 24 | chan_b << 16 | chan_g << 8 | chan_r;
+            uint32_t chan_a = a * 255.0;
+            uint32_t chan_r = r * 255.0;
+            uint32_t chan_g = g * 255.0;
+            uint32_t chan_b = b * 255.0;
+            *pixel_ptr =
+                (uint32_t)chan_a << 24 | chan_b << 16 | chan_g << 8 | chan_r;
             break;
         }
         case IMAGE_FORMAT_XRGB8888: {
-            uint8_t chan_r = r * 255.0;
-            uint8_t chan_g = g * 255.0;
-            uint8_t chan_b = b * 255.0;
+            uint32_t chan_r = r * 255.0;
+            uint32_t chan_g = g * 255.0;
+            uint32_t chan_b = b * 255.0;
             *pixel_ptr = chan_r << 16 | chan_g << 8 | chan_b;
             break;
         }
         case IMAGE_FORMAT_XBGR8888: {
-            uint8_t chan_r = r * 255.0;
-            uint8_t chan_g = g * 255.0;
-            uint8_t chan_b = b * 255.0;
+            uint32_t chan_r = r * 255.0;
+            uint32_t chan_g = g * 255.0;
+            uint32_t chan_b = b * 255.0;
             *pixel_ptr = chan_b << 16 | chan_g << 8 | chan_r;
             break;
         }
         case IMAGE_FORMAT_XRGB2101010: {
-            uint16_t chan_r = (uint16_t)(r * 1023.0) & 0x3ff;
-            uint16_t chan_g = (uint16_t)(g * 1023.0) & 0x3ff;
-            uint16_t chan_b = (uint16_t)(b * 1023.0) & 0x3ff;
+            uint32_t chan_r = (uint32_t)(r * 1023.0) & 0x3ff;
+            uint32_t chan_g = (uint32_t)(g * 1023.0) & 0x3ff;
+            uint32_t chan_b = (uint32_t)(b * 1023.0) & 0x3ff;
             *pixel_ptr = chan_r << 20 | chan_g << 10 | chan_b;
             break;
         }
         case IMAGE_FORMAT_XBGR2101010: {
-            uint16_t chan_r = (uint16_t)(r * 1023.0) & 0x3ff;
-            uint16_t chan_g = (uint16_t)(g * 1023.0) & 0x3ff;
-            uint16_t chan_b = (uint16_t)(b * 1023.0) & 0x3ff;
+            uint32_t chan_r = (uint32_t)(r * 1023.0) & 0x3ff;
+            uint32_t chan_g = (uint32_t)(g * 1023.0) & 0x3ff;
+            uint32_t chan_b = (uint32_t)(b * 1023.0) & 0x3ff;
             *pixel_ptr = chan_b << 20 | chan_g << 10 | chan_r;
             break;
         }
