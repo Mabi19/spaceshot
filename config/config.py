@@ -14,8 +14,9 @@ config_c, config_h = sc.config({
     "notify": {
         "enabled": sc.bool(),
         "summary": sc.string(),
+        "body-save": sc.string(),
         "body-copy": sc.string(),
-        "body-nocopy": sc.string(),
+        "body-save-copy": sc.string(),
         "edit-command": sc.string(),
         "actions": sc.tokenlist("open", "edit", "directory"),
         "default-action": sc.enum("open") | sc.enum("edit") | sc.enum("directory") | sc.enum("none")

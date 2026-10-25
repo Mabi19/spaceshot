@@ -57,8 +57,17 @@ int main(int argc, char **argv) {
         g_free(screenshot_path);
         run_server();
     } else {
-        if (screenshot_path == NULL) {
-            g_printerr("error: Path is required in client mode\n");
+        if (screenshot_path != NULL) {
+            char *absolute_path =
+                g_canonicalize_filename(screenshot_path, NULL);
+            g_free(screenshot_path);
+            screenshot_path = absolute_path;
+        }
+
+        if (screenshot_path == NULL && !did_copy) {
+            g_printerr(
+                "error: Either a file path or the copy flag must be specified\n"
+            );
             return 1;
         }
 
@@ -86,7 +95,9 @@ int main(int argc, char **argv) {
         GVariant *result = g_dbus_proxy_call_sync(
             client,
             "NotifyForFile",
-            g_variant_new("(sb)", screenshot_path, did_copy),
+            g_variant_new(
+                "(sb)", screenshot_path ? screenshot_path : "", did_copy
+            ),
             G_DBUS_CALL_FLAGS_NONE,
             -1,
             NULL,

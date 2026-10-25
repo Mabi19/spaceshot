@@ -77,7 +77,7 @@ static void spawn_process(char **argv) {
 
 static void
 file_manager_call_done(GObject *source, GAsyncResult *res, void *user_data) {
-    char *path = user_data;
+    char *uri = user_data;
     GError *error = NULL;
     GVariant *result =
         g_dbus_proxy_call_finish(G_DBUS_PROXY(source), res, &error);
@@ -90,16 +90,15 @@ file_manager_call_done(GObject *source, GAsyncResult *res, void *user_data) {
         g_variant_unref(result);
     }
     g_object_unref(source);
-    g_free(path);
+    g_free(uri);
 }
 
 static void file_manager_proxy_created(
-    GObject *source, GAsyncResult *res, void *user_data
+    GObject * /* source */, GAsyncResult *res, void *user_data
 ) {
     char *path = user_data;
     GError *error = NULL;
     GDBusProxy *proxy = g_dbus_proxy_new_for_bus_finish(res, &error);
-    (void)source;
     if (proxy == NULL) {
         g_printerr(
             "Couldn't invoke file manager through D-Bus: %s\n", error->message
@@ -109,9 +108,20 @@ static void file_manager_proxy_created(
         return;
     }
 
+    char *uri = g_filename_to_uri(path, NULL, &error);
+    if (uri == NULL) {
+        g_printerr(
+            "Invalid path (note: must be absolute): %s\n", error->message
+        );
+        g_clear_error(&error);
+        g_free(path);
+        return;
+    }
+    g_free(path);
+
     GVariantBuilder uri_builder;
     g_variant_builder_init(&uri_builder, G_VARIANT_TYPE("as"));
-    g_variant_builder_add(&uri_builder, "s", path);
+    g_variant_builder_add(&uri_builder, "s", uri);
     GVariant *uris = g_variant_builder_end(&uri_builder);
 
     g_dbus_proxy_call(
@@ -122,7 +132,7 @@ static void file_manager_proxy_created(
         -1,
         NULL,
         file_manager_call_done,
-        path
+        uri
     );
 }
 
@@ -147,14 +157,14 @@ static void exec_action(NotificationAction action, const char *path) {
         }
         bool has_found = false;
         for (int i = 0; i < argcp; i++) {
-            if (strcmp(argvp[i], "{{path}}") == 0) {
+            if (strcmp(argvp[i], "{path}") == 0) {
                 g_free(argvp[i]);
                 argvp[i] = g_strdup(path);
                 has_found = true;
             }
         }
         if (!has_found) {
-            g_warning("Edit command template has no {{path}} placeholders");
+            g_warning("Edit command template has no {path} placeholders");
         }
         spawn_process(argvp);
         g_strfreev(argvp);
@@ -238,49 +248,76 @@ static bool notify_for_file(const char *path, bool did_copy, GError **error) {
     bool has_default =
         conf->notify.default_action != CONFIG_NOTIFY_DEFAULT_ACTION_NONE;
 
+    // D-Bus does not support maybe types, so the empty string
+    // is used as a sentinel
+    if (strlen(path) == 0) {
+        path = NULL;
+    }
+
     GVariantBuilder actions_builder;
     g_variant_builder_init(&actions_builder, G_VARIANT_TYPE("as"));
-    if (has_default) {
-        NotificationAction default_action =
-            default_action_to_action(conf->notify.default_action);
-        g_variant_builder_add(&actions_builder, "s", "default");
-        g_variant_builder_add(
-            &actions_builder, "s", action_info[default_action].label
-        );
-    }
-    for (size_t i = 0; i < button_count; i++) {
-        NotificationAction action;
-        switch (conf->notify.actions.items[i]) {
-        case CONFIG_NOTIFY_ACTIONS_ITEM_OPEN:
-            action = NOTIFICATION_ACTION_OPEN;
-            break;
-        case CONFIG_NOTIFY_ACTIONS_ITEM_EDIT:
-            action = NOTIFICATION_ACTION_EDIT;
-            break;
-        case CONFIG_NOTIFY_ACTIONS_ITEM_DIRECTORY:
-            action = NOTIFICATION_ACTION_DIRECTORY;
-            break;
-        default:
-            g_assert_not_reached();
+    if (path) {
+        if (has_default) {
+            NotificationAction default_action =
+                default_action_to_action(conf->notify.default_action);
+            g_variant_builder_add(&actions_builder, "s", "default");
+            g_variant_builder_add(
+                &actions_builder, "s", action_info[default_action].label
+            );
         }
-        g_variant_builder_add(&actions_builder, "s", action_info[action].key);
-        g_variant_builder_add(&actions_builder, "s", action_info[action].label);
+        for (size_t i = 0; i < button_count; i++) {
+            NotificationAction action;
+            switch (conf->notify.actions.items[i]) {
+            case CONFIG_NOTIFY_ACTIONS_ITEM_OPEN:
+                action = NOTIFICATION_ACTION_OPEN;
+                break;
+            case CONFIG_NOTIFY_ACTIONS_ITEM_EDIT:
+                action = NOTIFICATION_ACTION_EDIT;
+                break;
+            case CONFIG_NOTIFY_ACTIONS_ITEM_DIRECTORY:
+                action = NOTIFICATION_ACTION_DIRECTORY;
+                break;
+            default:
+                g_assert_not_reached();
+            }
+            g_variant_builder_add(
+                &actions_builder, "s", action_info[action].key
+            );
+            g_variant_builder_add(
+                &actions_builder, "s", action_info[action].label
+            );
+        }
     }
     GVariant *actions = g_variant_builder_end(&actions_builder);
 
     GVariantBuilder hints_builder;
     g_variant_builder_init(&hints_builder, G_VARIANT_TYPE("a{sv}"));
-    // The "{sv}" format consumes the variant as the v's contents, so the
-    // string must not be wrapped in a variant here.
-    g_variant_builder_add(
-        &hints_builder, "{sv}", "image-path", g_variant_new_string(path)
-    );
+    if (path) {
+        // The "{sv}" format consumes the variant as the v's contents, so the
+        // string must not be wrapped in a variant here.
+        g_variant_builder_add(
+            &hints_builder, "{sv}", "image-path", g_variant_new_string(path)
+        );
+    }
     GVariant *hints = g_variant_builder_end(&hints_builder);
 
-    const char *body_template =
-        did_copy ? conf->notify.body_copy : conf->notify.body_nocopy;
-    GString *body = g_string_new(body_template);
-    g_string_replace(body, "{{path}}", path, 0);
+    GString *body;
+    if (path) {
+        const char *body_template =
+            did_copy ? conf->notify.body_save_copy : conf->notify.body_save;
+        body = g_string_new(body_template);
+        // The standard doesn't actually specify how to escape,
+        // but notification servers tend to support HTML-like escaping
+        GString *escaped_path = g_string_new(path);
+        g_string_replace(escaped_path, "&", "&amp;", 0);
+        g_string_replace(escaped_path, "<", "&lt;", 0);
+
+        g_string_replace(body, "{path}", escaped_path->str, 0);
+        g_string_free(escaped_path, TRUE);
+    } else {
+        // the client guards against this when copy is false
+        body = g_string_new(conf->notify.body_copy);
+    }
 
     GVariant *result = g_dbus_proxy_call_sync(
         notification_service,
