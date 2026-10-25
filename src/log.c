@@ -1,5 +1,6 @@
 #include "log.h"
 #include <config/config.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -99,13 +100,17 @@ void timing_display(
     timespec_subtract(&ts_diff, end, start);
     uint64_t us = ts_diff.tv_sec * 1'000'000 + ts_diff.tv_nsec / 1000;
     if (us >= 10000) {
-        fprintf(stderr, "%s took %ld ms\n", name, us / 1000);
+        fprintf(stderr, "%s took %" PRIu64 " ms\n", name, us / 1000);
     } else if (us >= 1000) {
         fprintf(
-            stderr, "%s took %ld.%ld ms\n", name, us / 1000, (us % 1000) / 100
+            stderr,
+            "%s took %" PRIu64 ".%" PRIu64 " ms\n",
+            name,
+            us / 1000,
+            (us % 1000) / 100
         );
     } else {
-        fprintf(stderr, "%s took %ld µs\n", name, us);
+        fprintf(stderr, "%s took %" PRIu64 " µs\n", name, us);
     }
 }
 
