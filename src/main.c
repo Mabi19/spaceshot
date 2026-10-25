@@ -99,29 +99,36 @@ static void send_notification(char *output_filename, bool did_copy) {
             char *notify_bin_path = getenv("SPACESHOT_NOTIFY_PATH");
             notify_bin_path =
                 notify_bin_path ? notify_bin_path : "spaceshot-notify";
-            if (did_copy) {
-                log_debug(
-                    "invoking 'spaceshot-notify -p %s -c\n", output_filename
-                );
-                execlp(
-                    notify_bin_path,
-                    "spaceshot-notify",
-                    "-p",
-                    output_filename,
-                    "-c",
-                    NULL
-                );
+            if (output_filename) {
+                if (did_copy) {
+                    log_debug(
+                        "invoking 'spaceshot-notify -p %s -c'\n",
+                        output_filename
+                    );
+                    execlp(
+                        notify_bin_path,
+                        "spaceshot-notify",
+                        "-p",
+                        output_filename,
+                        "-c",
+                        NULL
+                    );
+                } else {
+                    log_debug(
+                        "invoking 'spaceshot-notify -p %s'\n", output_filename
+                    );
+                    execlp(
+                        notify_bin_path,
+                        "spaceshot-notify",
+                        "-p",
+                        output_filename,
+                        NULL
+                    );
+                }
             } else {
-                log_debug(
-                    "invoking 'spaceshot-notify -p %s\n", output_filename
-                );
-                execlp(
-                    notify_bin_path,
-                    "spaceshot-notify",
-                    "-p",
-                    output_filename,
-                    NULL
-                );
+                assert(did_copy);
+                log_debug("invoking 'spaceshot-notify -c'\n");
+                execlp(notify_bin_path, "spaceshot-notify", "-c", NULL);
             }
 
             // if something has gone terribly wrong, exit
@@ -136,8 +143,8 @@ static void send_notification(char *output_filename, bool did_copy) {
             // (and the layers are closed by this point)
             TIMING_START(exec_spaceshot_notify);
             int status;
-            waitpid(pid, &status, WUNTRACED);
-            if (WIFEXITED(status)) {
+            pid_t result = waitpid(pid, &status, 0);
+            if (result != -1 && WIFEXITED(status)) {
                 int status_code = WEXITSTATUS(status);
                 if (status_code != 0) {
                     if (status_code == 104) {
@@ -155,11 +162,14 @@ static void send_notification(char *output_filename, bool did_copy) {
                     }
                 }
             } else {
-                report_warning("spaceshot-notify didn't exit?");
+                report_warning("spaceshot-notify didn't exit properly");
             }
             TIMING_END(exec_spaceshot_notify);
         }
     }
+#else
+    (void)output_filename;
+    (void)did_copy;
 #endif
 }
 
@@ -179,7 +189,11 @@ static void finish_screenshot(const Image *image) {
         );
     }
 
-    send_notification(output_filename, should_copy);
+    if (strcmp(output_filename, "-") == 0 && should_copy) {
+        send_notification(NULL, true);
+    } else {
+        send_notification(output_filename, should_copy);
+    }
 
     free(output_filename);
     // copies take ownership of link buffers
