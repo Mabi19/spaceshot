@@ -434,6 +434,7 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         case RENDER_COMMAND_POP_CLIP: {
             assert(clip_nesting_level > 0);
             cairo_restore(cr);
+            clip_nesting_level--;
             break;
         }
         default:

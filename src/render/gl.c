@@ -1682,7 +1682,12 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                 x1, y1, x2 <= x1 ? 0 : x2 - x1, y2 <= y1 ? 0 : y2 - y1
             };
             clip_depth++;
-            assert(clip_depth < MAX_CLIP_DEPTH);
+            if (clip_depth >= MAX_CLIP_DEPTH) {
+                // This is not an assert since theoretically valid code can just
+                // reach this limit. But valid code should still not do
+                // unbalanced clipping.
+                REPORT_ERROR_INTERNAL("max clip depth reached");
+            }
             clip_rects[clip_depth] = combined;
             glScissor(combined.x, combined.y, combined.width, combined.height);
             break;
@@ -1700,6 +1705,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         }
         cmd = cmd->next;
     }
+    assert(clip_depth == 0);
 
     flush_quad_batch(&batch_start, &batch_length);
 
