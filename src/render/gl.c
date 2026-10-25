@@ -25,10 +25,6 @@
 #include <wayland-egl.h>
 #include <xxh3.h>
 
-// This file uses #embed, which ccache doesn't support. Therefore:
-// TODO: remove once ccache 4.14 is available
-// ccache:disable
-
 typedef struct {
     EGLSurface surface;
     struct wl_egl_window *window;

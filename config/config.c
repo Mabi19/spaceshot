@@ -8,10 +8,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-// This file uses #embed, which ccache doesn't support. Therefore:
-// TODO: remove once ccache 4.14 is available
-// ccache:disable
-
 static Config config = {0};
 
 Config *config_get() { return &config; }
