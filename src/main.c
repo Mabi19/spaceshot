@@ -647,6 +647,13 @@ static void dispatch_captures() {
 // defined in debug.c
 extern void init_debug_mode();
 
+void dispatch_event_loop(struct wl_display *display) {
+    // TODO: Key repeat will need timers, which should be handled here
+    if (wl_display_dispatch(display) == -1) {
+        report_error_fatal("disconnected from Wayland compositor");
+    }
+}
+
 int main(int argc, char **argv) {
     wl_list_init(&active_captures);
     wl_list_init(&capture_targets);
@@ -687,7 +694,9 @@ int main(int argc, char **argv) {
         report_error_fatal("didn't find every required Wayland object");
     }
 
-    wl_display_roundtrip(display);
+    if (wl_display_roundtrip(display) == -1) {
+        report_error_fatal("initial wl_display_roundtrip failed");
+    };
 
     if (args.mode != CAPTURE_COPY_HELPER) {
         use_dmabuf_capture = should_use_dmabuf();
@@ -728,16 +737,14 @@ int main(int argc, char **argv) {
         TIMING_START(capture);
         while (pending_captures > 0) {
             log_debug("waiting for %d pending captures\n", pending_captures);
-            wl_display_dispatch(display);
+            dispatch_event_loop(display);
         }
         TIMING_END(capture);
 
         dispatch_captures();
 
-        while (wl_display_dispatch(display) != -1) {
-            if (!should_active_wait) {
-                break;
-            }
+        while (should_active_wait) {
+            dispatch_event_loop(display);
         }
 
         // By this point all of the pickers are done.
@@ -757,12 +764,8 @@ int main(int argc, char **argv) {
         );
     }
 
-    if (should_clipboard_wait) {
-        while (wl_display_dispatch(display) != -1) {
-            if (!should_clipboard_wait) {
-                break;
-            }
-        }
+    while (should_clipboard_wait) {
+        dispatch_event_loop(display);
     }
 
     cleanup_wayland_globals();
