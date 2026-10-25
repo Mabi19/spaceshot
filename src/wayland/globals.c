@@ -189,7 +189,14 @@ static void toplevel_handle_handle_done(
     void *data, struct ext_foreign_toplevel_handle_v1 * /* toplevel */
 ) {
     WrappedToplevel *toplevel = data;
-    wayland_globals.handle_toplevel_create(toplevel);
+    if (toplevel->fill_state & WRAPPED_TOPLEVEL_CREATE_WAS_CALLED) {
+        // this is an update
+        // like with outputs, listening to this in practice is hard
+        // and not really necessary
+    } else {
+        toplevel->fill_state |= WRAPPED_TOPLEVEL_CREATE_WAS_CALLED;
+        wayland_globals.handle_toplevel_create(toplevel);
+    }
 }
 
 static void toplevel_handle_handle_closed(
