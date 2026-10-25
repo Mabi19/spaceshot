@@ -414,6 +414,7 @@ def config(props: dict[str, BaseType | dict[str, BaseType]]):
 '''#include <spaceshot-config-struct-decl.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -440,10 +441,14 @@ static bool config_parse_bool(bool *x, char *value) {
 static bool config_parse_int(int *x, char *value) {
     char *endptr;
     errno = 0;
-    *x = strtol(value, &endptr, 0);
+    long v = strtol(value, &endptr, 0);
     if (value[0] == '\\0' || *endptr != '\\0' || errno) {
         return false;
     }
+    if (v < INT_MIN || v > INT_MAX) {
+        return false;
+    }
+    *x = v;
     return true;
 }
 
@@ -460,8 +465,8 @@ static bool config_parse_color(ConfigColor *x, char *value) {
         size_t len = strlen(value);
         // rest must be hex digits
         for (int i = 1; value[i] != '\\0'; i++) {
-            char c = tolower(value[i]);
-            if (c < '0' || c > 'f') {
+            unsigned char c = tolower(value[i]);
+            if (!isxdigit(c)) {
                 return false;
             }
         }
