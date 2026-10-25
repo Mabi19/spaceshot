@@ -121,19 +121,21 @@ void config_parse_string(
 ) {
     char *section = NULL;
 
-    while (*ini_contents != '\0') {
-        char *line_start = ini_contents;
-        while (1) {
-            char c = *ini_contents;
-            if (c == '\n' || c == '\0') {
-                break;
-            } else {
-                ini_contents++;
-            }
+    char *line_start = ini_contents;
+    while (1) {
+        char c = *ini_contents;
+        if (c == '\n') {
+            // terminate this line and move to the next one
+            *ini_contents = '\0';
+            parse_line(&section, line_start, callback, data);
+            ini_contents++;
+            line_start = ini_contents;
+        } else if (c == '\0') {
+            // end of string. parse the leftover bit
+            parse_line(&section, line_start, callback, data);
+            return;
+        } else {
+            ini_contents++;
         }
-        // terminate this line and move to the next one
-        *ini_contents = '\0';
-        ini_contents++;
-        parse_line(&section, line_start, callback, data);
     }
 }
