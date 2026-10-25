@@ -21,7 +21,6 @@ typedef struct {
     struct wl_display *display;
     struct wl_compositor *compositor;
     struct wl_shm *shm;
-    struct wl_subcompositor *subcompositor;
     struct zwp_linux_dmabuf_v1 *linux_dmabuf;
     struct ext_data_control_manager_v1 *ext_data_control_manager;
     struct ext_data_control_device_v1 *ext_data_control_device;

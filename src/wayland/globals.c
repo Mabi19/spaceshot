@@ -267,12 +267,6 @@ static void registry_handle_global(
         );
     }
 
-    if (strcmp(interface, wl_subcompositor_interface.name) == 0) {
-        globals->subcompositor = wl_registry_bind(
-            registry, object_id, &wl_subcompositor_interface, 1
-        );
-    }
-
     if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
         if (version >= 4) {
             globals->linux_dmabuf = wl_registry_bind(
@@ -479,7 +473,6 @@ void cleanup_wayland_globals() {
     if (wl_shm_get_version(wayland_globals.shm) >= 2) {
         wl_shm_release(wayland_globals.shm);
     }
-    wl_subcompositor_destroy(wayland_globals.subcompositor);
     if (wayland_globals.linux_dmabuf) {
         zwp_linux_dmabuf_v1_destroy(wayland_globals.linux_dmabuf);
     }
