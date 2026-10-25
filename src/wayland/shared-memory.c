@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdckdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <time.h>
@@ -46,7 +47,10 @@ SharedBuffer *shared_buffer_new(
     result->height = height;
     result->stride = stride;
     result->format = format;
-    uint32_t size = height * stride;
+    uint32_t size;
+    if (ckd_mul(&size, height, stride)) {
+        goto error;
+    }
 
     if (result->fd < 0) {
         goto error;
@@ -87,7 +91,7 @@ void shared_buffer_destroy(SharedBuffer *buffer) {
         munmap(buffer->data, buffer->height * buffer->stride);
     }
 
-    if (buffer->fd != 0) {
+    if (buffer->fd >= 0) {
         close(buffer->fd);
     }
 
