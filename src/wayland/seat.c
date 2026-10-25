@@ -411,6 +411,7 @@ static void seat_handle_capabilities(
     } else {
         if (seat->pointer) {
             wp_cursor_shape_device_v1_destroy(seat->pointer_data.shape_device);
+            seat->pointer_data.shape_device = NULL;
             wl_pointer_release(seat->pointer);
             seat->pointer = NULL;
         }
@@ -458,7 +459,8 @@ void seat_try_send_cursor_for_surface(
     OverlaySurface *surface,
     enum wp_cursor_shape_device_v1_shape shape
 ) {
-    if (seat->pointer_data.focus == surface->wl_surface) {
+    if (seat->pointer_data.shape_device &&
+        seat->pointer_data.focus == surface->wl_surface) {
         wp_cursor_shape_device_v1_set_shape(
             seat->pointer_data.shape_device,
             seat->pointer_data.last_enter_serial,
