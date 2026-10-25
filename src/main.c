@@ -13,6 +13,7 @@
 #include "wayland/toplevel.h"
 #include <assert.h>
 #include <config/config.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
 #include <stdio.h>
@@ -68,10 +69,25 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
         out_file = fdopen(dup(STDOUT_FILENO), "wb");
     } else {
         out_file = fopen(output_filename, "wb");
+        if (!out_file) {
+            report_error_fatal(
+                "couldn't open output file '%s': %s",
+                output_filename,
+                strerror(errno)
+            );
+        }
     }
-    assert(out_file);
     link_buffer_write(encoded_image, out_file);
-    fclose(out_file);
+    if (ferror(out_file)) {
+        report_error_fatal(
+            "writing to output file failed: %s", strerror(errno)
+        );
+    }
+    if (fclose(out_file) != 0) {
+        report_error_fatal(
+            "writing to output file failed: %s", strerror(errno)
+        );
+    }
 }
 
 static void send_notification(char *output_filename, bool did_copy) {
