@@ -118,12 +118,23 @@ bool config_load_file(const char *path) {
     if (!config_file) {
         return false;
     }
-    fseek(config_file, 0, SEEK_END);
-    size_t data_len = ftell(config_file);
-    char data[data_len + 1];
-    fseek(config_file, 0, SEEK_SET);
+    if (fseek(config_file, 0, SEEK_END) == -1) {
+        fclose(config_file);
+        return false;
+    }
+    long data_len = ftell(config_file);
+    if (data_len == -1) {
+        fclose(config_file);
+        return false;
+    }
+
+    char *data = malloc(data_len + 1);
+    if (fseek(config_file, 0, SEEK_SET) == -1) {
+        fclose(config_file);
+        return false;
+    }
     size_t bytes_read = fread(data, 1, data_len, config_file);
-    if (bytes_read != data_len) {
+    if (bytes_read != (size_t)data_len) {
         fclose(config_file);
         return false;
     }
