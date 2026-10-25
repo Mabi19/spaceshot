@@ -354,6 +354,16 @@ static void registry_handle_global(
         globals->output_manager = wl_registry_bind(
             registry, object_id, &zxdg_output_manager_v1_interface, 3
         );
+        // decorate any existing outputs if they came before
+        WrappedOutput *output;
+        wl_list_for_each(output, &globals->outputs, link) {
+            output->xdg_output = zxdg_output_manager_v1_get_xdg_output(
+                globals->output_manager, output->wl_output
+            );
+            zxdg_output_v1_add_listener(
+                output->xdg_output, &xdg_output_listener, output
+            );
+        }
     }
 
     if (strcmp(interface, wl_seat_interface.name) == 0) {
@@ -376,14 +386,17 @@ static void registry_handle_global(
 
         WrappedOutput *output = calloc(1, sizeof(WrappedOutput));
         output->wl_output = wl_output;
+        output->object_id = object_id;
         wl_output_add_listener(wl_output, &output_listener, output);
 
-        output->xdg_output = zxdg_output_manager_v1_get_xdg_output(
-            globals->output_manager, wl_output
-        );
-        zxdg_output_v1_add_listener(
-            output->xdg_output, &xdg_output_listener, output
-        );
+        if (globals->output_manager) {
+            output->xdg_output = zxdg_output_manager_v1_get_xdg_output(
+                globals->output_manager, wl_output
+            );
+            zxdg_output_v1_add_listener(
+                output->xdg_output, &xdg_output_listener, output
+            );
+        }
 
         wl_list_insert(&globals->outputs, &output->link);
     }
@@ -402,7 +415,9 @@ static void registry_handle_global_remove(
             // destroy callback can't really receive it.
             wl_list_remove(&output->link);
 
-            zxdg_output_v1_destroy(output->xdg_output);
+            if (output->xdg_output) {
+                zxdg_output_v1_destroy(output->xdg_output);
+            }
             // I'm not sure this is necessary, but why not do it anyway
             wl_output_release(output->wl_output);
             free(output->name);
