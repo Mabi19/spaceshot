@@ -651,6 +651,7 @@ region_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
         }
         break;
     case XKB_KEY_Control_L:
+    case XKB_KEY_Control_R:
         // keep track of ctrl key state
         // so that it can be used when released
         region->edit_flag = event.type == KEYBOARD_EVENT_PRESS ? true : false;

@@ -28,7 +28,7 @@ In any interactive mode, press Esc to cancel.
 Region mode:
 - Click and drag to select a region
 - Click in place to cancel
-- Hold Alt or Space to move the selection instead of resizing it
+- Hold Left Alt or Space to move the selection instead of resizing it
 - Hold Ctrl while releasing the mouse button to edit the selection by dragging its edges or corners
     - In edit mode, press Enter to confirm
 
