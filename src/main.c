@@ -214,6 +214,9 @@ static void finish_predefined_region_screenshot(
     // cropping takes place in pixels, which are whole, so round off any
     // potential inaccuracies
     crop_bounds = bbox_round(crop_bounds);
+    if (crop_bounds.width < 1 || crop_bounds.height < 1) {
+        report_error_fatal("region has zero area");
+    }
 
     Image *cropped = image_crop(
         image,

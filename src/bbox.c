@@ -24,6 +24,10 @@ bool bbox_parse(const char *str_form, BBox *out) {
     if (read_specifier_count != 4 || read_char_count != (int)strlen(str_form)) {
         return false;
     }
+    if (out->width <= 0 || !isfinite(out->width) || out->height <= 0 ||
+        !isfinite(out->height)) {
+        return false;
+    }
     return true;
 }
 
@@ -66,10 +70,10 @@ char *bbox_stringify(const BBox src) {
 }
 
 bool bbox_contains(const BBox outer, const BBox inner) {
-    int32_t outer_right = outer.x + outer.width;
-    int32_t outer_bottom = outer.y + outer.height;
-    int32_t inner_right = inner.x + inner.width;
-    int32_t inner_bottom = inner.y + inner.height;
+    double outer_right = outer.x + outer.width;
+    double outer_bottom = outer.y + outer.height;
+    double inner_right = inner.x + inner.width;
+    double inner_bottom = inner.y + inner.height;
     return (outer.x <= inner.x) && (outer.y <= inner.y) &&
            (outer_right >= inner_right) && (outer_bottom >= inner_bottom);
 }
