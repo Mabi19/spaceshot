@@ -127,13 +127,15 @@ static const int LONG_OPTION_COUNT = sizeof(LONG_OPTIONS) / sizeof(LongOption);
 
 void parse_argv(Arguments *result, int argc, char **argv) {
     char *mode_name = "?";
+    bool options_enabled = true;
 
     for (int i = 0; i < argc; i++) {
         char *arg = argv[i];
-        // do not include flags where the first character is a digit,
+        // do not include options where the first character is a digit,
         // because that can be part of a region specifier
-        if (arg[0] == '-' && arg[1] != '\0' && !isdigit(arg[1])) {
-            // this is a flag
+        if (options_enabled && arg[0] == '-' && arg[1] != '\0' &&
+            !isdigit(arg[1])) {
+            // this is an option
             if (arg[1] == '-') {
                 // long option
                 char *option_contents = arg + 2;
@@ -142,13 +144,41 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     equals_sign ? (size_t)(equals_sign - option_contents)
                                 : strlen(option_contents);
 
+                if (provided_len == 0) {
+                    // literal --
+                    options_enabled = false;
+                    continue;
+                }
+
+                const LongOption *option = NULL;
                 for (int j = 0; j < LONG_OPTION_COUNT; j++) {
-                    const LongOption *option = &LONG_OPTIONS[j];
+                    // support abbreviations like getopt
                     for (size_t k = 0; k < provided_len; k++) {
-                        if (option->long_name[k] != option_contents[k]) {
+                        if (LONG_OPTIONS[j].long_name[k] !=
+                            option_contents[k]) {
                             goto next;
                         }
                     }
+
+                    if (!option) {
+                        option = &LONG_OPTIONS[j];
+                    } else {
+                        // ambiguous
+                        report_error(
+                            "option --%s is ambiguous (candidates: '%s', "
+                            "'%s')\ntry %s --help for more information",
+                            option_contents,
+                            option->long_name,
+                            LONG_OPTIONS[j].long_name,
+                            result->executable_name
+                        );
+                        goto error;
+                    }
+
+                next:
+                }
+
+                if (option) {
                     if (option->has_parameter) {
                         if (equals_sign) {
                             interpret_option(
@@ -157,8 +187,10 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         } else {
                             if (i + 1 >= argc) {
                                 report_error(
-                                    "option --%s requires an argument",
-                                    option_contents
+                                    "option --%s requires an argument\ntry %s "
+                                    "--help for more information",
+                                    option_contents,
+                                    result->executable_name
                                 );
                                 goto error;
                             }
@@ -169,20 +201,25 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                             i++;
                         }
                     } else {
+                        if (equals_sign) {
+                            report_error(
+                                "option --%s does not take an argument\ntry %s "
+                                "--help for more information",
+                                option->long_name,
+                                result->executable_name
+                            );
+                            goto error;
+                        }
                         interpret_option(result, option->short_name, NULL);
                     }
-                    goto finish_option;
-                next:
+                } else {
+                    report_error(
+                        "invalid option %s\ntry %s --help for more information",
+                        arg,
+                        result->executable_name
+                    );
+                    goto error;
                 }
-
-                report_error(
-                    "invalid option %s\ntry %s --help for more information",
-                    arg,
-                    result->executable_name
-                );
-                goto error;
-
-            finish_option:
             } else {
                 // short option
                 for (int j = 1; arg[j] != '\0'; j++) {
@@ -210,7 +247,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                             );
                             goto error;
                         }
-                        if (j + 1 >= argc) {
+                        if (i + 1 >= argc) {
                             report_error(
                                 "option -%c requires an argument", arg[j]
                             );
@@ -221,12 +258,6 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                         i++;
                         break;
                     default:
-                        log_debug(
-                            "arg: %s, i: %d, argv[i + 1]: %s\n",
-                            arg,
-                            j,
-                            argv[i + 1]
-                        );
                         report_error(
                             "invalid option -%c\ntry %s --help for more "
                             "information",
