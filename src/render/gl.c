@@ -148,8 +148,8 @@ static GLuint gl_vao = 0;
 static GLuint gl_vbo_rect_mesh = 0;
 static GLuint gl_vbo_rect_data = 0;
 static GLuint gl_shader_program = 0;
-static GLuint gl_uniform_screen_size = 0;
-static GLuint gl_uniform_tex = 0;
+static GLint gl_uniform_screen_size = 0;
+static GLint gl_uniform_tex = 0;
 
 // Offscreen programs share this vertex shader and fullscreen quad. Keep the
 // shader alive so future image-processing programs can link against it too.
