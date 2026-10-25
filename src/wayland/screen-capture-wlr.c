@@ -42,7 +42,9 @@ static void frame_context_finalize(
 
     // cleanup
     zwlr_screencopy_frame_v1_destroy(frame);
-    shared_buffer_destroy(context->shm_buffer);
+    if (context->shm_buffer) {
+        shared_buffer_destroy(context->shm_buffer);
+    }
     free(context);
 }
 
@@ -69,7 +71,9 @@ static void frame_handle_buffer(
         format == WL_SHM_FORMAT_XBGR2101010) {
         goto accept_format;
     } else if (
-        format == WL_SHM_FORMAT_XRGB8888 && !context->has_selected_format
+        !context->has_selected_format &&
+        (format == WL_SHM_FORMAT_ARGB8888 || format == WL_SHM_FORMAT_XRGB8888 ||
+         format == WL_SHM_FORMAT_XBGR8888)
     ) {
         goto accept_format;
     }
@@ -108,6 +112,10 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
         context->stride,
         context->selected_format
     );
+    if (!context->shm_buffer) {
+        log_debug("couldn't allocate buffer\n");
+        frame_context_finalize(context, frame, NULL);
+    }
     zwlr_screencopy_frame_v1_copy(frame, context->shm_buffer->wl_buffer);
 
     log_debug("buffer done\n");
@@ -138,16 +146,19 @@ static void frame_handle_ready(
         context->height,
         context->stride
     );
+    if (context->frame_flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT) {
+        // 180 degrees flips both X and Y, then the X is flipped back
+        Image *transformed =
+            image_transform(result, IMAGE_TRANSFORM_FLIPPED_180);
+        image_destroy(result);
+        result = transformed;
+    }
+
     log_debug(
         "Got image from wayland: %dx%d, %d bytes in total\n",
         result->width,
         result->height,
         result->stride * result->height
-    );
-    log_debug(
-        "Top-left pixel: %x, original: %x\n",
-        ((uint32_t *)result->data)[0],
-        ((uint32_t *)context->shm_buffer->data)[0]
     );
 
     frame_context_finalize(context, frame, result);
