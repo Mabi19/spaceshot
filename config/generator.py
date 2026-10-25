@@ -465,7 +465,7 @@ static bool config_parse_color(ConfigColor *x, char *value) {
         size_t len = strlen(value);
         // rest must be hex digits
         for (int i = 1; value[i] != '\\0'; i++) {
-            unsigned char c = tolower(value[i]);
+            char c = tolower(value[i]);
             if (!isxdigit(c)) {
                 return false;
             }

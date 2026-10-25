@@ -412,6 +412,7 @@ static void seat_handle_capabilities(
         if (seat->pointer) {
             wp_cursor_shape_device_v1_destroy(seat->pointer_data.shape_device);
             seat->pointer_data.shape_device = NULL;
+            seat->pointer_data.focus = NULL;
             wl_pointer_release(seat->pointer);
             seat->pointer = NULL;
         }

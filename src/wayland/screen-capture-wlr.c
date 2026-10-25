@@ -106,6 +106,8 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
         report_error_fatal("couldn't agree on screenshot image format");
     }
 
+    log_debug("buffer done\n");
+
     context->shm_buffer = shared_buffer_new(
         context->width,
         context->height,
@@ -115,10 +117,9 @@ frame_handle_buffer_done(void *data, struct zwlr_screencopy_frame_v1 *frame) {
     if (!context->shm_buffer) {
         log_debug("couldn't allocate buffer\n");
         frame_context_finalize(context, frame, NULL);
+        return;
     }
     zwlr_screencopy_frame_v1_copy(frame, context->shm_buffer->wl_buffer);
-
-    log_debug("buffer done\n");
 }
 
 static void frame_handle_flags(

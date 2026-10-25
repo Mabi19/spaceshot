@@ -381,11 +381,10 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                         inner_radius.br - fmax(bwidth.bottom, bwidth.right), 0
                     );
                     make_rounded_rect_path(cr, inner_rect, inner_radius);
-
-                    set_source_render_color(
-                        cr, rect->border_color, canvas->pixel_format
-                    );
                 }
+                set_source_render_color(
+                    cr, rect->border_color, canvas->pixel_format
+                );
                 cairo_fill(cr);
             }
 

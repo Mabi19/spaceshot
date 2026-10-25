@@ -67,6 +67,9 @@ save_screenshot(LinkBuffer *encoded_image, const char *output_filename) {
     FILE *out_file;
     if (strcmp(output_filename, "-") == 0) {
         out_file = fdopen(dup(STDOUT_FILENO), "wb");
+        if (!out_file) {
+            report_error_fatal("couldn't write to stdout: %s", strerror(errno));
+        }
     } else {
         out_file = fopen(output_filename, "wb");
         if (!out_file) {
@@ -189,8 +192,10 @@ static void finish_screenshot(const Image *image) {
         );
     }
 
-    if (strcmp(output_filename, "-") == 0 && should_copy) {
-        send_notification(NULL, true);
+    if (strcmp(output_filename, "-") == 0) {
+        if (should_copy) {
+            send_notification(NULL, true);
+        }
     } else {
         send_notification(output_filename, should_copy);
     }

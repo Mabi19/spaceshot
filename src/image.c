@@ -440,8 +440,7 @@ static inline void image_put_pixel(
             uint32_t chan_r = r * 255.0;
             uint32_t chan_g = g * 255.0;
             uint32_t chan_b = b * 255.0;
-            *pixel_ptr =
-                (uint32_t)chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
+            *pixel_ptr = chan_a << 24 | chan_r << 16 | chan_g << 8 | chan_b;
             break;
         }
         case IMAGE_FORMAT_ABGR8888: {
@@ -449,8 +448,7 @@ static inline void image_put_pixel(
             uint32_t chan_r = r * 255.0;
             uint32_t chan_g = g * 255.0;
             uint32_t chan_b = b * 255.0;
-            *pixel_ptr =
-                (uint32_t)chan_a << 24 | chan_b << 16 | chan_g << 8 | chan_r;
+            *pixel_ptr = chan_a << 24 | chan_b << 16 | chan_g << 8 | chan_r;
             break;
         }
         case IMAGE_FORMAT_XRGB8888: {

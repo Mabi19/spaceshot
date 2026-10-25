@@ -126,11 +126,13 @@ bool config_load_file(const char *path) {
 
     char *data = malloc(data_len + 1);
     if (fseek(config_file, 0, SEEK_SET) == -1) {
+        free(data);
         fclose(config_file);
         return false;
     }
     size_t bytes_read = fread(data, 1, data_len, config_file);
     if (bytes_read != (size_t)data_len) {
+        free(data);
         fclose(config_file);
         return false;
     }
@@ -138,6 +140,7 @@ bool config_load_file(const char *path) {
     fclose(config_file);
 
     config_parse_string(data, config_parse_entry, &config);
+    free(data);
     return true;
 }
 
