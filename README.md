@@ -57,7 +57,10 @@ Dependencies:
 - wayland
 - wayland-protocols
 
+Python 3 is also necessary to build.
+
 If the `notifications` build option is enabled (it is on by default):
+- GLib is used for implementing the D-Bus service,
 - xdg-open and a file manager implementing org.freedesktop.FileManager1 need to be available at runtime,
 - [satty](https://github.com/gabm/satty) is invoked by the edit button, though this is configurable
 
