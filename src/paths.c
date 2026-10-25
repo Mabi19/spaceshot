@@ -84,7 +84,7 @@ char *get_output_file_path() {
     const char *EXT_PLACEHOLDER = "{ext}";
     const int EXT_PLACEHOLDER_LEN = strlen(EXT_PLACEHOLDER);
     int expanded_template_len = strlen(expanded_template);
-    if (expanded_template_len > EXT_PLACEHOLDER_LEN &&
+    if (expanded_template_len >= EXT_PLACEHOLDER_LEN &&
         strcmp(
             expanded_template + expanded_template_len - EXT_PLACEHOLDER_LEN,
             EXT_PLACEHOLDER
@@ -105,7 +105,7 @@ char *get_output_file_path() {
     if (!strftime(
             filename, filename_buf_size, expanded_template, &local_time
         )) {
-        report_error("output filename too long");
+        report_error_fatal("output filename too long or empty");
     }
     free(expanded_template);
     log_debug("output filename: %s\n", filename);
