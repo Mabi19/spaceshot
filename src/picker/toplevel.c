@@ -295,6 +295,7 @@ toplevel_picker_handle_keyboard(PickerSurface *picker, KeyboardEvent event) {
                 test_idx = (test_idx + delta + toplevel->entry_count) %
                            toplevel->entry_count;
                 if (toplevel->entries[test_idx].visible) {
+                    update_target_y = true;
                     new_idx = test_idx;
                     break;
                 }
