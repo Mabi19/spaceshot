@@ -43,6 +43,10 @@ parse_line(char **section, char *line, ConfigEntryFunc callback, void *data) {
     } else if (*line == '[') {
         // start of a section
         char *end_bracket = strchr(line, ']');
+        if (!end_bracket) {
+            config_error("unterminated section name");
+            return;
+        }
         *end_bracket = '\0';
         // check that nothing is afterwards
         char *past_end_bracket = end_bracket + 1;
