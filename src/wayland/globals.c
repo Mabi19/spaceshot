@@ -255,7 +255,7 @@ static void registry_handle_global(
 
     if (strcmp(interface, wl_compositor_interface.name) == 0) {
         globals->compositor =
-            wl_registry_bind(registry, object_id, &wl_compositor_interface, 6);
+            wl_registry_bind(registry, object_id, &wl_compositor_interface, 5);
     }
 
     if (strcmp(interface, wl_shm_interface.name) == 0) {
