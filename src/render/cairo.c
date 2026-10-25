@@ -385,8 +385,8 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
                     set_source_render_color(
                         cr, rect->border_color, canvas->pixel_format
                     );
-                    cairo_fill(cr);
                 }
+                cairo_fill(cr);
             }
 
             break;
