@@ -40,8 +40,8 @@ const char *get_home_directory() {
 
 char *get_output_file_path() {
     char *template = config_get()->output_file;
-    int template_len = strlen(template);
-    int tilde_count = 0;
+    size_t template_len = strlen(template);
+    size_t tilde_count = 0;
     while (tilde_count < template_len && template[tilde_count] == '~') {
         tilde_count++;
     }
@@ -77,7 +77,7 @@ char *get_output_file_path() {
         strcat(expanded_template, template + tilde_count);
     } else {
         report_error_fatal(
-            "invalid file path template, can't expand %d ~ characters",
+            "invalid file path template, can't expand %zu ~ characters",
             tilde_count
         );
     }

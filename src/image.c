@@ -6,8 +6,10 @@
 #include <cairo.h>
 #include <config/config.h>
 #include <drm_fourcc.h>
+#include <limits.h>
 #include <png.h>
 #include <setjmp.h>
+#include <stdckdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wayland-client.h>
@@ -94,6 +96,10 @@ uint32_t image_format_bytes_per_pixel(ImageFormat format) {
 }
 
 uint32_t image_format_default_stride(ImageFormat format, uint32_t width) {
+    if (width > INT_MAX) {
+        report_error_fatal("width too large to calculate stride for");
+    }
+
     switch (format) {
     case IMAGE_FORMAT_GRAY8:
         return width;
@@ -111,7 +117,11 @@ Image *image_new(uint32_t width, uint32_t height, ImageFormat format) {
     result->width = width;
     result->height = height;
     result->stride = image_format_default_stride(format, width);
-    result->data = cmalloc(result->stride * height);
+    size_t size;
+    if (ckd_mul(&size, result->stride, height)) {
+        report_error_fatal("image_new size overflow");
+    }
+    result->data = cmalloc(size);
     return result;
 }
 
@@ -126,8 +136,6 @@ Image *image_new_from_wayland(
     ImageFormat format = image_format_from_wl(wl_format);
 
     Image *result = image_new(width, height, format);
-    if (!result)
-        return NULL;
 
     // copy the data
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(format);
@@ -144,7 +152,11 @@ Image *image_new_from_wayland(
 
 Image *image_copy(const Image *src) {
     Image *result = image_new(src->width, src->height, src->format);
-    memcpy(result->data, src->data, src->height * src->stride);
+    size_t size;
+    if (ckd_mul(&size, src->height, src->stride)) {
+        report_error_fatal("image_copy size overflow");
+    }
+    memcpy(result->data, src->data, size);
     return result;
 }
 
@@ -298,21 +310,18 @@ Image *image_transform(const Image *src, ImageTransform transform) {
         swap_dimensions ? src->width : src->height,
         src->format
     );
-    if (!result) {
-        return NULL;
-    }
 
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(src->format);
-    for (uint32_t y = 0; y < src->height; y++) {
+    for (size_t y = 0; y < src->height; y++) {
         const uint8_t *source_row = src->data + y * src->stride;
-        for (uint32_t x = 0; x < src->width; x++) {
+        for (size_t x = 0; x < src->width; x++) {
             uint32_t dest_x, dest_y;
             image_transform_coords(
                 transform, src->width, src->height, x, y, &dest_x, &dest_y
             );
             memcpy(
-                result->data + dest_y * result->stride +
-                    dest_x * bytes_per_pixel,
+                result->data + (size_t)dest_y * result->stride +
+                    (size_t)dest_x * bytes_per_pixel,
                 source_row + x * bytes_per_pixel,
                 bytes_per_pixel
             );
@@ -325,20 +334,19 @@ Image *image_transform(const Image *src, ImageTransform transform) {
 Image *image_crop(
     const Image *src, uint32_t x, uint32_t y, uint32_t width, uint32_t height
 ) {
-    uint32_t crop_right = x + width;
-    uint32_t crop_bottom = y + height;
-    assert(x < src->width && y < src->height);
-    assert(crop_right <= src->width && crop_bottom <= src->height);
-
-    Image *result = image_new(width, height, src->format);
-    if (!result) {
-        return NULL;
+    uint64_t crop_right = (uint64_t)x + width;
+    uint64_t crop_bottom = (uint64_t)y + height;
+    if (x >= src->width || y >= src->height || crop_right > src->width ||
+        crop_bottom > src->height) {
+        report_error_fatal("invalid crop bounds");
     }
 
+    Image *result = image_new(width, height, src->format);
+
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(src->format);
-    for (uint32_t crop_y = 0; crop_y < height; crop_y++) {
-        const uint8_t *source_row =
-            src->data + (y + crop_y) * src->stride + x * bytes_per_pixel;
+    for (size_t crop_y = 0; crop_y < height; crop_y++) {
+        const uint8_t *source_row = src->data + (y + crop_y) * src->stride +
+                                    (size_t)x * bytes_per_pixel;
         uint8_t *result_row = result->data + crop_y * result->stride;
         memcpy(result_row, source_row, width * bytes_per_pixel);
     }
@@ -356,7 +364,7 @@ static inline void image_get_pixel(
 ) {
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(src->format);
     const void *raw_pixel_ptr =
-        src->data + y * src->stride + x * bytes_per_pixel;
+        src->data + (size_t)y * src->stride + (size_t)x * bytes_per_pixel;
     if (bytes_per_pixel == 1) {
         const uint8_t *pixel_ptr = (const uint8_t *)raw_pixel_ptr;
         switch (src->format) {
@@ -417,7 +425,7 @@ static inline void image_put_pixel(
 ) {
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(target->format);
     void *raw_pixel_ptr =
-        target->data + y * target->stride + x * bytes_per_pixel;
+        target->data + (size_t)y * target->stride + (size_t)x * bytes_per_pixel;
     if (bytes_per_pixel == 1) {
         uint8_t *pixel_ptr = (uint8_t *)raw_pixel_ptr;
         switch (target->format) {
@@ -594,13 +602,13 @@ LinkBuffer *image_save_png(const Image *image) {
         // little-endian causes it to be effectively BGRA
         png_set_bgr(png_data);
 
-        for (uint32_t y = 0; y < image->height; y++) {
+        for (size_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
         }
         png_write_image(png_data, row_ptrs);
     } else if (image->format == IMAGE_FORMAT_ABGR8888) {
         // little-endian makes the bytes RGBA, which is PNG's native order
-        for (uint32_t y = 0; y < image->height; y++) {
+        for (size_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
         }
         png_write_image(png_data, row_ptrs);
@@ -614,7 +622,7 @@ LinkBuffer *image_save_png(const Image *image) {
             png_set_bgr(png_data);
         }
 
-        for (uint32_t y = 0; y < image->height; y++) {
+        for (size_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&image->data[y * image->stride];
         }
         png_write_image(png_data, row_ptrs);
@@ -623,10 +631,18 @@ LinkBuffer *image_save_png(const Image *image) {
         image->format == IMAGE_FORMAT_XBGR2101010
     ) {
         // this needs transcoding anyway, so use the PNG pixel format directly
-        uint16_t *transcoded_data = cmalloc(image->width * image->height * 6);
+        size_t transcoded_size;
+        if (ckd_mul(&transcoded_size, image->width, image->height)) {
+            report_error_fatal("image_save_png size overflow");
+        }
+        if (ckd_mul(&transcoded_size, transcoded_size, 6)) {
+            report_error_fatal("image_save_png size overflow");
+        }
+        uint16_t *transcoded_data = cmalloc(transcoded_size);
+
         uint16_t *current_pixel = transcoded_data;
-        for (uint32_t y = 0; y < image->height; y++) {
-            for (uint32_t x = 0; x < image->width; x++) {
+        for (size_t y = 0; y < image->height; y++) {
+            for (size_t x = 0; x < image->width; x++) {
                 uint32_t *source_pixel =
                     (uint32_t *)(image->data + y * image->stride +
                                  x * bytes_per_pixel);
@@ -637,7 +653,7 @@ LinkBuffer *image_save_png(const Image *image) {
             }
         }
 
-        for (uint32_t y = 0; y < image->height; y++) {
+        for (size_t y = 0; y < image->height; y++) {
             row_ptrs[y] = (png_bytep)&transcoded_data[y * image->width * 3];
         }
 

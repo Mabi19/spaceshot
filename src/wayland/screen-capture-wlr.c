@@ -5,6 +5,7 @@
 #include "wayland/globals.h"
 #include "wayland/shared-memory.h"
 #include <stdbool.h>
+#include <stdckdint.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <wlr-screencopy-client.h>
@@ -81,6 +82,17 @@ static void frame_handle_buffer(
     log_debug("skipping\n");
     return;
 accept_format:
+    // do a sanity check on the stride
+    uint32_t check_stride;
+    if (ckd_mul(&check_stride, width, image_format_bytes_per_pixel(format))) {
+        log_debug("calculating minimum stride caused overflow\n");
+        return;
+    }
+    if (stride < check_stride) {
+        log_debug("invalid stride for format\n");
+        return;
+    }
+
     context->selected_format = format;
     context->width = width;
     context->height = height;

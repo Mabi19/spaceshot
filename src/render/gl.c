@@ -1266,7 +1266,7 @@ static GLTextCacheEntry *text_cache_ensure_entry(
     const char *content, int length, RenderTextStyle style
 ) {
     XXH3_64bits_reset(text_cache_hash_state);
-    if (length == -1) {
+    if (length < 0) {
         length = strlen(content);
     }
     XXH3_64bits_update(text_cache_hash_state, &length, sizeof(length));

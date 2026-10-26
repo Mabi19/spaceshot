@@ -213,7 +213,7 @@ void clipboard_copy(
         }
 
         size_t buf_size = sizeof("file://") + 2;
-        int src_pos = 0;
+        size_t src_pos = 0;
         while (absolute_path[src_pos] != '\0') {
             buf_size += should_percent_encode(absolute_path[src_pos]) ? 3 : 1;
             src_pos++;

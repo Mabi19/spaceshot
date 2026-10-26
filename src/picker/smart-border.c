@@ -4,6 +4,7 @@
 #include "render/renderer.h"
 #include "render/texture.h"
 #include "wayland/screen-capture.h"
+#include <limits.h>
 #include <stdatomic.h>
 #include <threads.h>
 
@@ -29,7 +30,7 @@ static int smart_border_context_thread_func(void *data) {
     // box blur
     Image *work_buf_2 = image_new(width, height, IMAGE_FORMAT_GRAY8);
     // this is how many pixels to do from the center
-    const int BOX_BLUR_SIZE = 8 * ctx->scale / 120;
+    const int BOX_BLUR_SIZE = 8 * MIN(ctx->scale, 480) / 120;
     log_debug("smart border box blur size %d\n", BOX_BLUR_SIZE);
     for (int y = 0; y < height; y++) {
         const uint8_t *src_row = IMAGE_ROW(work_buf_1, y);
@@ -133,6 +134,13 @@ smart_border_context_start(CaptureFrame *base, uint32_t scale) {
     ctx->base = capture_frame_get_image(base);
     ctx->is_done = false;
     ctx->ref_count = 2;
+    // The CPU algorithm needs the size to fit in ints.
+    if (ctx->base->width > INT_MAX || ctx->base->height > INT_MAX) {
+        ctx->ref_count = 1;
+        ctx->base_released = true;
+        return ctx;
+    }
+
     thrd_t thread;
     if (thrd_create(&thread, smart_border_context_thread_func, ctx) ==
         thrd_success) {

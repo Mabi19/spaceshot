@@ -510,8 +510,8 @@ static void get_required_capture_types(bool *output, bool *toplevel) {
 static void read_deferred_args() {
     // Read stdin until EOF and use that as the actual arguments.
     char **new_argv = NULL;
-    int new_argc = 0;
-    int capacity = 16;
+    size_t new_argc = 0;
+    size_t capacity = 16;
     new_argv = cmalloc(capacity * sizeof(char *));
 
     char *line = NULL;
@@ -545,7 +545,7 @@ static void read_deferred_args() {
     args.captured_mode_params = 0;
     parse_argv(&args, new_argc, new_argv);
 
-    for (int i = 0; i < new_argc; i++) {
+    for (size_t i = 0; i < new_argc; i++) {
         log_debug("new arg: '%s'\n", new_argv[i]);
         free(new_argv[i]);
     }

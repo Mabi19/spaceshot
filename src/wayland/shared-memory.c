@@ -48,7 +48,12 @@ SharedBuffer *shared_buffer_new(
     result->height = height;
     result->stride = stride;
     result->format = format;
-    uint32_t size;
+
+    if (width > INT32_MAX || height > INT32_MAX || stride > INT32_MAX) {
+        // would overflow in create_buffer
+        goto error;
+    }
+    int32_t size;
     if (ckd_mul(&size, height, stride)) {
         goto error;
     }

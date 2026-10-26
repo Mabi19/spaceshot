@@ -10,6 +10,7 @@
 #include <drm_fourcc.h>
 #include <ext-image-capture-source-client.h>
 #include <ext-image-copy-capture-client.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/types.h>
 #include <wayland-client-protocol.h>
@@ -307,16 +308,12 @@ static void frame_handle_ready(
         break;
     }
     case CAPTURE_METHOD_SHM: {
-        uint32_t stride = image_format_default_stride(
-            image_format_from_wl(frame->shm.buffer->format),
-            frame->shm.buffer->width
-        );
         Image *captured = image_new_from_wayland(
             frame->shm.buffer->format,
             frame->shm.buffer->data,
             frame->shm.buffer->width,
             frame->shm.buffer->height,
-            stride
+            frame->shm.buffer->stride
         );
         if (frame->transform == IMAGE_TRANSFORM_NORMAL) {
             frame->shm.result = captured;
@@ -631,9 +628,14 @@ static void try_start_capture(FrameContext *context) {
         );
         return;
     } else if (context->has_shm_format) {
+        if (context->width > INT_MAX) {
+            // this would overflow the stride calculation
+            goto error;
+        }
         uint32_t stride = image_format_default_stride(
             image_format_from_wl(context->shm_format), context->width
         );
+
         SharedBuffer *shm_buffer = shared_buffer_new(
             context->width, context->height, stride, context->shm_format
         );
