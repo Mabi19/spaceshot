@@ -13,6 +13,7 @@
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
+constexpr int MAX_COLUMNS = 32;
 // TODO: make configurable?
 constexpr double DEFAULT_COLUMN_WIDTH = 480;
 constexpr double PADDING = 32;
@@ -48,11 +49,14 @@ static void recompute_grid(PickerSurface *picker) {
         // the columns.
         columns += floor(avail_width / (column_width + padding));
     }
+    if (columns > MAX_COLUMNS) {
+        columns = MAX_COLUMNS;
+    }
 
     // The top-left X positions of each column.
-    double *column_x = cmalloc(columns * sizeof(double));
+    double column_x[MAX_COLUMNS];
     // The current Y positions of each column.
-    double *column_y = cmalloc(columns * sizeof(double));
+    double column_y[MAX_COLUMNS];
 
     double used_width = columns * column_width + (columns - 1) * padding;
     double left_space =
@@ -132,9 +136,6 @@ static void recompute_grid(PickerSurface *picker) {
     }
     toplevel->content_height = device_content_height / scale;
     clamp_scroll(picker);
-
-    free(column_x);
-    free(column_y);
 }
 
 static double entry_target_y(const ToplevelPickerEntry *entry) {
