@@ -31,6 +31,10 @@ static const char *get_home_directory() {
 static char *config_dir_to_file(const char *dir) {
     const char *SUFFIX = "/spaceshot/config.ini";
     char *result = malloc(strlen(dir) + strlen(SUFFIX) + 1);
+    if (!result) {
+        fprintf(stderr, "error(config): memory allocation failed\n");
+        _exit(2);
+    }
     strcpy(result, dir);
     strcat(result, SUFFIX);
     return result;
@@ -62,9 +66,18 @@ const char **config_get_locations() {
     // one member for the file in $XDG_CONFIG_HOME, one member for the
     // terminating NULL
     result = calloc(path_count + 2, sizeof(const char *));
+    if (!result) {
+        fprintf(stderr, "error(config): memory allocation failed\n");
+        _exit(2);
+    }
+
     int i = 0;
     // read from back to front, so the most important directory is read last
     char *check_dirs = strdup(xdg_dirs);
+    if (!check_dirs) {
+        fprintf(stderr, "error(config): memory allocation failed\n");
+        _exit(2);
+    }
     char *current = check_dirs + strlen(check_dirs);
     while (current >= check_dirs) {
         if (*current == ':') {
@@ -105,6 +118,10 @@ extern void config_parse_entry(
 
 void config_load_string(const char *str) {
     char *mutable_str = strdup(str);
+    if (!mutable_str) {
+        fprintf(stderr, "error(config): memory allocation failed\n");
+        _exit(2);
+    }
     config_parse_string(mutable_str, config_parse_entry, &config);
     free(mutable_str);
 }
@@ -125,6 +142,11 @@ bool config_load_file(const char *path) {
     }
 
     char *data = malloc(data_len + 1);
+    if (!data) {
+        fclose(config_file);
+        return false;
+    }
+
     if (fseek(config_file, 0, SEEK_SET) == -1) {
         free(data);
         fclose(config_file);

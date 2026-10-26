@@ -314,7 +314,11 @@ class tokenlist(BaseType):
 
         parts.append(f"{indent}size_t item_count = count_commas(value) + 1;")
         parts.append(f"{indent}{array_struct_name} array = {{.count = item_count, .items = malloc(sizeof({array_item_name}) * item_count)}};")
-        parts.append(f"""{indent}char *part_start = value;
+        parts.append(f"""{indent}if (!array.items) {{
+{indent}    config_warn("memory allocation failed");
+{indent}    return;
+{indent}}}
+{indent}char *part_start = value;
 {indent}bool success = true;
 {indent}for (size_t i = 0; i < item_count; i++) {{
 {indent}    char *part_end = part_start;
@@ -371,7 +375,12 @@ class string(BaseType):
 
     def generate_insert_code(self, c_key: str, indent: str):
         return f'''{indent}free(conf->{c_key});
-{indent}conf->{c_key} = strdup(x);''';
+{indent}char *copy = strdup(x);
+{indent}if (!copy) {{
+{indent}    config_warn("memory allocation failed");
+{indent}    return;
+{indent}}}
+{indent}conf->{c_key} = copy;''';
 
 class bool(BaseType):
     def get_declaration_type(self, qualified_name):

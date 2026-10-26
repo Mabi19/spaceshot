@@ -1,4 +1,5 @@
 #include "smart-border.h"
+#include "alloc.h"
 #include "log.h"
 #include "render/renderer.h"
 #include "render/texture.h"
@@ -99,7 +100,7 @@ static int smart_border_context_thread_func(void *data) {
 
 SmartBorderContext *
 smart_border_context_start(CaptureFrame *base, uint32_t scale) {
-    SmartBorderContext *ctx = calloc(1, sizeof(SmartBorderContext));
+    SmartBorderContext *ctx = ccalloc(1, sizeof(SmartBorderContext));
     ctx->scale = scale;
     mtx_init(&ctx->base_mtx, mtx_plain);
     cnd_init(&ctx->base_cnd);

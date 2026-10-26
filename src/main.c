@@ -1,3 +1,4 @@
+#include "alloc.h"
 #include "args.h"
 #include "bbox.h"
 #include "image.h"
@@ -433,7 +434,7 @@ static void add_new_output(WrappedOutput *output) {
         return;
     }
 
-    CaptureTarget *target = calloc(1, sizeof(CaptureTarget));
+    CaptureTarget *target = ccalloc(1, sizeof(CaptureTarget));
     target->output = output;
     wl_list_insert(&capture_targets, &target->link);
 }
@@ -476,7 +477,7 @@ static void add_new_toplevel(WrappedToplevel *toplevel) {
         return;
     }
 
-    CaptureTarget *target = calloc(1, sizeof(CaptureTarget));
+    CaptureTarget *target = ccalloc(1, sizeof(CaptureTarget));
     target->is_toplevel = true;
     target->toplevel = toplevel;
     wl_list_insert(&capture_targets, &target->link);
@@ -511,7 +512,7 @@ static void read_deferred_args() {
     char **new_argv = NULL;
     int new_argc = 0;
     int capacity = 16;
-    new_argv = malloc(capacity * sizeof(char *));
+    new_argv = cmalloc(capacity * sizeof(char *));
 
     char *line = NULL;
     size_t line_len = 0;
@@ -519,7 +520,7 @@ static void read_deferred_args() {
     while ((nread = getdelim(&line, &line_len, '\0', stdin)) != -1) {
         if (new_argc >= capacity) {
             capacity *= 2;
-            char **new_ptr = realloc(new_argv, capacity * sizeof(char *));
+            char **new_ptr = crealloc(new_argv, capacity * sizeof(char *));
             new_argv = new_ptr;
         }
         new_argv[new_argc++] = line;

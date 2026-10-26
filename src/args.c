@@ -1,4 +1,5 @@
 #include "args.h"
+#include "alloc.h"
 #include "bbox.h"
 #include "log.h"
 #include <build-config.h>
@@ -89,7 +90,7 @@ static void interpret_option(Arguments *args, char opt, char *value) {
         break;
     case 'o':
         free(config_get()->output_file);
-        config_get()->output_file = strdup(value);
+        config_get()->output_file = cstrdup(value);
         break;
     case '#':
         // only as --verbose
@@ -325,7 +326,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                 // this is a mode parameter
                 if (result->mode == CAPTURE_OUTPUT) {
                     if (result->captured_mode_params == 1) {
-                        result->output_params.output_name = strdup(arg);
+                        result->output_params.output_name = cstrdup(arg);
                     } else {
                         report_error(
                             "too many parameters for mode '%s' (max 1)",
@@ -352,7 +353,7 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     }
                 } else if (result->mode == CAPTURE_TOPLEVEL) {
                     if (result->captured_mode_params == 1) {
-                        result->toplevel_params.toplevel_id = strdup(arg);
+                        result->toplevel_params.toplevel_id = cstrdup(arg);
                     } else {
                         report_error(
                             "too many parameters for mode '%s' (max 1)",
@@ -375,9 +376,9 @@ void parse_argv(Arguments *result, int argc, char **argv) {
                     }
                 } else if (result->mode == CAPTURE_COPY_HELPER) {
                     if (result->captured_mode_params == 1) {
-                        result->copy_helper_params.mime_type = strdup(arg);
+                        result->copy_helper_params.mime_type = cstrdup(arg);
                     } else if (result->captured_mode_params == 2) {
-                        result->copy_helper_params.file_path = strdup(arg);
+                        result->copy_helper_params.file_path = cstrdup(arg);
                     } else {
                         report_error(
                             "too many parameters for mode 'copy-helper' (max 2)"

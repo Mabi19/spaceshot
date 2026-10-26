@@ -1,4 +1,5 @@
 #include "overlay-surface.h"
+#include "alloc.h"
 #include "debug.h"
 #include "log.h"
 #include "render/renderer.h"
@@ -126,7 +127,7 @@ OverlaySurface *overlay_surface_new(
     OverlaySurfaceHandlers handlers,
     void *user_data
 ) {
-    OverlaySurface *result = calloc(1, sizeof(OverlaySurface));
+    OverlaySurface *result = ccalloc(1, sizeof(OverlaySurface));
     result->pixel_format = pixel_format;
     result->wl_surface =
         wl_compositor_create_surface(wayland_globals.compositor);

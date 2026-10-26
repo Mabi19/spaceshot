@@ -1,4 +1,5 @@
 #include "bbox.h"
+#include "alloc.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +34,7 @@ bool bbox_parse(const char *str_form, BBox *out) {
 
 static char *format_double(double input) {
     int buf_len = snprintf(NULL, 0, "%.4lf", input) + 1;
-    char *output_buf = malloc(buf_len);
+    char *output_buf = cmalloc(buf_len);
     snprintf(output_buf, buf_len, "%.4lf", input);
 
     // remove trailing zeroes
@@ -60,7 +61,7 @@ char *bbox_stringify(const BBox src) {
 
     int buf_len =
         strlen(x) + 1 + strlen(y) + 1 + strlen(width) + 1 + strlen(height) + 1;
-    char *result = malloc(buf_len);
+    char *result = cmalloc(buf_len);
     snprintf(result, buf_len, "%s,%s %sx%s", x, y, width, height);
     free(x);
     free(y);

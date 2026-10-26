@@ -164,6 +164,7 @@ sources = files(
     'wayland/screen-capture-wlr.c',
     'wayland/seat.c',
     'wayland/shared-memory.c',
+    'alloc.c',
     'args.c',
     'bbox.c',
     'debug.c',

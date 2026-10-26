@@ -1,4 +1,5 @@
 #include "wayland/seat.h"
+#include "alloc.h"
 #include "cursor-shape-client.h"
 #include "log.h"
 #include "wayland/globals.h"
@@ -443,7 +444,7 @@ static struct wl_seat_listener seat_listener = {
 };
 
 Seat *seat_new(struct wl_seat *seat) {
-    Seat *result = calloc(1, sizeof(Seat));
+    Seat *result = ccalloc(1, sizeof(Seat));
     result->seat = seat;
 
     wl_seat_add_listener(seat, &seat_listener, result);

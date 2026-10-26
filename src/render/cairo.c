@@ -1,3 +1,4 @@
+#include "alloc.h"
 #include "image.h"
 #include "log.h"
 #include "render/command.h"
@@ -51,7 +52,7 @@ static const struct wl_buffer_listener buffer_listener = {
 
 static CairoBuffer *
 buffer_new(uint32_t width, uint32_t height, ImageFormat format) {
-    CairoBuffer *result = calloc(1, sizeof(CairoBuffer));
+    CairoBuffer *result = ccalloc(1, sizeof(CairoBuffer));
 
     uint32_t stride =
         cairo_format_stride_for_width(image_format_to_cairo(format), width);
@@ -154,7 +155,7 @@ static RenderCanvas *renderer_cairo_canvas_new(
     uint32_t device_height,
     ImageFormat pixel_format
 ) {
-    CairoCanvas *result = calloc(1, sizeof(CairoCanvas));
+    CairoCanvas *result = ccalloc(1, sizeof(CairoCanvas));
     result->wl_surface = surface;
     result->device_width = device_width;
     result->device_height = device_height;
@@ -474,7 +475,7 @@ static RenderTextMetrics renderer_cairo_measure_text(
 
 static RenderTexture *
 renderer_cairo_texture_new_from_image(const Image *image) {
-    CairoTexture *result = calloc(1, sizeof(CairoTexture));
+    CairoTexture *result = ccalloc(1, sizeof(CairoTexture));
     result->width = image->width;
     result->height = image->height;
     result->source = image;

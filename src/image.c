@@ -1,4 +1,5 @@
 #include "image.h"
+#include "alloc.h"
 #include "link-buffer.h"
 #include "log.h"
 #include <assert.h>
@@ -104,16 +105,13 @@ uint32_t image_format_default_stride(ImageFormat format, uint32_t width) {
 }
 
 Image *image_new(uint32_t width, uint32_t height, ImageFormat format) {
-    Image *result = calloc(1, sizeof(Image));
-    if (!result) {
-        return NULL;
-    }
+    Image *result = ccalloc(1, sizeof(Image));
 
     result->format = format;
     result->width = width;
     result->height = height;
     result->stride = image_format_default_stride(format, width);
-    result->data = malloc(result->stride * height);
+    result->data = cmalloc(result->stride * height);
     return result;
 }
 
@@ -590,7 +588,7 @@ LinkBuffer *image_save_png(const Image *image) {
     // transform and write image
     TIMING_START(png_encode);
 
-    png_bytepp row_ptrs = malloc(image->height * sizeof(png_bytep));
+    png_bytepp row_ptrs = cmalloc(image->height * sizeof(png_bytep));
     uint32_t bytes_per_pixel = image_format_bytes_per_pixel(image->format);
     if (image->format == IMAGE_FORMAT_ARGB8888) {
         // little-endian causes it to be effectively BGRA
@@ -625,7 +623,7 @@ LinkBuffer *image_save_png(const Image *image) {
         image->format == IMAGE_FORMAT_XBGR2101010
     ) {
         // this needs transcoding anyway, so use the PNG pixel format directly
-        uint16_t *transcoded_data = malloc(image->width * image->height * 6);
+        uint16_t *transcoded_data = cmalloc(image->width * image->height * 6);
         uint16_t *current_pixel = transcoded_data;
         for (uint32_t y = 0; y < image->height; y++) {
             for (uint32_t x = 0; x < image->width; x++) {

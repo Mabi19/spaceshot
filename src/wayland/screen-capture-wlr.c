@@ -1,3 +1,4 @@
+#include "alloc.h"
 #include "image.h"
 #include "log.h"
 #include "screen-capture.h"
@@ -29,7 +30,7 @@ static void frame_context_finalize(
 ) {
     CaptureFrame *capture_frame = NULL;
     if (result) {
-        capture_frame = calloc(1, sizeof(CaptureFrame));
+        capture_frame = ccalloc(1, sizeof(CaptureFrame));
         capture_frame->image = result;
         capture_frame->width = result->width;
         capture_frame->height = result->height;
@@ -189,7 +190,7 @@ void capture_output_wlr(
         zwlr_screencopy_manager_v1_capture_output(
             wayland_globals.wlr_screencopy_manager, 0, output->wl_output
         );
-    FrameContext *context = calloc(1, sizeof(FrameContext));
+    FrameContext *context = ccalloc(1, sizeof(FrameContext));
     context->output = output;
     context->frame_callback = image_callback;
     context->user_data = data;

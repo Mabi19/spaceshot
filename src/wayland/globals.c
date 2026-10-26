@@ -1,4 +1,5 @@
 #include "globals.h"
+#include "alloc.h"
 #include "ext-data-control-client.h"
 #include "ext-foreign-toplevel-list-client.h"
 #include "log.h"
@@ -57,7 +58,7 @@ static void output_handle_name(
     WrappedOutput *output = data;
     // if there was a previous name, free it properly
     free(output->name);
-    output->name = strdup(name);
+    output->name = cstrdup(name);
     output->fill_state |= WRAPPED_OUTPUT_HAS_NAME;
 }
 
@@ -162,7 +163,7 @@ static void toplevel_handle_handle_identifier(
 ) {
     WrappedToplevel *toplevel = data;
     free(toplevel->identifier);
-    toplevel->identifier = strdup(identifier);
+    toplevel->identifier = cstrdup(identifier);
 }
 
 static void toplevel_handle_handle_app_id(
@@ -172,7 +173,7 @@ static void toplevel_handle_handle_app_id(
 ) {
     WrappedToplevel *toplevel = data;
     free(toplevel->app_id);
-    toplevel->app_id = strdup(app_id);
+    toplevel->app_id = cstrdup(app_id);
 }
 
 static void toplevel_handle_handle_title(
@@ -182,7 +183,7 @@ static void toplevel_handle_handle_title(
 ) {
     WrappedToplevel *toplevel = data;
     free(toplevel->title);
-    toplevel->title = strdup(title);
+    toplevel->title = cstrdup(title);
 }
 
 static void toplevel_handle_handle_done(
@@ -223,7 +224,7 @@ static void toplevel_list_handle_toplevel(
 ) {
     WaylandGlobals *globals = data;
 
-    WrappedToplevel *toplevel = calloc(1, sizeof(WrappedToplevel));
+    WrappedToplevel *toplevel = ccalloc(1, sizeof(WrappedToplevel));
     toplevel->handle = toplevel_handle;
     ext_foreign_toplevel_handle_v1_add_listener(
         toplevel_handle, &toplevel_handle_listener, toplevel
@@ -391,7 +392,7 @@ static void registry_handle_global(
         struct wl_output *wl_output =
             wl_registry_bind(registry, object_id, &wl_output_interface, 4);
 
-        WrappedOutput *output = calloc(1, sizeof(WrappedOutput));
+        WrappedOutput *output = ccalloc(1, sizeof(WrappedOutput));
         output->wl_output = wl_output;
         output->object_id = object_id;
         wl_output_add_listener(wl_output, &output_listener, output);

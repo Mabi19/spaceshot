@@ -1,4 +1,5 @@
 #include "dmabuf.h"
+#include "alloc.h"
 #include "log.h"
 #include "render/renderer.h"
 #include "wayland/globals.h"
@@ -176,7 +177,7 @@ void dmabuf_buffer_new(
         return;
     }
 
-    DmabufBuffer *buffer = calloc(1, sizeof(DmabufBuffer));
+    DmabufBuffer *buffer = ccalloc(1, sizeof(DmabufBuffer));
     buffer->width = width;
     buffer->height = height;
     buffer->format = format;

@@ -1,3 +1,4 @@
+#include "alloc.h"
 #include "image.h"
 #include "log.h"
 #include "render/renderer.h"
@@ -121,7 +122,7 @@ static void frame_context_unref(FrameContext *context) {
         switch (frame->method) {
         case CAPTURE_METHOD_DMABUF: {
             if (frame->dmabuf.ready) {
-                result = calloc(1, sizeof(CaptureFrame));
+                result = ccalloc(1, sizeof(CaptureFrame));
                 result->texture = frame->dmabuf.texture;
                 result->width = frame->dmabuf.width;
                 result->height = frame->dmabuf.height;
@@ -135,7 +136,7 @@ static void frame_context_unref(FrameContext *context) {
         }
         case CAPTURE_METHOD_SHM: {
             if (frame->shm.result) {
-                result = calloc(1, sizeof(CaptureFrame));
+                result = ccalloc(1, sizeof(CaptureFrame));
                 result->image = frame->shm.result;
                 result->width = frame->shm.result->width;
                 result->height = frame->shm.result->height;
@@ -450,7 +451,7 @@ static void session_handle_dmabuf_format(
             size_t count = modifiers->size / sizeof(uint64_t);
             uint64_t *list = NULL;
             if (count > 0) {
-                list = malloc(count * sizeof(uint64_t));
+                list = cmalloc(count * sizeof(uint64_t));
                 memcpy(list, modifiers->data, count * sizeof(uint64_t));
             }
             // only keep modifiers which the renderer can import as a texture
@@ -680,7 +681,7 @@ void capture_output_ext(
     FrameCaptureCallback image_callback,
     void *data
 ) {
-    FrameContext *context = calloc(1, sizeof(FrameContext));
+    FrameContext *context = ccalloc(1, sizeof(FrameContext));
     context->use_dmabuf = use_dmabuf;
     context->frame_callback = image_callback;
     context->output = output;
@@ -706,7 +707,7 @@ void capture_toplevel_ext(
     FrameCaptureCallback image_callback,
     void *data
 ) {
-    FrameContext *context = calloc(1, sizeof(FrameContext));
+    FrameContext *context = ccalloc(1, sizeof(FrameContext));
     context->use_dmabuf = use_dmabuf;
     context->frame_callback = image_callback;
     context->toplevel = toplevel;

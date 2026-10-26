@@ -1,5 +1,5 @@
 #include "link-buffer.h"
-#include "log.h"
+#include "alloc.h"
 #include <assert.h>
 #include <errno.h>
 #include <stddef.h>
@@ -7,18 +7,10 @@
 #include <unistd.h>
 
 LinkBuffer *link_buffer_new(size_t block_size) {
-    LinkBuffer *result = malloc(sizeof(LinkBuffer));
-    if (!result) {
-        report_error_fatal("couldn't allocate buffer");
-    }
+    LinkBuffer *result = cmalloc(sizeof(LinkBuffer));
     result->block_size = block_size;
 
-    result->first = malloc(sizeof(LinkBufferBlock) + block_size);
-    if (!result->first) {
-        report_error_fatal(
-            "couldn't allocate buffer block of size %zu", block_size
-        );
-    }
+    result->first = cmalloc(sizeof(LinkBufferBlock) + block_size);
     result->first->next = NULL;
     result->first->used_size = 0;
 
@@ -34,12 +26,7 @@ static void next_block(LinkBuffer *buffer) {
         buffer->last = buffer->last->next;
     } else {
         LinkBufferBlock *new_block =
-            malloc(sizeof(LinkBufferBlock) + buffer->block_size);
-        if (!new_block) {
-            report_error_fatal(
-                "couldn't allocate buffer block of size %zu", buffer->block_size
-            );
-        }
+            cmalloc(sizeof(LinkBufferBlock) + buffer->block_size);
         buffer->last->next = new_block;
         buffer->last = new_block;
         new_block->next = NULL;

@@ -1,4 +1,5 @@
 #include "clipboard.h"
+#include "alloc.h"
 #include "args.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -189,7 +190,7 @@ void clipboard_copy(
         return;
     }
 
-    ClipboardCopy *copy = calloc(1, sizeof(ClipboardCopy));
+    ClipboardCopy *copy = ccalloc(1, sizeof(ClipboardCopy));
 
     copy->data_source = ext_data_control_manager_v1_create_data_source(
         wayland_globals.ext_data_control_manager
@@ -217,7 +218,7 @@ void clipboard_copy(
             buf_size += should_percent_encode(absolute_path[src_pos]) ? 3 : 1;
             src_pos++;
         }
-        copy->file_uri = malloc(buf_size);
+        copy->file_uri = cmalloc(buf_size);
         strcpy(copy->file_uri, "file://");
         char *dest = copy->file_uri + 7;
         src_pos = 0;

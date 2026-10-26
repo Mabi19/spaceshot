@@ -1,3 +1,4 @@
+#include "alloc.h"
 #include "image.h"
 #include "log.h"
 #include "render/command.h"
@@ -533,7 +534,7 @@ static bool renderer_gl_init() {
     text_cache_hash_state = XXH3_createState();
     text_cache_item_count = 0;
     text_cache_size = 64;
-    text_cache = calloc(64, sizeof(GLTextCacheEntry *));
+    text_cache = ccalloc(64, sizeof(GLTextCacheEntry *));
 
     frame_no = 0;
 
@@ -627,7 +628,7 @@ static RenderCanvas *renderer_gl_canvas_new(
     uint32_t device_height,
     ImageFormat pixel_format
 ) {
-    GLCanvas *result = calloc(1, sizeof(GLCanvas));
+    GLCanvas *result = ccalloc(1, sizeof(GLCanvas));
     result->device_width = device_width;
     result->device_height = device_height;
     result->window =
@@ -731,7 +732,7 @@ static void renderer_gl_canvas_destroy(RenderCanvas *render_canvas) {
 }
 
 static RenderTexture *renderer_gl_texture_new_from_image(const Image *image) {
-    GLTexture *texture = calloc(1, sizeof(GLTexture));
+    GLTexture *texture = ccalloc(1, sizeof(GLTexture));
     texture->width = image->width;
     texture->height = image->height;
     // Uploading and reading back with the same GL formats is byte-preserving,
@@ -918,7 +919,7 @@ static RenderTexture *renderer_gl_texture_run_pass(
         REPORT_UNHANDLED("pass output format", "%d", output_format);
     }
 
-    GLTexture *result = calloc(1, sizeof(GLTexture));
+    GLTexture *result = ccalloc(1, sizeof(GLTexture));
     if (!result) {
         return NULL;
     }
@@ -1036,7 +1037,7 @@ renderer_gl_texture_new_from_dmabuf(DmabufBuffer *buffer) {
         return NULL;
     }
 
-    GLTexture *texture = calloc(1, sizeof(GLTexture));
+    GLTexture *texture = ccalloc(1, sizeof(GLTexture));
     glGenTextures(1, &texture->gl);
     glBindTexture(GL_TEXTURE_2D, texture->gl);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -1243,7 +1244,8 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
 static void text_cache_grow() {
     size_t new_size = text_cache_size * 2;
     log_debug("growing text cache to %zu buckets\n", new_size);
-    GLTextCacheEntry **new_cache = calloc(new_size, sizeof(GLTextCacheEntry *));
+    GLTextCacheEntry **new_cache =
+        ccalloc(new_size, sizeof(GLTextCacheEntry *));
 
     for (size_t i = 0; i < text_cache_size; i++) {
         GLTextCacheEntry *cache_entry = text_cache[i];
@@ -1312,8 +1314,8 @@ static GLTextCacheEntry *text_cache_ensure_entry(
     log_debug(
         "creating new cache entry for string %.*s\n", (int)length, content
     );
-    GLTextCacheEntry *new_entry = calloc(1, sizeof(GLTextCacheEntry));
-    new_entry->content = malloc(length);
+    GLTextCacheEntry *new_entry = ccalloc(1, sizeof(GLTextCacheEntry));
+    new_entry->content = cmalloc(length);
     memcpy(new_entry->content, content, length);
     new_entry->length = length;
     new_entry->style = style;
@@ -1466,7 +1468,7 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     }
     if (quad_count > rect_instance_capacity) {
         rect_instance_buffer =
-            realloc(rect_instance_buffer, sizeof(GLRectData) * quad_count);
+            crealloc(rect_instance_buffer, sizeof(GLRectData) * quad_count);
         rect_instance_capacity = quad_count;
     }
 

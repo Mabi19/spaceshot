@@ -1,4 +1,5 @@
 #include "output.h"
+#include "alloc.h"
 #include "bbox.h"
 #include "picker/context.h"
 #include "render/command.h"
@@ -6,7 +7,6 @@
 #include "wayland/overlay-surface.h"
 #include <cursor-shape-client.h>
 #include <stdlib.h>
-#include <string.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
 constexpr double LABEL_PADDING_X = 6;
@@ -111,7 +111,7 @@ static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
 
 static void output_picker_init(PickerSurface *picker) {
     WrappedOutput *output = picker->background->output;
-    picker->output.output_name = strdup(output->name);
+    picker->output.output_name = cstrdup(output->name);
     output_picker_handle_scale(picker, picker->surface->scale);
 }
 

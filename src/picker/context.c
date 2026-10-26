@@ -1,4 +1,5 @@
 #include "context.h"
+#include "alloc.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -105,7 +106,7 @@ static PickerSurface *picker_surface_new(
     WrappedOutput *output,
     CaptureFrame *frame
 ) {
-    PickerSurface *picker = calloc(1, sizeof(PickerSurface));
+    PickerSurface *picker = ccalloc(1, sizeof(PickerSurface));
     picker->ctx = ctx;
     picker->vtable = vtable;
     picker->surface = overlay_surface_new(

@@ -1,4 +1,5 @@
 #include "toplevel.h"
+#include "alloc.h"
 #include "log.h"
 #include "picker/context.h"
 #include "render/command.h"
@@ -49,9 +50,9 @@ static void recompute_grid(PickerSurface *picker) {
     }
 
     // The top-left X positions of each column.
-    double *column_x = malloc(columns * sizeof(double));
+    double *column_x = cmalloc(columns * sizeof(double));
     // The current Y positions of each column.
-    double *column_y = malloc(columns * sizeof(double));
+    double *column_y = cmalloc(columns * sizeof(double));
 
     double used_width = columns * column_width + (columns - 1) * padding;
     double left_space =
@@ -520,7 +521,7 @@ static void toplevel_picker_init(PickerSurface *picker) {
     }
 
     picker->toplevel.entries =
-        calloc(toplevel_captures, sizeof(ToplevelPickerEntry));
+        ccalloc(toplevel_captures, sizeof(ToplevelPickerEntry));
     picker->toplevel.entry_count = toplevel_captures;
     picker->toplevel.keyboard_focus_idx = -1;
     picker->toplevel.mouse_focus_idx = -1;
@@ -532,7 +533,7 @@ static void toplevel_picker_init(PickerSurface *picker) {
                 .frame = capture,
                 // In practice the title should always be here,
                 // but don't crash if it isn't
-                .title = strdup(
+                .title = cstrdup(
                     capture->toplevel->title ? capture->toplevel->title : "???"
                 ),
                 .visible = true,

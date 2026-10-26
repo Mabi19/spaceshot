@@ -1,4 +1,5 @@
 #include "shared-memory.h"
+#include "alloc.h"
 #include "log.h"
 #include "wayland/globals.h"
 #include <assert.h>
@@ -41,7 +42,7 @@ static int make_shm_file() {
 SharedBuffer *shared_buffer_new(
     uint32_t width, uint32_t height, uint32_t stride, enum wl_shm_format format
 ) {
-    SharedBuffer *result = calloc(1, sizeof(SharedBuffer));
+    SharedBuffer *result = ccalloc(1, sizeof(SharedBuffer));
     result->fd = make_shm_file();
     result->width = width;
     result->height = height;
