@@ -446,7 +446,10 @@ static void toplevel_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
         .color = {0.025, 0.025, 0.025, 0.4}
     );
 
-    double scroll = toplevel->scroll_y * surface->scale / 120.0;
+    // Because dmabuf textures cannot often have mipmaps generated,
+    // shimmering due to aliasing is a problem shrunk thumbnails are offset
+    // by a non-integer amount of pixels.
+    double scroll = round(toplevel->scroll_y * surface->scale / 120.0);
     int focused = focused_entry(toplevel);
     for (int i = 0; i < toplevel->entry_count; i++) {
         ToplevelPickerEntry *entry = &toplevel->entries[i];
