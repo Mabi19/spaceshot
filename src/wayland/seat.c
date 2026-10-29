@@ -23,8 +23,10 @@ typedef struct {
 // The amount of pixels one wheel scroll tick is worth.
 // Compositors can't be trusted to give reasonable values via axis events,
 // so convert ticks from axis_value120 with a multiplier.
-// TODO: make this configurable once the UI is more settled
+// TODO: make these configurable once the UI is more settled
 constexpr double SCROLL_TICK_PIXELS = 60.0;
+// But also touchpad axis values are separately too small.
+constexpr double AXIS_PIXEL_MULTIPLIER = 3.0;
 
 static void pointer_handle_enter(
     void *data,
@@ -121,7 +123,7 @@ static void pointer_handle_axis(
     wl_fixed_t value
 ) {
     Seat *seat = data;
-    double amount = wl_fixed_to_double(value);
+    double amount = wl_fixed_to_double(value) * AXIS_PIXEL_MULTIPLIER;
     switch (axis) {
     case WL_POINTER_AXIS_VERTICAL_SCROLL:
         seat->pointer_data.pending_scroll_y += amount;
