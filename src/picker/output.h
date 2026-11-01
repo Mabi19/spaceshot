@@ -11,7 +11,7 @@ typedef enum {
 typedef struct OutputPicker {
     OutputPickerState state;
     char *output_name;
-    RenderTextMetrics label_size;
+    UITextMetrics label_size;
     bool move_label_down;
 } OutputPicker;
 

@@ -30,7 +30,7 @@ static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     double padding_x = LABEL_PADDING_X * surface->scale / 120.0;
     double padding_y = LABEL_PADDING_Y * surface->scale / 120.0;
     double y_offset = LABEL_Y_OFFSET * surface->scale / 120.0;
-    RenderTextMetrics label_size = output->label_size;
+    UITextMetrics label_size = output->label_size;
     double text_x = (surface->device_width - label_size.width) / 2.0;
     double text_y = output->move_label_down
                         ? (surface->device_height - y_offset - padding_y -
@@ -49,7 +49,7 @@ static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
         .color = {0, 0, 0, 0.75},
         .border_radius = RENDER_BORDER_RADIUS(4)
     );
-    RenderTextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(surface->scale);
+    UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(surface->scale);
     RENDER_TEXT(
         *dl,
         .x = text_x,
@@ -103,7 +103,7 @@ output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
 }
 
 static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
-    RenderTextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
+    UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
     picker->output.label_size = picker->surface->renderer->measure_text(
         picker->output.output_name, -1, scaled_style
     );

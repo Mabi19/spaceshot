@@ -21,7 +21,6 @@ static inline RenderColor config_color_to_render_color(ConfigColor src) {
 typedef enum {
     RENDER_COMMAND_CLEAR,
     RENDER_COMMAND_RECT,
-    RENDER_COMMAND_TEXT,
     RENDER_COMMAND_PUSH_CLIP,
     RENDER_COMMAND_POP_CLIP,
 } RenderCommandType;
@@ -104,22 +103,6 @@ typedef struct {
     RenderUV uv;
 } RenderCommandRect;
 
-typedef struct {
-    /**
-     * This is expected to outlive the renderer
-     * (either static string or config'd is fine)
-     */
-    const char *font_family;
-    float font_size;
-    /**
-     * 0 or negative = no limit.
-     * Past this width the string is ellipsized
-     */
-    float max_width;
-    int weight;
-    bool italic;
-} RenderTextStyle;
-
 /** Create a RenderTextStyle object with the default values at the specified
  * scale. */
 #define RENDER_TEXT_STYLE_DEFAULT(scale)                                       \
@@ -127,27 +110,6 @@ typedef struct {
         .font_family = "Sans", .font_size = 16.0 * (scale) / 120.0,            \
         .max_width = -1, .weight = 400, .italic = false                        \
     }
-
-typedef struct {
-    RenderCommand header;
-    float x;
-    float y;
-    /**
-     * Not necessarily null-terminated: set length to -1 to determine length
-     * via strlen.
-     */
-    const char *content;
-    int length;
-    RenderTextStyle style;
-    /**
-     * The color of the text.
-     * Due to how the GL renderer currently works, emoji will also be tinted
-     * this color; therefore, avoid emojis in non-white text.
-     */
-    RenderColor color;
-    /** Used internally by the renderers, must be unset (set to NULL) */
-    void *renderer_data;
-} RenderCommandText;
 
 /** Different from BBox because clipping is always in device coordinates. */
 typedef struct {
@@ -207,12 +169,6 @@ typedef struct {
 #define RENDER_RECT(dl, ...)                                                   \
     RENDER_PUSH_COMMAND(                                                       \
         RenderCommandRect, RENDER_COMMAND_RECT, (dl), __VA_ARGS__              \
-    )
-
-/** Push a line of text to the display list. Every field must be specified. */
-#define RENDER_TEXT(dl, ...)                                                   \
-    RENDER_PUSH_COMMAND(                                                       \
-        RenderCommandText, RENDER_COMMAND_TEXT, (dl), __VA_ARGS__              \
     )
 
 /** Push a clip rectangle to the display list. */

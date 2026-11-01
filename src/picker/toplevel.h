@@ -46,7 +46,7 @@ typedef struct {
     /** The total height of the entry grid, in logical coordinates. */
     double content_height;
 
-    RenderTextStyle label_text_style;
+    UITextStyle label_text_style;
 } ToplevelPicker;
 
 // All other functions are in the vtable.

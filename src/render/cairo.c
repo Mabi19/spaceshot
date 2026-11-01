@@ -2,7 +2,6 @@
 #include "image.h"
 #include "log.h"
 #include "render/command.h"
-#include "render/common.h"
 #include "render/renderer.h"
 #include "render/texture.h"
 #include "wayland/shared-memory.h"

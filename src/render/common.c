@@ -6,7 +6,7 @@
 void renderer_update_pango(
     PangoLayout *layout,
     PangoFontDescription *fontdesc,
-    const RenderTextStyle *style
+    const UITextStyle *style
 ) {
     pango_layout_set_width(
         layout, style->max_width <= 0 ? -1 : style->max_width * PANGO_SCALE

@@ -8,11 +8,6 @@
 /** An opaque handle representing renderer-specific data for a surface. */
 typedef struct RenderCanvas RenderCanvas;
 
-typedef struct {
-    double width;
-    double height;
-} RenderTextMetrics;
-
 typedef enum {
     /**
      * The identity operator: returns a copy of the texture, same format.
@@ -54,14 +49,6 @@ typedef struct {
     void (*canvas_destroy)(RenderCanvas *canvas);
     /** Draw a display list, then damage and commit the surface. */
     void (*draw)(RenderCanvas *canvas, const RenderDisplayList dl);
-    /**
-     * Measure a piece of text's width and height.
-     * Similarly to the TEXT render command the string is length-based,
-     * but you can set length to -1 to deduce it via strlen.
-     */
-    RenderTextMetrics (*measure_text)(
-        const char *content, int length, RenderTextStyle style
-    );
 
     RenderTexture *(*texture_new_from_image)(const Image *image);
     /**
