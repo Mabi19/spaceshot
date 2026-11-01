@@ -16,9 +16,6 @@
 #include <assert.h>
 #include <cairo.h>
 #include <drm_fourcc.h>
-#include <math.h>
-#include <pango/pango.h>
-#include <pango/pangocairo.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -81,23 +78,6 @@ typedef struct {
     RECT_FIELD(8, uv_tr);                                                      \
     RECT_FIELD(9, uv_bl);                                                      \
     RECT_FIELD(10, uv_br)
-
-typedef struct GLTextCacheEntry {
-    char *content;
-    size_t length;
-    RenderTextStyle style;
-    XXH64_hash_t key_hash;
-    uint32_t last_used_frame;
-
-    PangoRectangle logical_rect;
-    PangoRectangle ink_rect;
-    /**
-     * May be NULL if a texture wasn't generated
-     * (e.g. this text was only measured)
-     */
-    GLTexture *texture;
-    struct GLTextCacheEntry *next;
-} GLTextCacheEntry;
 
 static const char VERTEX_SHADER_SOURCE[] = {
 #embed "rect-vert.glsl"
@@ -167,18 +147,6 @@ static GLint gl_pass_smart_border_v_scale = 0;
 
 static GLRectData *rect_instance_buffer = NULL;
 static size_t rect_instance_capacity = 0;
-
-static PangoFontMap *pango_fontmap = NULL;
-static PangoContext *pango_context = NULL;
-static PangoLayout *pango_layout = NULL;
-static PangoFontDescription *pango_font_description = NULL;
-
-static XXH3_state_t *text_cache_hash_state = NULL;
-static GLTextCacheEntry **text_cache = NULL;
-static size_t text_cache_item_count = 0;
-static size_t text_cache_size = 0;
-// Used by the text cache to know when to evict items.
-static uint32_t frame_no = 0;
 
 static void renderer_gl_cleanup();
 
@@ -526,22 +494,8 @@ static bool renderer_gl_init() {
         return false;
     }
 
-    pango_fontmap = pango_cairo_font_map_new();
-    pango_context = pango_font_map_create_context(pango_fontmap);
-    pango_layout = pango_layout_new(pango_context);
-    renderer_init_pango_layout(pango_layout);
-    pango_font_description = pango_font_description_new();
-    text_cache_hash_state = XXH3_createState();
-    text_cache_item_count = 0;
-    text_cache_size = 64;
-    text_cache = ccalloc(64, sizeof(GLTextCacheEntry *));
-
-    frame_no = 0;
-
     return true;
 }
-
-static void text_cache_free_entry(GLTextCacheEntry *entry);
 
 static void renderer_gl_cleanup() {
     if (gl_pass_identity_program != 0) {
@@ -578,18 +532,6 @@ static void renderer_gl_cleanup() {
         glDeleteTextures(1, &gl_texture_none);
     }
 
-    if (text_cache) {
-        for (size_t i = 0; i < text_cache_size; i++) {
-            GLTextCacheEntry *entry = text_cache[i];
-            while (entry != NULL) {
-                GLTextCacheEntry *next = entry->next;
-                text_cache_free_entry(entry);
-                entry = next;
-            }
-        }
-        free(text_cache);
-    }
-
     if (egl_context != EGL_NO_CONTEXT) {
         eglDestroyContext(egl_display, egl_context);
     }
@@ -604,22 +546,6 @@ static void renderer_gl_cleanup() {
     gl_eglDestroyImageKHR = NULL;
     gl_eglImageTargetTexture2DOES = NULL;
     gl_eglQueryDmaBufModifiersEXT = NULL;
-
-    if (pango_fontmap) {
-        g_object_unref(pango_fontmap);
-    }
-    if (pango_context) {
-        g_object_unref(pango_context);
-    }
-    if (pango_layout) {
-        g_object_unref(pango_layout);
-    }
-    if (pango_font_description) {
-        pango_font_description_free(pango_font_description);
-    }
-    if (text_cache_hash_state) {
-        XXH3_freeState(text_cache_hash_state);
-    }
 }
 
 static RenderCanvas *renderer_gl_canvas_new(
@@ -1240,160 +1166,6 @@ renderer_gl_texture_download(const RenderTexture *render_texture) {
     return result;
 }
 
-/** Double the size of the text cache's hash table. */
-static void text_cache_grow() {
-    size_t new_size = text_cache_size * 2;
-    log_debug("growing text cache to %zu buckets\n", new_size);
-    GLTextCacheEntry **new_cache =
-        ccalloc(new_size, sizeof(GLTextCacheEntry *));
-
-    for (size_t i = 0; i < text_cache_size; i++) {
-        GLTextCacheEntry *cache_entry = text_cache[i];
-        while (cache_entry != NULL) {
-            GLTextCacheEntry *next = cache_entry->next;
-            size_t new_slot = cache_entry->key_hash & (new_size - 1);
-            cache_entry->next = new_cache[new_slot];
-            new_cache[new_slot] = cache_entry;
-            cache_entry = next;
-        }
-    }
-    free(text_cache);
-    text_cache = new_cache;
-    text_cache_size = new_size;
-}
-
-static GLTextCacheEntry *text_cache_ensure_entry(
-    const char *content, int length, RenderTextStyle style
-) {
-    XXH3_64bits_reset(text_cache_hash_state);
-    if (length < 0) {
-        length = strlen(content);
-    }
-    XXH3_64bits_update(text_cache_hash_state, &length, sizeof(length));
-    XXH3_64bits_update(text_cache_hash_state, content, length);
-    size_t font_family_len = strlen(style.font_family);
-    // include the null terminator to separate between fields
-    XXH3_64bits_update(
-        text_cache_hash_state, style.font_family, font_family_len + 1
-    );
-    XXH3_64bits_update(
-        text_cache_hash_state, &style.font_size, sizeof(style.font_size)
-    );
-    XXH3_64bits_update(
-        text_cache_hash_state, &style.weight, sizeof(style.weight)
-    );
-    XXH3_64bits_update(
-        text_cache_hash_state, &style.italic, sizeof(style.italic)
-    );
-    XXH3_64bits_update(
-        text_cache_hash_state, &style.max_width, sizeof(style.max_width)
-    );
-    XXH64_hash_t hash = XXH3_64bits_digest(text_cache_hash_state);
-    size_t slot = hash & (text_cache_size - 1);
-    GLTextCacheEntry *entry = text_cache[slot];
-    while (entry != NULL) {
-        if (entry->key_hash == hash && entry->length == (size_t)length &&
-            memcmp(entry->content, content, length) == 0 &&
-            strcmp(entry->style.font_family, style.font_family) == 0 &&
-            entry->style.font_size == style.font_size &&
-            entry->style.weight == style.weight &&
-            entry->style.italic == style.italic &&
-            entry->style.max_width == style.max_width) {
-            entry->last_used_frame = frame_no;
-            return entry;
-        }
-        entry = entry->next;
-    }
-
-    text_cache_item_count++;
-    if (text_cache_item_count >= text_cache_size) {
-        text_cache_grow();
-        slot = hash & (text_cache_size - 1);
-    }
-
-    log_debug(
-        "creating new cache entry for string %.*s\n", (int)length, content
-    );
-    GLTextCacheEntry *new_entry = ccalloc(1, sizeof(GLTextCacheEntry));
-    new_entry->content = cmalloc(length);
-    memcpy(new_entry->content, content, length);
-    new_entry->length = length;
-    new_entry->style = style;
-    new_entry->key_hash = hash;
-    new_entry->last_used_frame = frame_no;
-    // compute extents: this is always needed, so we may as well do it here
-    renderer_update_pango(pango_layout, pango_font_description, &style);
-    pango_layout_set_text(pango_layout, content, length);
-    pango_layout_set_font_description(pango_layout, pango_font_description);
-    pango_layout_get_pixel_extents(
-        pango_layout, &new_entry->ink_rect, &new_entry->logical_rect
-    );
-    // link it in
-    new_entry->next = text_cache[slot];
-    text_cache[slot] = new_entry;
-
-    return new_entry;
-}
-
-/**
- * Get the GLTextCacheEntry for a TEXT command's parameters.
- * This also saves it inside the command struct, so it should be preferred over
- * manually calling text_cache_ensure_entry.
- */
-static GLTextCacheEntry *
-text_cache_ensure_command_entry(RenderCommandText *text) {
-    if (!text->renderer_data) {
-        text->renderer_data =
-            text_cache_ensure_entry(text->content, text->length, text->style);
-    }
-    return text->renderer_data;
-}
-
-static void text_cache_ensure_rendered(GLTextCacheEntry *entry) {
-    if (entry->texture != NULL) {
-        return;
-    }
-    log_debug(
-        "rendering string %.*s to cache\n", (int)entry->length, entry->content
-    );
-
-    Image *image = image_new(
-        entry->ink_rect.width, entry->ink_rect.height, IMAGE_FORMAT_ARGB8888
-    );
-    // Images do not clear their contents by default
-    memset(image->data, 0, image->stride * image->height);
-    cairo_surface_t *surface = image_make_cairo_surface(image);
-    cairo_t *cr = cairo_create(surface);
-
-    renderer_update_pango(pango_layout, pango_font_description, &entry->style);
-    pango_layout_set_text(pango_layout, entry->content, entry->length);
-    pango_layout_set_font_description(pango_layout, pango_font_description);
-    // Color is applied on the GPU.
-    // This means that emoji will be colored as well;
-    // this is an acceptable tradeoff for not having to also key by color,
-    // since I don't see the need to have non-white labels anyway.
-    cairo_move_to(cr, -entry->ink_rect.x, -entry->ink_rect.y);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    pango_cairo_update_context(cr, pango_context);
-    pango_layout_context_changed(pango_layout);
-    pango_cairo_show_layout(cr, pango_layout);
-
-    cairo_surface_flush(surface);
-    entry->texture = (GLTexture *)renderer_gl_texture_new_from_image(image);
-    cairo_destroy(cr);
-    cairo_surface_destroy(surface);
-    image_destroy(image);
-}
-
-/** Only frees the entry, doesn't manipulate the links. */
-static void text_cache_free_entry(GLTextCacheEntry *entry) {
-    free(entry->content);
-    if (entry->texture) {
-        renderer_gl_texture_destroy((RenderTexture *)entry->texture);
-    }
-    free(entry);
-}
-
 /** Returns whether the specified command should result in a drawn quad. */
 static inline bool command_needs_quad(RenderCommand *command) {
     if (command->type == RENDER_COMMAND_RECT) {
@@ -1401,12 +1173,6 @@ static inline bool command_needs_quad(RenderCommand *command) {
         // zero in the vertex shader).
         RenderCommandRect *rect = (RenderCommandRect *)command;
         return rect->bounds.width > 0 && rect->bounds.height > 0;
-    } else if (command->type == RENDER_COMMAND_TEXT) {
-        // Similarly, guard against 0-size texts.
-        RenderCommandText *text = (RenderCommandText *)command;
-        GLTextCacheEntry *cache_entry = text_cache_ensure_command_entry(text);
-        return cache_entry->ink_rect.width > 0 &&
-               cache_entry->ink_rect.height > 0;
     }
     return false;
 }
@@ -1442,7 +1208,6 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     GLCanvas *canvas = (GLCanvas *)render_canvas;
     int canvas_width = canvas->device_width;
     int canvas_height = canvas->device_height;
-    frame_no++;
 
     TIMING_START(gl_frame);
 
@@ -1545,41 +1310,6 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             i++;
             break;
         }
-        case RENDER_COMMAND_TEXT: {
-            RenderCommandText *text = (RenderCommandText *)cmd;
-            GLTextCacheEntry *cache_entry =
-                text_cache_ensure_command_entry(text);
-            if (cache_entry->ink_rect.width <= 0 ||
-                cache_entry->ink_rect.height <= 0) {
-                // The renderer can't cope with degenerate rectangles.
-                break;
-            }
-            // We know this texture will be used now, and since this function
-            // changes the GL state, calling it in the draw pass would be
-            // tricky.
-            text_cache_ensure_rendered(cache_entry);
-
-            rect_instance_buffer[i] = (GLRectData){
-                // Round the text position to make hinting valid.
-                .position =
-                    {round(text->x + cache_entry->ink_rect.x),
-                     round(text->y + cache_entry->ink_rect.y)},
-                .size =
-                    {cache_entry->ink_rect.width, cache_entry->ink_rect.height},
-                .color =
-                    {text->color.r,
-                     text->color.g,
-                     text->color.b,
-                     text->color.a},
-                .uv_tl = {0, 0},
-                .uv_tr = {1, 0},
-                .uv_bl = {0, 1},
-                .uv_br = {1, 1}
-            };
-
-            i++;
-            break;
-        }
         default:
             assert(!command_needs_quad(cmd));
             break;
@@ -1626,27 +1356,6 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
             GLuint texture = rect->texture == NULL
                                  ? gl_texture_none
                                  : ((const GLTexture *)rect->texture)->gl;
-            if (last_texture == 0) {
-                last_texture = texture;
-                glBindTexture(GL_TEXTURE_2D, texture);
-            } else if (last_texture != texture) {
-                flush_quad_batch(&batch_start, &batch_length);
-                glBindTexture(GL_TEXTURE_2D, texture);
-                last_texture = texture;
-            }
-            batch_length++;
-            break;
-        }
-        case RENDER_COMMAND_TEXT: {
-            RenderCommandText *text = (RenderCommandText *)cmd;
-            GLTextCacheEntry *cache_entry =
-                text_cache_ensure_command_entry(text);
-            if (cache_entry->ink_rect.width <= 0 ||
-                cache_entry->ink_rect.height <= 0) {
-                break;
-            }
-
-            GLuint texture = cache_entry->texture->gl;
             if (last_texture == 0) {
                 last_texture = texture;
                 glBindTexture(GL_TEXTURE_2D, texture);
@@ -1722,40 +1431,6 @@ renderer_gl_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     TIMING_END(gl_frame);
 
     eglSwapBuffers(egl_display, canvas->surface);
-
-    // GC stale strings from the text cache
-    for (size_t i = 0; i < text_cache_size; i++) {
-        // pointer to the previous entry's next pointer to the cache entry
-        GLTextCacheEntry **p_entry = &text_cache[i];
-        while (*p_entry != NULL) {
-            if (frame_no - (*p_entry)->last_used_frame > 16) {
-                GLTextCacheEntry *stale = *p_entry;
-                *p_entry = (*p_entry)->next;
-                log_debug(
-                    "text cache GC freed string %.*s\n",
-                    (int)stale->length,
-                    stale->content
-                );
-                text_cache_free_entry(stale);
-                text_cache_item_count--;
-            } else {
-                p_entry = &(*p_entry)->next;
-            }
-        }
-    }
-}
-
-static RenderTextMetrics renderer_gl_measure_text(
-    const char *content, int length, RenderTextStyle style
-) {
-    // Creating a cache entry automatically computes extents
-    GLTextCacheEntry *cache_entry =
-        text_cache_ensure_entry(content, length, style);
-
-    return (RenderTextMetrics){
-        .width = cache_entry->logical_rect.width,
-        .height = cache_entry->logical_rect.height,
-    };
 }
 
 const Renderer renderer_gl = {
@@ -1765,7 +1440,6 @@ const Renderer renderer_gl = {
     .canvas_resize = renderer_gl_canvas_resize,
     .canvas_destroy = renderer_gl_canvas_destroy,
     .draw = renderer_gl_draw,
-    .measure_text = renderer_gl_measure_text,
     .texture_new_from_image = renderer_gl_texture_new_from_image,
     .texture_new_from_dmabuf = renderer_gl_texture_new_from_dmabuf,
     .texture_dmabuf_set_transform = renderer_gl_texture_dmabuf_set_transform,

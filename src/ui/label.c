@@ -3,25 +3,8 @@
 #include "ui/context.h"
 #include <pango/pango.h>
 
-typedef struct {
-    double width;
-    double height;
-} UITextMetrics;
-
-typedef struct {
-
-} UITextStyle;
-
-/**
- * Measure a piece of text's width and height.
- * The string is length-based,
- * but you can set length to -1 to deduce it via strlen.
- */
-UITextMetrics measure_text(const char *content, int length, UITextStyle style) {
-    // TODO (perhaps this won't be necessary...)
-}
-
-static void widget_label_layout(UIContext *ctx, WidgetHeader *header) {
+static void
+widget_label_layout(UIContext *ctx, WidgetHeader *header, double scale) {
     WidgetLabel *label = (WidgetLabel *)header;
     // TODO: recompute Pango parameters, if anything's different queue a draw
 }
@@ -31,6 +14,7 @@ static void widget_label_draw(
     WidgetHeader *header,
     double sx,
     double sy,
+    double scale,
     RenderDisplayList *dl
 ) {
     WidgetLabel *label = (WidgetLabel *)header;

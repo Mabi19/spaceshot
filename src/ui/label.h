@@ -26,11 +26,13 @@ typedef struct {
     int weight;
     bool italic;
 
-    // TODO: PangoFontDescription and PangoLayout.
     // The FontMap and Context live within the UIContext.
-
+    PangoLayout *pango_layout;
+    PangoFontDescription *pango_font_description;
     Image *rendered;
     RenderTexture *texture;
 } WidgetLabel;
 
 extern const WidgetVTable WIDGET_LABEL_VTABLE;
+
+// TODO: init() and destroy() functions

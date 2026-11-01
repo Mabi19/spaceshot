@@ -2,13 +2,12 @@
 #include "image.h"
 #include "log.h"
 #include "render/command.h"
+#include "render/common.h"
 #include "render/renderer.h"
 #include "render/texture.h"
 #include "wayland/shared-memory.h"
 #include <assert.h>
 #include <cairo.h>
-#include <pango/pango.h>
-#include <pango/pangocairo.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -125,28 +124,8 @@ static CairoBuffer *get_unused_buffer(CairoCanvas *canvas) {
     return canvas->buffers[0];
 }
 
-// internal state: Pango objects necessary for text rendering.
-static PangoFontMap *pango_fontmap;
-static PangoContext *pango_context;
-static PangoLayout *pango_layout;
-static PangoFontDescription *pango_font_description;
-
-static bool renderer_cairo_init() {
-    pango_fontmap = pango_cairo_font_map_new();
-    pango_context = pango_font_map_create_context(pango_fontmap);
-    pango_layout = pango_layout_new(pango_context);
-    renderer_init_pango_layout(pango_layout);
-    pango_font_description = pango_font_description_new();
-
-    return true;
-}
-
-static void renderer_cairo_cleanup() {
-    g_object_unref(pango_fontmap);
-    g_object_unref(pango_context);
-    g_object_unref(pango_layout);
-    pango_font_description_free(pango_font_description);
-}
+static bool renderer_cairo_init() { return true; }
+static void renderer_cairo_cleanup() {}
 
 static RenderCanvas *renderer_cairo_canvas_new(
     struct wl_surface *surface,
@@ -270,7 +249,6 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
 
     int clip_nesting_level = 0;
-    bool has_updated_pango_context = false;
 
     TIMING_START(cairo_frame);
 
@@ -390,31 +368,6 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
 
             break;
         }
-        case RENDER_COMMAND_TEXT: {
-            RenderCommandText *text = (RenderCommandText *)cmd;
-
-            if (!has_updated_pango_context) {
-                // We don't change the transformation or font properties, so
-                // this is technically unnecessary, but what happens in Pango is
-                // an implementation detail, so do it anyway.
-                pango_cairo_update_context(cr, pango_context);
-                pango_layout_context_changed(pango_layout);
-                has_updated_pango_context = true;
-            }
-
-            renderer_update_pango(
-                pango_layout, pango_font_description, &text->style
-            );
-            pango_layout_set_text(pango_layout, text->content, text->length);
-            pango_layout_set_font_description(
-                pango_layout, pango_font_description
-            );
-
-            set_source_render_color(cr, text->color, canvas->pixel_format);
-            cairo_move_to(cr, text->x, text->y);
-            pango_cairo_show_layout(cr, pango_layout);
-            break;
-        }
         case RENDER_COMMAND_PUSH_CLIP: {
             RenderCommandPushClip *push_clip = (RenderCommandPushClip *)cmd;
             // pop clip will restore this
@@ -455,21 +408,6 @@ renderer_cairo_draw(RenderCanvas *render_canvas, const RenderDisplayList dl) {
         canvas->wl_surface, 0, 0, canvas->device_width, canvas->device_height
     );
     wl_surface_commit(canvas->wl_surface);
-}
-
-static RenderTextMetrics renderer_cairo_measure_text(
-    const char *content, int length, RenderTextStyle style
-) {
-    renderer_update_pango(pango_layout, pango_font_description, &style);
-    pango_layout_set_text(pango_layout, content, length);
-    pango_layout_set_font_description(pango_layout, pango_font_description);
-
-    PangoRectangle extents;
-    pango_layout_get_pixel_extents(pango_layout, NULL, &extents);
-    return (RenderTextMetrics){
-        .width = extents.width,
-        .height = extents.height,
-    };
 }
 
 static RenderTexture *
@@ -534,7 +472,6 @@ const Renderer renderer_cairo = {
     .canvas_resize = renderer_cairo_canvas_resize,
     .canvas_destroy = renderer_cairo_canvas_destroy,
     .draw = renderer_cairo_draw,
-    .measure_text = renderer_cairo_measure_text,
     .texture_new_from_image = renderer_cairo_texture_new_from_image,
     .texture_new_from_dmabuf = renderer_cairo_texture_new_from_dmabuf,
     .texture_dmabuf_set_transform = renderer_cairo_texture_dmabuf_set_transform,

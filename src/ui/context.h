@@ -1,9 +1,10 @@
 #pragma once
 #include "render/renderer.h"
+#include <pango/pango.h>
 
-// TODO: The PangoFontMap and PangoContext should live in here.
-// They're shared between all labels.
 typedef struct {
     Renderer *renderer;
-    double scale;
+    // These two objects can be shared between all labels.
+    PangoFontMap *pango_fontmap;
+    PangoContext *pango_context;
 } UIContext;
