@@ -2,6 +2,7 @@
 #include "picker/output.h"
 #include "picker/region.h"
 #include "picker/toplevel.h"
+#include "ui/context.h"
 #include "wayland/overlay-surface.h"
 #include "wayland/screen-capture.h"
 #include "wayland/seat.h"
@@ -36,6 +37,7 @@ typedef struct {
     /** list of PickerSurface */
     struct wl_list pickers;
     const PickerHost *host;
+    UIContextCommon ui_common;
 } PickerContext;
 
 /**
@@ -69,6 +71,7 @@ typedef struct PickerSurface {
     OverlaySurface *surface;
     CaptureFrame *background;
     LinkBuffer *command_arena;
+    UIContext ui;
 
     const PickerVTable *vtable;
     RegionPicker region;

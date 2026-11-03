@@ -1,6 +1,4 @@
 #pragma once
-#include "render/renderer.h"
-
 typedef struct PickerSurface PickerSurface;
 
 typedef enum {
@@ -11,8 +9,8 @@ typedef enum {
 typedef struct OutputPicker {
     OutputPickerState state;
     char *output_name;
-    UITextMetrics label_size;
-    bool move_label_down;
+    // TODO: Make this thing
+    WidgetTooltip output_tooltip;
 } OutputPicker;
 
 // All other functions are in the vtable.

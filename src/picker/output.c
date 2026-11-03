@@ -30,35 +30,35 @@ static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     double padding_x = LABEL_PADDING_X * surface->scale / 120.0;
     double padding_y = LABEL_PADDING_Y * surface->scale / 120.0;
     double y_offset = LABEL_Y_OFFSET * surface->scale / 120.0;
-    UITextMetrics label_size = output->label_size;
-    double text_x = (surface->device_width - label_size.width) / 2.0;
-    double text_y = output->move_label_down
-                        ? (surface->device_height - y_offset - padding_y -
-                           label_size.height)
-                        : (y_offset + padding_y);
+    // UITextMetrics label_size = output->label_size;
+    // double text_x = (surface->device_width - label_size.width) / 2.0;
+    // double text_y = output->move_label_down
+    //                     ? (surface->device_height - y_offset - padding_y -
+    //                        label_size.height)
+    //                     : (y_offset + padding_y);
 
-    RENDER_RECT(
-        *dl,
-        .bounds =
-            (BBox){
-                .x = text_x - padding_x,
-                .y = text_y - padding_y,
-                .width = label_size.width + 2 * padding_x,
-                .height = label_size.height + 2 * padding_y,
-            },
-        .color = {0, 0, 0, 0.75},
-        .border_radius = RENDER_BORDER_RADIUS(4)
-    );
-    UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(surface->scale);
-    RENDER_TEXT(
-        *dl,
-        .x = text_x,
-        .y = text_y,
-        .content = output->output_name,
-        .length = -1,
-        .style = scaled_style,
-        .color = RENDER_COLOR_DEFAULT
-    );
+    // RENDER_RECT(
+    //     *dl,
+    //     .bounds =
+    //         (BBox){
+    //             .x = text_x - padding_x,
+    //             .y = text_y - padding_y,
+    //             .width = label_size.width + 2 * padding_x,
+    //             .height = label_size.height + 2 * padding_y,
+    //         },
+    //     .color = {0, 0, 0, 0.75},
+    //     .border_radius = RENDER_BORDER_RADIUS(4)
+    // );
+    // UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(surface->scale);
+    // RENDER_TEXT(
+    //     *dl,
+    //     .x = text_x,
+    //     .y = text_y,
+    //     .content = output->output_name,
+    //     .length = -1,
+    //     .style = scaled_style,
+    //     .color = RENDER_COLOR_DEFAULT
+    // );
 }
 
 static void
@@ -103,10 +103,10 @@ output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
 }
 
 static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
-    UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
-    picker->output.label_size = picker->surface->renderer->measure_text(
-        picker->output.output_name, -1, scaled_style
-    );
+    // UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(scale);
+    // picker->output.label_size = picker->surface->renderer->measure_text(
+    //     picker->output.output_name, -1, scaled_style
+    // );
 }
 
 static void output_picker_init(PickerSurface *picker) {

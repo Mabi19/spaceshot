@@ -6,9 +6,9 @@
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 
-static void
-widget_label_layout(UIContext *ctx, WidgetHeader *header, double scale) {
+static void widget_label_layout(UIContext *ctx, WidgetHeader *header) {
     WidgetLabel *label = (WidgetLabel *)header;
+    double scale = ctx->scale;
 
     double effective_font_size = label->font_size * scale;
     if (label->stale || label->effective_font_size != effective_font_size) {
@@ -82,7 +82,6 @@ static void widget_label_draw(
     WidgetHeader *header,
     double sx,
     double sy,
-    double /* scale */,
     RenderDisplayList *dl
 ) {
     WidgetLabel *label = (WidgetLabel *)header;

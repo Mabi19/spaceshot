@@ -3,6 +3,7 @@
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
+#include "ui/context.h"
 #include "wayland/globals.h"
 #include "wayland/screen-capture.h"
 #include "wayland/seat.h"
@@ -58,6 +59,7 @@ static void picker_surface_scale(void *data, uint32_t scale) {
     if (picker->vtable->scale) {
         picker->vtable->scale(picker, scale);
     }
+    // TODO: tell the UI context
 }
 
 static void picker_surface_resize(void *data) {
@@ -66,6 +68,7 @@ static void picker_surface_resize(void *data) {
     if (picker->vtable->resize) {
         picker->vtable->resize(picker);
     }
+    // TODO: tell the UI context
 }
 
 static void picker_surface_mouse(void *data, MouseEvent ev) {
@@ -122,6 +125,7 @@ static PickerSurface *picker_surface_new(
     );
     picker->background = frame;
     picker->command_arena = link_buffer_new(LINK_BUFFER_ARENA_SIZE);
+    ui_context_init(&picker->ui, &ctx->ui_common);
 
     seat_add_listener(
         wayland_globals.seat,
@@ -188,6 +192,7 @@ void picker_context_init(
 ) {
     ctx->captures = captures;
     ctx->host = host;
+    ui_context_init_common(&ctx->ui_common);
     wl_list_init(&ctx->pickers);
 
     const PickerVTable *ops = picker_vtable_for_type(type);

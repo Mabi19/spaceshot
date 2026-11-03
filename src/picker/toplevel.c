@@ -20,8 +20,8 @@ constexpr double PADDING = 32;
 constexpr double IMAGE_LABEL_PADDING = 8;
 constexpr double HIGHLIGHT_PADDING = 16;
 // TODO: somehow unify with the output picker?
-constexpr double LABEL_PADDING_X = 6;
-constexpr double LABEL_PADDING_Y = 4;
+// constexpr double LABEL_PADDING_X = 6;
+// constexpr double LABEL_PADDING_Y = 4;
 
 static void clamp_scroll(PickerSurface *picker) {
     ToplevelPicker *toplevel = &picker->toplevel;
@@ -66,12 +66,11 @@ static void recompute_grid(PickerSurface *picker) {
         column_y[i] = padding;
     }
 
-    double label_padding_x = round(LABEL_PADDING_X * scale);
-    double label_padding_y = round(LABEL_PADDING_Y * scale);
+    // double label_padding_x = round(LABEL_PADDING_X * scale);
+    // double label_padding_y = round(LABEL_PADDING_Y * scale);
     double image_label_padding = round(IMAGE_LABEL_PADDING * scale);
-    toplevel->label_text_style =
-        RENDER_TEXT_STYLE_DEFAULT(picker->surface->scale);
-    toplevel->label_text_style.max_width = column_width - 2.0 * label_padding_x;
+    // TODO toplevel->label_text_style.max_width = column_width - 2.0 *
+    // label_padding_x;
     for (int i = 0; i < toplevel->entry_count; i++) {
         ToplevelPickerEntry *entry = &toplevel->entries[i];
         if (!entry->visible) {
@@ -102,19 +101,20 @@ static void recompute_grid(PickerSurface *picker) {
         entry->image_bounds = image_bounds;
         entry->column = this_column;
         // label
-        RenderTextMetrics label_size = picker->surface->renderer->measure_text(
-            entry->title, -1, toplevel->label_text_style
-        );
-        entry->label_text_x = column_x[this_column] +
-                              round((column_width - label_size.width) / 2.0);
-        entry->label_text_y = column_y[this_column] + image_height +
-                              image_label_padding + label_padding_y;
-        entry->label_background_bounds = (BBox){
-            entry->label_text_x - label_padding_x,
-            entry->label_text_y - label_padding_y,
-            label_size.width + 2.0 * label_padding_x,
-            label_size.height + 2.0 * label_padding_y,
-        };
+        // RenderTextMetrics label_size =
+        // picker->surface->renderer->measure_text(
+        //     entry->title, -1, toplevel->label_text_style
+        // );
+        // entry->label_text_x = column_x[this_column] +
+        //                       round((column_width - label_size.width) / 2.0);
+        // entry->label_text_y = column_y[this_column] + image_height +
+        //                       image_label_padding + label_padding_y;
+        // entry->label_background_bounds = (BBox){
+        //     entry->label_text_x - label_padding_x,
+        //     entry->label_text_y - label_padding_y,
+        //     label_size.width + 2.0 * label_padding_x,
+        //     label_size.height + 2.0 * label_padding_y,
+        // };
 
         double total_height = image_height + image_label_padding +
                               entry->label_background_bounds.height;
@@ -496,15 +496,15 @@ static void toplevel_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
             .border_radius = RENDER_BORDER_RADIUS(4),
         );
         // label
-        RENDER_TEXT(
-            *dl,
-            .x = entry->label_text_x,
-            .y = entry->label_text_y - scroll,
-            .content = entry->title,
-            .length = -1,
-            .style = toplevel->label_text_style,
-            .color = RENDER_COLOR_DEFAULT,
-        );
+        // RENDER_TEXT(
+        //     *dl,
+        //     .x = entry->label_text_x,
+        //     .y = entry->label_text_y - scroll,
+        //     .content = entry->title,
+        //     .length = -1,
+        //     .style = toplevel->label_text_style,
+        //     .color = RENDER_COLOR_DEFAULT,
+        // );
     }
 }
 

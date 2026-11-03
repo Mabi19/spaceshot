@@ -11,7 +11,7 @@ typedef struct {
      * and the positions of its children.
      * Required.
      */
-    void (*layout)(UIContext *context, WidgetHeader *header, double scale);
+    void (*layout)(UIContext *context, WidgetHeader *header);
     /**
      * Draw the widget.
      * This function is responsible for applying the coordinate translation
@@ -22,7 +22,6 @@ typedef struct {
         WidgetHeader *header,
         double sx,
         double sy,
-        double scale,
         RenderDisplayList *dl
     );
 } WidgetVTable;

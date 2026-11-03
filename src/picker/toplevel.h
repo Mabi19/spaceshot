@@ -1,5 +1,4 @@
 #pragma once
-#include "render/command.h"
 #include "wayland/screen-capture.h"
 
 typedef struct PickerSurface PickerSurface;
@@ -45,8 +44,6 @@ typedef struct {
     double scroll_y;
     /** The total height of the entry grid, in logical coordinates. */
     double content_height;
-
-    UITextStyle label_text_style;
 } ToplevelPicker;
 
 // All other functions are in the vtable.
