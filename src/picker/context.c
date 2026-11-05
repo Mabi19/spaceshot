@@ -59,7 +59,9 @@ static void picker_surface_scale(void *data, uint32_t scale) {
     if (picker->vtable->scale) {
         picker->vtable->scale(picker, scale);
     }
-    // TODO: tell the UI context
+    picker->ui.scale = scale / 120.0;
+    ui_context_queue_layout(&picker->ui);
+    ui_context_dispatch_queued(&picker->ui, picker->surface);
 }
 
 static void picker_surface_resize(void *data) {
@@ -68,7 +70,9 @@ static void picker_surface_resize(void *data) {
     if (picker->vtable->resize) {
         picker->vtable->resize(picker);
     }
-    // TODO: tell the UI context
+    // TODO: tell the UI context (once it knows how big the surface is)
+    ui_context_queue_layout(&picker->ui);
+    ui_context_dispatch_queued(&picker->ui, picker->surface);
 }
 
 static void picker_surface_mouse(void *data, MouseEvent ev) {
@@ -77,6 +81,7 @@ static void picker_surface_mouse(void *data, MouseEvent ev) {
     if (picker->vtable->mouse) {
         picker->vtable->mouse(picker, ev);
     }
+    // TODO: Tell the UI context
 }
 
 static void picker_surface_keyboard(void *data, KeyboardEvent ev) {
@@ -91,6 +96,9 @@ static void picker_surface_keyboard(void *data, KeyboardEvent ev) {
     if (picker->vtable->keyboard) {
         picker->vtable->keyboard(picker, ev);
     }
+    // The UI system does not interact with keyboard inputs by itself.
+    // Any change would have been done by the picker's keyboard handler.
+    ui_context_dispatch_queued(&picker->ui, picker->surface);
 }
 
 static SeatListener picker_surface_seat_listener = {
@@ -151,6 +159,8 @@ static void picker_surface_destroy(PickerSurface *picker) {
         capture_frame_destroy(picker->background);
     }
 
+    // TODO: destroy the UI context
+
     wl_list_remove(&picker->link);
     free(picker);
 }
@@ -168,6 +178,8 @@ static void picker_surface_spawn(
     if (ops->enter) {
         ops->enter(picker);
     }
+    ui_context_queue_layout(&picker->ui);
+    ui_context_dispatch_queued(&picker->ui, picker->surface);
     wl_list_insert(&ctx->pickers, &picker->link);
 }
 

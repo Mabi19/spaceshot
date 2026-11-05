@@ -1,6 +1,7 @@
 #include "alloc.h"
 #include "args.h"
 #include "bbox.h"
+#include "debug.h"
 #include "image.h"
 #include "link-buffer.h"
 #include "log.h"
@@ -381,7 +382,8 @@ static bool should_use_dmabuf() {
                 matching_outputs++;
             }
         }
-        if (matching_outputs <= 1) {
+        if (matching_outputs <= 1 &&
+            debug_mode != DEBUG_MODE_ALWAYS_SHOW_OUTPUT_PICKER) {
             return false;
         }
         break;
@@ -630,7 +632,8 @@ static void dispatch_captures() {
                     output_count++;
                 }
             }
-            if (output_count == 1) {
+            if (output_count == 1 &&
+                debug_mode != DEBUG_MODE_ALWAYS_SHOW_OUTPUT_PICKER) {
                 wl_list_for_each(frame, &active_captures, link) {
                     if (frame->type == CAPTURE_FRAME_TYPE_OUTPUT) {
                         finish_screenshot(capture_frame_get_image(frame));
@@ -638,7 +641,7 @@ static void dispatch_captures() {
                         break;
                     }
                 }
-            } else if (output_count > 1) {
+            } else if (output_count >= 1) {
                 picker_context_init(
                     &pickers, PICKER_TYPE_OUTPUT, &active_captures, &picker_host
                 );

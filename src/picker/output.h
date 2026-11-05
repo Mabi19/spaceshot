@@ -1,4 +1,6 @@
 #pragma once
+#include "ui/tooltip.h"
+
 typedef struct PickerSurface PickerSurface;
 
 typedef enum {
@@ -9,7 +11,6 @@ typedef enum {
 typedef struct OutputPicker {
     OutputPickerState state;
     char *output_name;
-    // TODO: Make this thing
     WidgetTooltip output_tooltip;
 } OutputPicker;
 

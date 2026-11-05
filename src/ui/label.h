@@ -31,7 +31,7 @@ typedef struct {
 extern const WidgetVTable WIDGET_LABEL_VTABLE;
 
 void widget_label_init(UIContext *ctx, WidgetLabel *label);
-void widget_label_destroy(UIContext *ctx, WidgetLabel *label);
+void widget_label_deinit(UIContext *ctx, WidgetLabel *label);
 /**
  * Set the label's content.
  * The string is borrowed by the label and must outlive it.

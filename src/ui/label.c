@@ -61,6 +61,7 @@ static void widget_label_layout(UIContext *ctx, WidgetHeader *header) {
         cairo_surface_t *cairo_surface =
             image_make_cairo_surface(label->rendered);
         cairo_t *cr = cairo_create(cairo_surface);
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
 
         cairo_translate(cr, -label->x_offset, -label->y_offset);
         pango_cairo_show_layout(cr, label->pango_layout);
@@ -78,7 +79,7 @@ static void widget_label_layout(UIContext *ctx, WidgetHeader *header) {
 }
 
 static void widget_label_draw(
-    UIContext * /* ctx */,
+    UIContext *ctx,
     WidgetHeader *header,
     double sx,
     double sy,
@@ -90,8 +91,12 @@ static void widget_label_draw(
         *dl,
         .bounds =
             (BBox){
-                .x = round(header->bounds.x + sx + label->x_offset),
-                .y = round(header->bounds.y + sy + label->y_offset),
+                .x = round(
+                    (header->bounds.x + sx) * ctx->scale + label->x_offset
+                ),
+                .y = round(
+                    (header->bounds.y + sy) * ctx->scale + label->y_offset
+                ),
                 .width = label->rendered->width,
                 .height = label->rendered->height,
             },
@@ -111,9 +116,15 @@ void widget_label_init(UIContext *ctx, WidgetLabel *label) {
     label->color = RENDER_COLOR_DEFAULT;
     label->pango_font_description = pango_font_description_new();
     label->pango_layout = pango_layout_new(ctx->pango_context);
+
+    pango_layout_set_ellipsize(label->pango_layout, PANGO_ELLIPSIZE_END);
+    // Currently, we only ever render text in single lines.
+    // Set these two to be safe.
+    pango_layout_set_single_paragraph_mode(label->pango_layout, true);
+    pango_layout_set_wrap(label->pango_layout, PANGO_WRAP_NONE);
 }
 
-void widget_label_destroy(UIContext * /* ctx */, WidgetLabel *label) {
+void widget_label_deinit(UIContext * /* ctx */, WidgetLabel *label) {
     g_object_unref(label->pango_layout);
     pango_font_description_free(label->pango_font_description);
 }

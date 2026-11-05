@@ -3,14 +3,13 @@
 #include "bbox.h"
 #include "picker/context.h"
 #include "render/command.h"
+#include "ui/label.h"
 #include "wayland/globals.h"
 #include "wayland/overlay-surface.h"
 #include <cursor-shape-client.h>
 #include <stdlib.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
-constexpr double LABEL_PADDING_X = 6;
-constexpr double LABEL_PADDING_Y = 4;
 constexpr double LABEL_Y_OFFSET = 12;
 
 static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
@@ -27,38 +26,9 @@ static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
         );
     }
 
-    double padding_x = LABEL_PADDING_X * surface->scale / 120.0;
-    double padding_y = LABEL_PADDING_Y * surface->scale / 120.0;
-    double y_offset = LABEL_Y_OFFSET * surface->scale / 120.0;
-    // UITextMetrics label_size = output->label_size;
-    // double text_x = (surface->device_width - label_size.width) / 2.0;
-    // double text_y = output->move_label_down
-    //                     ? (surface->device_height - y_offset - padding_y -
-    //                        label_size.height)
-    //                     : (y_offset + padding_y);
-
-    // RENDER_RECT(
-    //     *dl,
-    //     .bounds =
-    //         (BBox){
-    //             .x = text_x - padding_x,
-    //             .y = text_y - padding_y,
-    //             .width = label_size.width + 2 * padding_x,
-    //             .height = label_size.height + 2 * padding_y,
-    //         },
-    //     .color = {0, 0, 0, 0.75},
-    //     .border_radius = RENDER_BORDER_RADIUS(4)
-    // );
-    // UITextStyle scaled_style = RENDER_TEXT_STYLE_DEFAULT(surface->scale);
-    // RENDER_TEXT(
-    //     *dl,
-    //     .x = text_x,
-    //     .y = text_y,
-    //     .content = output->output_name,
-    //     .length = -1,
-    //     .style = scaled_style,
-    //     .color = RENDER_COLOR_DEFAULT
-    // );
+    output->output_tooltip.header.vtable->draw(
+        &picker->ui, &output->output_tooltip.header, 32, 32, dl
+    );
 }
 
 static void
@@ -74,19 +44,19 @@ output_picker_handle_mouse(PickerSurface *picker, MouseEvent event) {
     }
 
     // intentionally a bit bigger than the label
-    int32_t center_x = picker->surface->logical_width / 2;
-    double logical_label_w =
-        output->label_size.width / picker->surface->scale * 120.0;
-    double logical_label_h =
-        output->label_size.height / picker->surface->scale * 120.0;
-    bool new_move =
-        fabs(center_x - event.surface_x) < logical_label_w / 2.0 + 24 &&
-        (event.surface_y) < logical_label_h + LABEL_Y_OFFSET + 24;
+    // int32_t center_x = picker->surface->logical_width / 2;
+    // double logical_label_w =
+    //     output->label_size.width / picker->surface->scale * 120.0;
+    // double logical_label_h =
+    //     output->label_size.height / picker->surface->scale * 120.0;
+    // bool new_move =
+    //     fabs(center_x - event.surface_x) < logical_label_w / 2.0 + 24 &&
+    //     (event.surface_y) < logical_label_h + LABEL_Y_OFFSET + 24;
 
-    if (output->move_label_down != new_move) {
-        output->move_label_down = new_move;
-        should_redraw = true;
-    }
+    // if (output->move_label_down != new_move) {
+    //     output->move_label_down = new_move;
+    //     should_redraw = true;
+    // }
 
     if (should_redraw) {
         overlay_surface_queue_draw(picker->surface);
@@ -112,11 +82,23 @@ static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
 static void output_picker_init(PickerSurface *picker) {
     WrappedOutput *output = picker->background->output;
     picker->output.output_name = cstrdup(output->name);
+    widget_tooltip_init(&picker->ui, &picker->output.output_tooltip);
+    widget_label_set_font(
+        &picker->ui, &picker->output.output_tooltip.label, "Sans", 16.0
+    );
+    widget_label_set_content(
+        &picker->ui,
+        &picker->output.output_tooltip.label,
+        picker->output.output_name,
+        -1
+    );
+
     output_picker_handle_scale(picker, picker->surface->scale);
 }
 
 static void output_picker_enter(PickerSurface *picker) {
     OutputPicker *output = &picker->output;
+    picker->ui.picker_root = &output->output_tooltip.header;
 
     if (wayland_globals.seat->pointer_data.focus ==
         picker->surface->wl_surface) {

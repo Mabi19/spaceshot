@@ -11,14 +11,14 @@ typedef struct {
      * and the positions of its children.
      * Required.
      */
-    void (*layout)(UIContext *context, WidgetHeader *header);
+    void (*layout)(UIContext *ctx, WidgetHeader *header);
     /**
      * Draw the widget.
      * This function is responsible for applying the coordinate translation
      * itself. Optional: by default draws children.
      */
     void (*draw)(
-        UIContext *context,
+        UIContext *ctx,
         WidgetHeader *header,
         double sx,
         double sy,
@@ -35,3 +35,12 @@ typedef struct WidgetHeader {
      */
     BBox bounds;
 } WidgetHeader;
+
+void widget_layout(UIContext *ctx, WidgetHeader *header);
+void widget_draw(
+    UIContext *ctx,
+    WidgetHeader *header,
+    double sx,
+    double sy,
+    RenderDisplayList *dl
+);
