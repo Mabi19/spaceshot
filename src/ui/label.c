@@ -124,9 +124,16 @@ void widget_label_init(UIContext *ctx, WidgetLabel *label) {
     pango_layout_set_wrap(label->pango_layout, PANGO_WRAP_NONE);
 }
 
-void widget_label_deinit(UIContext * /* ctx */, WidgetLabel *label) {
+void widget_label_deinit(UIContext *ctx, WidgetLabel *label) {
     g_object_unref(label->pango_layout);
     pango_font_description_free(label->pango_font_description);
+
+    if (label->texture) {
+        ctx->renderer->texture_destroy(label->texture);
+    }
+    if (label->rendered) {
+        image_destroy(label->rendered);
+    }
 }
 
 void widget_label_set_content(
