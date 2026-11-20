@@ -12,12 +12,47 @@
 
 constexpr double LABEL_Y_OFFSET = 12;
 
+static void output_picker_layout(UIContext *ctx, WidgetHeader *header) {
+    OutputPicker *output = (OutputPicker *)header;
+
+    widget_layout(ctx, &output->output_tooltip.header);
+
+    double center_x = header->bounds.width / 2;
+    BBox *tooltip_bounds = &output->output_tooltip.header.bounds;
+    double new_x = center_x - tooltip_bounds->width / 2;
+    // TODO: unless label is moved down
+    double new_y = LABEL_Y_OFFSET;
+    if (tooltip_bounds->x != new_x || tooltip_bounds->y != new_y) {
+        tooltip_bounds->x = new_x;
+        tooltip_bounds->y = new_y;
+        ui_context_queue_draw(ctx);
+    }
+}
+
+static void output_picker_widget_draw(
+    UIContext *ctx,
+    WidgetHeader *header,
+    double sx,
+    double sy,
+    RenderDisplayList *dl
+) {
+    OutputPicker *output = (OutputPicker *)header;
+
+    widget_draw(ctx, &output->output_tooltip.header, sx, sy, dl);
+}
+
+const WidgetVTable WIDGET_OUTPUT_PICKER_VTABLE = {
+    .layout = output_picker_layout,
+    .draw = output_picker_widget_draw,
+};
+
 static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
     OutputPicker *output = &picker->output;
     OverlaySurface *surface = picker->surface;
     BBox full_surface_box =
         (BBox){0, 0, surface->device_width, surface->device_height};
 
+    // TODO: This can also very easily be done by the widget draw function.
     if (output->state != OUTPUT_PICKER_ACTIVE) {
         // Pretty close to the default region picker background color.
         // TODO: Rework how style configuration is done (or drop it entirely?)
@@ -25,10 +60,6 @@ static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {
             *dl, .bounds = full_surface_box, .color = {0.025, 0.025, 0.025, 0.4}
         );
     }
-
-    output->output_tooltip.header.vtable->draw(
-        &picker->ui, &output->output_tooltip.header, 32, 32, dl
-    );
 }
 
 static void
@@ -80,6 +111,8 @@ static void output_picker_handle_scale(PickerSurface *picker, uint32_t scale) {
 }
 
 static void output_picker_init(PickerSurface *picker) {
+    picker->output.header.vtable = &WIDGET_OUTPUT_PICKER_VTABLE;
+
     WrappedOutput *output = picker->background->output;
     picker->output.output_name = cstrdup(output->name);
     widget_tooltip_init(&picker->ui, &picker->output.output_tooltip);
@@ -98,7 +131,7 @@ static void output_picker_init(PickerSurface *picker) {
 
 static void output_picker_enter(PickerSurface *picker) {
     OutputPicker *output = &picker->output;
-    picker->ui.picker_root = &output->output_tooltip.header;
+    picker->ui.picker_root = &output->header;
 
     if (wayland_globals.seat->pointer_data.focus ==
         picker->surface->wl_surface) {

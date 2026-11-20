@@ -36,6 +36,8 @@ typedef struct {
      * to convert from logical coordinates to device coordinates.
      */
     double scale;
+    double logical_width;
+    double logical_height;
 
     bool layout_queued;
     bool draw_queued;
@@ -45,6 +47,6 @@ void ui_context_init_common(UIContextCommon *common);
 void ui_context_init(UIContext *ctx, UIContextCommon *common);
 // TODO: ui_context_deinit (_common)
 
-void ui_context_queue_layout(UIContext *context);
-void ui_context_queue_draw(UIContext *context);
-void ui_context_dispatch_queued(UIContext *context, OverlaySurface *surface);
+void ui_context_queue_layout(UIContext *ctx);
+void ui_context_queue_draw(UIContext *ctx);
+void ui_context_dispatch_queued(UIContext *ctx, OverlaySurface *surface);

@@ -8,14 +8,16 @@ typedef struct WidgetHeader WidgetHeader;
 typedef struct {
     /**
      * Update the widget's width and height based on its state,
-     * and the positions of its children.
+     * and the positions and layouts of its children.
+     * Root widgets have their size forced to the surface size,
+     * so they should only act on their children.
      * Required.
      */
     void (*layout)(UIContext *ctx, WidgetHeader *header);
     /**
      * Draw the widget.
      * This function is responsible for applying the coordinate translation
-     * itself. Optional: by default draws children.
+     * itself. Required.
      */
     void (*draw)(
         UIContext *ctx,

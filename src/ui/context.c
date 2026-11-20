@@ -1,4 +1,5 @@
 #include "context.h"
+#include "bbox.h"
 #include "log.h"
 #include "render/renderer.h"
 #include "ui/widget.h"
@@ -20,6 +21,8 @@ void ui_context_init(UIContext *ctx, UIContextCommon *common) {
     ctx->picker_root = NULL;
 
     ctx->scale = 1.0;
+    ctx->logical_width = 0.0;
+    ctx->logical_height = 0.0;
     ctx->layout_queued = false;
     ctx->draw_queued = false;
 }
@@ -31,6 +34,12 @@ void ui_context_dispatch_queued(UIContext *ctx, OverlaySurface *surface) {
     if (ctx->layout_queued) {
         if (ctx->picker_root) {
             log_debug("laying out picker_root\n");
+            ctx->picker_root->bounds = (BBox){
+                .x = 0,
+                .y = 0,
+                .width = ctx->logical_width,
+                .height = ctx->logical_height,
+            };
             widget_layout(ctx, ctx->picker_root);
         }
         ctx->layout_queued = false;

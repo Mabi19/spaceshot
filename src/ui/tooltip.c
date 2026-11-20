@@ -32,7 +32,13 @@ static void widget_tooltip_draw(
         .color = {0, 0, 0, 0.75},
         .border_radius = RENDER_BORDER_RADIUS(4 * ctx->scale)
     );
-    widget_draw(ctx, &tooltip->label.header, sx, sy, dl);
+    widget_draw(
+        ctx,
+        &tooltip->label.header,
+        header->bounds.x + sx,
+        header->bounds.y + sy,
+        dl
+    );
 }
 
 const WidgetVTable WIDGET_TOOLTIP_VTABLE = {

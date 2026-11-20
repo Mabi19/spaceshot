@@ -35,6 +35,9 @@ static RenderDisplayList picker_surface_draw(void *data) {
     }
 
     picker->vtable->draw(picker, &dl);
+    if (picker->ui.picker_root) {
+        widget_draw(&picker->ui, picker->ui.picker_root, 0, 0, &dl);
+    }
 
     return dl;
 }
@@ -70,7 +73,9 @@ static void picker_surface_resize(void *data) {
     if (picker->vtable->resize) {
         picker->vtable->resize(picker);
     }
-    // TODO: tell the UI context (once it knows how big the surface is)
+
+    picker->ui.logical_width = picker->surface->logical_width;
+    picker->ui.logical_height = picker->surface->logical_height;
     ui_context_queue_layout(&picker->ui);
     ui_context_dispatch_queued(&picker->ui, picker->surface);
 }
