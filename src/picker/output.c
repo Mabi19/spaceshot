@@ -146,6 +146,7 @@ static void output_picker_enter(PickerSurface *picker) {
 }
 
 void output_picker_destroy(PickerSurface *picker) {
+    widget_tooltip_deinit(&picker->ui, &picker->output.output_tooltip);
     if (picker->output.output_name) {
         free(picker->output.output_name);
     }
