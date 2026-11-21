@@ -26,7 +26,14 @@ typedef struct {
         double sy,
         RenderDisplayList *dl
     );
+
+    size_t static_child_count;
+    const size_t *static_child_offsets;
 } WidgetVTable;
+
+#define STATIC_CHILD_TABLE(table)                                              \
+    .static_child_count = sizeof(table) / sizeof(size_t),                      \
+    .static_child_offsets = (table)
 
 typedef struct WidgetHeader {
     const WidgetVTable *vtable;

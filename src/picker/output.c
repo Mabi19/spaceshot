@@ -41,9 +41,14 @@ static void output_picker_widget_draw(
     widget_draw(ctx, &output->output_tooltip.header, sx, sy, dl);
 }
 
+constexpr size_t WIDGET_OUTPUT_PICKER_STATIC_CHILDREN[] = {
+    offsetof(OutputPicker, output_tooltip),
+};
+
 const WidgetVTable WIDGET_OUTPUT_PICKER_VTABLE = {
     .layout = output_picker_layout,
     .draw = output_picker_widget_draw,
+    STATIC_CHILD_TABLE(WIDGET_OUTPUT_PICKER_STATIC_CHILDREN),
 };
 
 static void output_picker_draw(PickerSurface *picker, RenderDisplayList *dl) {

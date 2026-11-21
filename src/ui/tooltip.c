@@ -1,5 +1,6 @@
 #include "tooltip.h"
 #include "render/command.h"
+#include <stddef.h>
 
 constexpr double TOOLTIP_PADDING_X = 6;
 constexpr double TOOLTIP_PADDING_Y = 4;
@@ -41,9 +42,14 @@ static void widget_tooltip_draw(
     );
 }
 
+constexpr size_t WIDGET_TOOLTIP_STATIC_CHILDREN[] = {
+    offsetof(WidgetTooltip, label)
+};
+
 const WidgetVTable WIDGET_TOOLTIP_VTABLE = {
     .layout = widget_tooltip_layout,
     .draw = widget_tooltip_draw,
+    STATIC_CHILD_TABLE(WIDGET_TOOLTIP_STATIC_CHILDREN),
 };
 
 void widget_tooltip_init(UIContext *ctx, WidgetTooltip *tooltip) {
