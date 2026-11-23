@@ -36,9 +36,7 @@ static void output_picker_widget_draw(
     double sy,
     RenderDisplayList *dl
 ) {
-    OutputPicker *output = (OutputPicker *)header;
-
-    widget_draw(ctx, &output->output_tooltip.header, sx, sy, dl);
+    widget_draw_children(ctx, header, sx, sy, dl);
 }
 
 constexpr size_t WIDGET_OUTPUT_PICKER_STATIC_CHILDREN[] = {

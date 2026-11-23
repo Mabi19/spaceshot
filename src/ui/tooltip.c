@@ -24,8 +24,6 @@ static void widget_tooltip_draw(
     double sy,
     RenderDisplayList *dl
 ) {
-    WidgetTooltip *tooltip = (WidgetTooltip *)header;
-
     RENDER_RECT(
         *dl,
         .bounds =
@@ -33,13 +31,7 @@ static void widget_tooltip_draw(
         .color = {0, 0, 0, 0.75},
         .border_radius = RENDER_BORDER_RADIUS(4 * ctx->scale)
     );
-    widget_draw(
-        ctx,
-        &tooltip->label.header,
-        header->bounds.x + sx,
-        header->bounds.y + sy,
-        dl
-    );
+    widget_draw_children(ctx, header, sx, sy, dl);
 }
 
 constexpr size_t WIDGET_TOOLTIP_STATIC_CHILDREN[] = {

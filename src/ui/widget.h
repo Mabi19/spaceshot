@@ -53,3 +53,12 @@ void widget_draw(
     double sy,
     RenderDisplayList *dl
 );
+
+WidgetHeader *widget_get_child(WidgetHeader *parent, size_t i);
+void widget_draw_children(
+    UIContext *ctx,
+    WidgetHeader *parent,
+    double sx,
+    double sy,
+    RenderDisplayList *dl
+);
